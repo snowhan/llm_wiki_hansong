@@ -36,6 +36,23 @@ export default defineConfig(async () => ({
   },
 
   test: {
-    environment: "node",
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    css: false,
+    deps: {
+      optimizer: {
+        web: {
+          include: ["@testing-library/jest-dom"],
+        },
+      },
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "./coverage",
+      include: ["src/lib/**/*.ts", "src/stores/**/*.ts", "src/components/**/*.tsx"],
+      exclude: ["src/**/__tests__/**", "src/test/**", "src/**/*.d.ts"],
+    },
   },
 }))

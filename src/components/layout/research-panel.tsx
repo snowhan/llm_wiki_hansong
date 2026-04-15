@@ -1,10 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import remarkMath from "remark-math"
-import rehypeKatex from "rehype-katex"
-import "katex/dist/katex.min.css"
+import { MarkdownView } from "@/components/ui/markdown-view"
 import {
   Search, Loader2, CheckCircle2, AlertCircle, ChevronRight, ChevronDown, X,
   ExternalLink, FileText, Send,
@@ -166,28 +162,7 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
           </div>
         )}
         {answer && (
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm, remarkMath]}
-            rehypePlugins={[rehypeKatex]}
-            components={{
-              table: ({ children, ...props }) => (
-                <div className="my-2 overflow-x-auto rounded border border-border">
-                  <table className="w-full border-collapse text-xs" {...props}>{children}</table>
-                </div>
-              ),
-              thead: ({ children, ...props }) => (
-                <thead className="bg-muted" {...props}>{children}</thead>
-              ),
-              th: ({ children, ...props }) => (
-                <th className="border border-border/80 px-3 py-1.5 text-left font-semibold bg-muted" {...props}>{children}</th>
-              ),
-              td: ({ children, ...props }) => (
-                <td className="border border-border/60 px-3 py-1.5" {...props}>{children}</td>
-              ),
-            }}
-          >
-            {answer}
-          </ReactMarkdown>
+          <MarkdownView content={answer} className="text-sm" />
         )}
         {isStreaming && <span className="animate-pulse">▊</span>}
       </div>

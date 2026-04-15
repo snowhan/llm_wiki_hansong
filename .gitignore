@@ -40,5 +40,11 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Test coverage reports
+coverage/
+
+# Build artifacts
+*.dmg
+
 # Brainstorm assets (not tracked in source control)
 .superpowers/

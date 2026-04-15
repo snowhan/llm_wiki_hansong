@@ -1,0 +1,57 @@
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { WelcomeScreen } from "../project/welcome-screen"
+
+const recentMocks = vi.hoisted(() => ({
+  getRecentProjects: vi.fn(),
+  removeFromRecentProjects: vi.fn(),
+}))
+
+vi.mock("@/lib/project-store", () => ({
+  getRecentProjects: recentMocks.getRecentProjects,
+  removeFromRecentProjects: recentMocks.removeFromRecentProjects,
+}))
+
+describe("WelcomeScreen", () => {
+  beforeEach(() => {
+    recentMocks.getRecentProjects.mockReset()
+    recentMocks.removeFromRecentProjects.mockReset()
+    recentMocks.getRecentProjects.mockResolvedValue([])
+  })
+
+  it("renders new and open project actions", () => {
+    render(
+      <WelcomeScreen onCreateProject={vi.fn()} onOpenProject={vi.fn()} onSelectProject={vi.fn()} />,
+    )
+    expect(screen.getByText("welcome.newProject")).toBeTruthy()
+    expect(screen.getByText("welcome.openProject")).toBeTruthy()
+  })
+
+  it("invokes callbacks when primary buttons are clicked", () => {
+    const onCreateProject = vi.fn()
+    const onOpenProject = vi.fn()
+    render(
+      <WelcomeScreen
+        onCreateProject={onCreateProject}
+        onOpenProject={onOpenProject}
+        onSelectProject={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByText("welcome.newProject"))
+    fireEvent.click(screen.getByText("welcome.openProject"))
+    expect(onCreateProject).toHaveBeenCalledTimes(1)
+    expect(onOpenProject).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows recent projects when the list is non-empty", async () => {
+    recentMocks.getRecentProjects.mockResolvedValue([{ name: "Old Wiki", path: "/path/old" }])
+    render(
+      <WelcomeScreen onCreateProject={vi.fn()} onOpenProject={vi.fn()} onSelectProject={vi.fn()} />,
+    )
+    await waitFor(() => {
+      expect(screen.getByText("welcome.recentProjects")).toBeTruthy()
+    })
+    expect(screen.getByText("Old Wiki")).toBeTruthy()
+    expect(screen.getByText("/path/old")).toBeTruthy()
+  })
+})

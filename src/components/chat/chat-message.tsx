@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
-import remarkMath from "remark-math"
-import rehypeKatex from "rehype-katex"
-import "katex/dist/katex.min.css"
 import {
   Bot, User, FileText, BookmarkPlus, ChevronDown, ChevronRight, RefreshCw, Copy, Check,
   Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, Layout, Globe, Paperclip,
@@ -18,6 +13,7 @@ import type { FileNode } from "@/types/wiki"
 import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
 import { enrichWithWikilinks } from "@/lib/enrich-wikilinks"
 import { normalizePath, getFileName } from "@/lib/path-utils"
+import { MarkdownView } from "@/components/ui/markdown-view"
 
 // Module-level cache of source file names
 let cachedSourceFiles: string[] = []
@@ -483,54 +479,18 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
 }
 
 function MarkdownContent({ content }: { content: string }) {
-  // Strip hidden comments
   const cleaned = content.replace(/<!--.*?-->/gs, "").trimEnd()
-
-  // Separate thinking blocks from main content
   const { thinking, answer } = useMemo(() => separateThinking(cleaned), [cleaned])
   const processed = useMemo(() => processContent(answer), [answer])
 
   return (
     <div>
       {thinking && <ThinkingBlock content={thinking} />}
-      <div className="chat-markdown prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-pre:my-2 prose-code:text-xs prose-code:before:content-none prose-code:after:content-none">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[rehypeKatex]}
-          components={{
-            a: ({ href, children }) => {
-              if (href?.startsWith("wikilink:")) {
-                const pageName = href.slice("wikilink:".length)
-                return <WikiLink pageName={pageName}>{children}</WikiLink>
-              }
-              return (
-                <span className="text-primary underline cursor-default" title={href}>
-                  {children}
-                </span>
-              )
-            },
-            table: ({ children, ...props }) => (
-              <div className="my-2 overflow-x-auto rounded border border-border">
-                <table className="w-full border-collapse text-xs" {...props}>{children}</table>
-              </div>
-            ),
-            thead: ({ children, ...props }) => (
-              <thead className="bg-muted" {...props}>{children}</thead>
-            ),
-            th: ({ children, ...props }) => (
-              <th className="border border-border/80 px-3 py-1.5 text-left font-semibold bg-muted" {...props}>{children}</th>
-            ),
-            td: ({ children, ...props }) => (
-              <td className="border border-border/60 px-3 py-1.5" {...props}>{children}</td>
-            ),
-            pre: ({ children, ...props }) => (
-              <pre className="rounded bg-background/50 p-2 text-xs overflow-x-auto" {...props}>{children}</pre>
-            ),
-          }}
-        >
-          {processed}
-        </ReactMarkdown>
-      </div>
+      <MarkdownView
+        content={processed}
+        className="chat-markdown text-sm"
+        enableWikilinks
+      />
     </div>
   )
 }
@@ -645,12 +605,13 @@ function processContent(text: string): string {
   // Fix malformed wikilinks like [[name] (missing closing bracket)
   result = result.replace(/\[\[([^\]]+)\](?!\])/g, "[[$1]]")
 
-  // Convert [[wikilinks]] to markdown links
+  // Convert [[wikilinks]] to HTML links with data-wikilink attribute
   result = result.replace(
     /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g,
     (_match, pageName: string, displayText?: string) => {
       const display = displayText?.trim() || pageName.trim()
-      return `[${display}](wikilink:${pageName.trim()})`
+      const escaped = pageName.trim().replace(/"/g, "&quot;")
+      return `<a data-wikilink="${escaped}">${display}</a>`
     }
   )
 

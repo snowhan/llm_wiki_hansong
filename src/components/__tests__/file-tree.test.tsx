@@ -1,0 +1,83 @@
+import { describe, it, expect, beforeEach } from "vitest"
+import { render, screen, fireEvent } from "@testing-library/react"
+import { FileTree } from "../layout/file-tree"
+import { useWikiStore } from "@/stores/wiki-store"
+
+beforeEach(() => {
+  useWikiStore.setState({
+    project: null,
+    fileTree: [],
+    selectedFile: null,
+    fileContent: "",
+    chatExpanded: false,
+    activeView: "wiki",
+    dataVersion: 0,
+    llmConfig: {
+      provider: "openai",
+      apiKey: "",
+      model: "",
+      ollamaUrl: "http://localhost:11434",
+      customEndpoint: "",
+      maxContextSize: 204800,
+    },
+    searchApiConfig: { provider: "none", apiKey: "" },
+    embeddingConfig: { enabled: false, endpoint: "", apiKey: "", model: "" },
+  } as any)
+})
+
+describe("FileTree", () => {
+  it("shows noProject message when there is no project", () => {
+    render(<FileTree />)
+    expect(screen.getByText("fileTree.noProject")).toBeTruthy()
+  })
+
+  it("renders folder and file nodes from fileTree", () => {
+    useWikiStore.setState({
+      project: { name: "My Wiki", path: "/wiki" },
+      fileTree: [
+        {
+          name: "docs",
+          path: "/wiki/docs",
+          is_dir: true,
+          children: [{ name: "readme.md", path: "/wiki/docs/readme.md", is_dir: false }],
+        },
+        { name: "notes.md", path: "/wiki/notes.md", is_dir: false },
+      ],
+    } as any)
+    render(<FileTree />)
+    expect(screen.getByText("My Wiki")).toBeTruthy()
+    expect(screen.getByText("folderNames.docs")).toBeTruthy()
+    expect(screen.getByText("readme.md")).toBeTruthy()
+    expect(screen.getByText("notes.md")).toBeTruthy()
+  })
+
+  it("calls setSelectedFile when a file is clicked", () => {
+    useWikiStore.setState({
+      project: { name: "P", path: "/p" },
+      fileTree: [{ name: "a.md", path: "/p/a.md", is_dir: false }],
+    } as any)
+    render(<FileTree />)
+    fireEvent.click(screen.getByText("a.md"))
+    expect(useWikiStore.getState().selectedFile).toBe("/p/a.md")
+  })
+
+  it("toggles folder expand/collapse for children", () => {
+    useWikiStore.setState({
+      project: { name: "P", path: "/p" },
+      fileTree: [
+        {
+          name: "src",
+          path: "/p/src",
+          is_dir: true,
+          children: [{ name: "main.ts", path: "/p/src/main.ts", is_dir: false }],
+        },
+      ],
+    } as any)
+    render(<FileTree />)
+    expect(screen.getByText("main.ts")).toBeTruthy()
+    fireEvent.click(screen.getByText("folderNames.src"))
+    expect(screen.queryByText("main.ts")).toBeNull()
+    fireEvent.click(screen.getByText("folderNames.src"))
+    expect(screen.getByText("main.ts")).toBeTruthy()
+  })
+})
