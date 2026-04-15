@@ -18,7 +18,7 @@ export function SidebarPanel() {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Knowledge
+          {t("sidebar.knowledge")}
         </button>
         <button
           onClick={() => setMode("files")}
@@ -28,7 +28,7 @@ export function SidebarPanel() {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Files
+          {t("sidebar.files")}
         </button>
       </div>
       <div className="flex-1 overflow-hidden">

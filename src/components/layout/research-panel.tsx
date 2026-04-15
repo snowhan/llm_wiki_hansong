@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -16,6 +17,7 @@ import { queueResearch } from "@/lib/deep-research"
 import { normalizePath } from "@/lib/path-utils"
 
 export function ResearchPanel() {
+  const { t } = useTranslation()
   const tasks = useResearchStore((s) => s.tasks)
   const removeTask = useResearchStore((s) => s.removeTask)
   const setPanelOpen = useResearchStore((s) => s.setPanelOpen)
@@ -24,15 +26,15 @@ export function ResearchPanel() {
   const searchApiConfig = useWikiStore((s) => s.searchApiConfig)
   const [inputValue, setInputValue] = useState("")
 
-  const running = tasks.filter((t) => ["searching", "synthesizing", "saving"].includes(t.status))
-  const queued = tasks.filter((t) => t.status === "queued")
-  const done = tasks.filter((t) => t.status === "done" || t.status === "error")
+  const running = tasks.filter((task) => ["searching", "synthesizing", "saving"].includes(task.status))
+  const queued = tasks.filter((task) => task.status === "queued")
+  const done = tasks.filter((task) => task.status === "done" || task.status === "error")
 
   function handleStartResearch() {
     const topic = inputValue.trim()
     if (!topic || !project) return
     if (searchApiConfig.provider === "none" || !searchApiConfig.apiKey) {
-      window.alert("Web Search not configured. Go to Settings → Web Search to add a Tavily API key.")
+      window.alert(t("research.webSearchNotConfigured"))
       return
     }
     queueResearch(normalizePath(project.path), topic, llmConfig, searchApiConfig)
@@ -44,10 +46,11 @@ export function ResearchPanel() {
       <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <Search className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Deep Research</span>
+          <span className="text-sm font-semibold">{t("research.title")}</span>
           {(running.length > 0 || queued.length > 0) && (
             <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-              {running.length} active{queued.length > 0 ? `, ${queued.length} queued` : ""}
+              {t("research.active", { count: running.length })}
+              {queued.length > 0 ? `, ${t("research.queued", { count: queued.length })}` : ""}
             </span>
           )}
         </div>
@@ -65,7 +68,7 @@ export function ResearchPanel() {
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") handleStartResearch() }}
-          placeholder="Enter a research topic..."
+          placeholder={t("research.enterTopic")}
           className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
         />
         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleStartResearch} disabled={!inputValue.trim()}>
@@ -77,8 +80,8 @@ export function ResearchPanel() {
         {tasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-muted-foreground">
             <Search className="h-8 w-8 opacity-20" />
-            <p>No research tasks yet</p>
-            <p>Enter a topic above or click "Deep Research" in Review</p>
+            <p>{t("research.noTasks")}</p>
+            <p>{t("research.noTasksHint")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-1 p-2">
@@ -112,6 +115,7 @@ function separateThinking(text: string): { thinking: string; answer: string } {
 }
 
 function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStreaming: boolean }) {
+  const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const { thinking, answer } = useMemo(() => separateThinking(synthesis), [synthesis])
   const [thinkingCollapsed, setThinkingCollapsed] = useState(false)
@@ -132,7 +136,7 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
 
   return (
     <div className="mb-2 flex flex-col min-h-0">
-      <div className="mb-1 font-medium text-muted-foreground">Synthesis</div>
+      <div className="mb-1 font-medium text-muted-foreground">{t("research.synthesis")}</div>
       <div
         ref={scrollRef}
         className="flex-1 overflow-y-auto rounded bg-muted/30 p-2 prose prose-xs prose-invert max-w-none"
@@ -149,7 +153,8 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
               ) : (
                 <ChevronDown className="h-3 w-3" />
               )}
-              Thinking{isStreaming && !answer ? "..." : ""}
+              {t("research.thinking")}
+              {isStreaming && !answer ? "..." : ""}
             </button>
             {!thinkingCollapsed && (
               <div className="mt-1 rounded border border-muted px-2 py-1 text-[10px] text-muted-foreground opacity-70 leading-relaxed whitespace-pre-wrap">
@@ -191,6 +196,7 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
 }
 
 function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (id: string) => void }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(
     task.status === "synthesizing" || task.status === "searching"
   )
@@ -207,14 +213,20 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
     error: <AlertCircle className="h-3 w-3 text-destructive" />,
   }[task.status]
 
-  const statusText = {
-    queued: "Queued",
-    searching: "Searching web...",
-    synthesizing: "Synthesizing...",
-    saving: "Saving to wiki...",
-    done: task.savedPath ? "Saved" : "Done",
-    error: "Failed",
-  }[task.status]
+  const statusText =
+    task.status === "queued"
+      ? t("research.statusQueued")
+      : task.status === "searching"
+        ? t("research.statusSearching")
+        : task.status === "synthesizing"
+          ? t("research.statusSynthesizing")
+          : task.status === "saving"
+            ? t("research.statusSaving")
+            : task.status === "done"
+              ? task.savedPath
+                ? t("research.statusSaved")
+                : t("research.statusDone")
+              : t("research.statusFailed")
 
   async function handleOpenSaved() {
     if (!project || !task.savedPath) return
@@ -257,7 +269,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
           {task.webResults.length > 0 && (
             <div className="mb-2">
               <div className="mb-1 font-medium text-muted-foreground">
-                Sources ({task.webResults.length})
+                {t("research.sources", { count: task.webResults.length })}
               </div>
               <div className="flex flex-col gap-1">
                 {task.webResults.map((r, i) => (
@@ -283,7 +295,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
             {task.savedPath && (
               <Button variant="outline" size="sm" className="h-6 text-[11px] gap-1" onClick={handleOpenSaved}>
                 <FileText className="h-3 w-3" />
-                Open
+                {t("research.open")}
               </Button>
             )}
             {(task.status === "done" || task.status === "error") && (
@@ -294,7 +306,7 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
                 onClick={() => onRemove(task.id)}
               >
                 <X className="h-3 w-3" />
-                Remove
+                {t("research.remove")}
               </Button>
             )}
           </div>

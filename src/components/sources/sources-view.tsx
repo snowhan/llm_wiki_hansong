@@ -48,10 +48,10 @@ export function SourcesView() {
 
     const selected = await open({
       multiple: true,
-      title: "Import Source Files",
+      title: t("sources.importSourceFiles"),
       filters: [
         {
-          name: "Documents",
+          name: t("sources.documents"),
           extensions: [
             "md", "mdx", "txt", "rtf", "pdf",
             "html", "htm", "xml",
@@ -60,25 +60,25 @@ export function SourcesView() {
           ],
         },
         {
-          name: "Data",
+          name: t("sources.data"),
           extensions: ["json", "jsonl", "csv", "tsv", "yaml", "yml", "ndjson"],
         },
         {
-          name: "Code",
+          name: t("sources.code"),
           extensions: [
             "py", "js", "ts", "jsx", "tsx", "rs", "go", "java",
             "c", "cpp", "h", "rb", "php", "swift", "sql", "sh",
           ],
         },
         {
-          name: "Images",
+          name: t("sources.images"),
           extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "avif", "heic"],
         },
         {
-          name: "Media",
+          name: t("sources.media"),
           extensions: ["mp4", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg", "flac", "m4a"],
         },
-        { name: "All Files", extensions: ["*"] },
+        { name: t("sources.allFiles"), extensions: ["*"] },
       ],
     })
 
@@ -106,7 +106,7 @@ export function SourcesView() {
     await loadSources()
 
     // Enqueue for serial ingest (runs in background via ingest queue)
-    if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom") {
+    if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
       for (const destPath of importedPaths) {
         enqueueIngest(pp, destPath).catch((err) =>
           console.error(`Failed to enqueue ingest:`, err)
@@ -120,7 +120,7 @@ export function SourcesView() {
 
     const selected = await open({
       directory: true,
-      title: "Import Source Folder",
+      title: t("sources.importSourceFolder"),
     })
 
     if (!selected || typeof selected !== "string") return
@@ -148,7 +148,7 @@ export function SourcesView() {
       await loadSources()
 
       // Build ingest tasks with folder context
-      if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom") {
+      if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
         const tasks = copiedFiles
           .filter((fp) => {
             const ext = fp.split(".").pop()?.toLowerCase() ?? ""
@@ -320,7 +320,7 @@ export function SourcesView() {
       }
     } catch (err) {
       console.error("Failed to delete source:", err)
-      window.alert(`Failed to delete: ${err}`)
+      window.alert(t("sources.failedToDelete", { err }))
     }
   }
 
@@ -343,7 +343,7 @@ export function SourcesView() {
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h2 className="text-sm font-semibold">{t("sources.title")}</h2>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={loadSources} title="Refresh">
+          <Button variant="ghost" size="icon" onClick={loadSources} title={t("sources.refresh")}>
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button size="sm" onClick={handleImport} disabled={importing}>
@@ -352,7 +352,7 @@ export function SourcesView() {
           </Button>
           <Button size="sm" onClick={handleImportFolder} disabled={importing}>
             <Plus className="mr-1 h-4 w-4" />
-            {t("sources.importFolder", "Folder")}
+            {t("sources.importFolder")}
           </Button>
         </div>
       </div>
@@ -369,7 +369,7 @@ export function SourcesView() {
               </Button>
               <Button variant="outline" size="sm" onClick={handleImportFolder}>
                 <Plus className="mr-1 h-4 w-4" />
-                Folder
+                {t("sources.importFolder")}
               </Button>
             </div>
           </div>
@@ -476,6 +476,7 @@ function SourceTree({
   ingestingPath: string | null
   depth: number
 }) {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
 
   const toggle = (path: string) => {
@@ -543,7 +544,7 @@ function SourceTree({
               variant="ghost"
               size="icon"
               className="h-7 w-7 shrink-0"
-              title="Ingest"
+              title={t("sources.ingest")}
               disabled={ingestingPath === node.path}
               onClick={() => onIngest(node)}
             >
@@ -553,7 +554,7 @@ function SourceTree({
               variant="ghost"
               size="icon"
               className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-              title="Delete"
+              title={t("sources.delete")}
               onClick={() => onDelete(node)}
             >
               <Trash2 className="h-3.5 w-3.5" />

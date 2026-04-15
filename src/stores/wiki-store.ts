@@ -2,7 +2,7 @@ import { create } from "zustand"
 import type { WikiProject, FileNode } from "@/types/wiki"
 
 interface LlmConfig {
-  provider: "openai" | "anthropic" | "google" | "ollama" | "custom" | "minimax"
+  provider: "openai" | "anthropic" | "google" | "ollama" | "custom" | "minimax" | "wps"
   apiKey: string
   model: string
   ollamaUrl: string

@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef, type ChangeEvent } from "react"
+import { useTranslation } from "react-i18next"
 import Graph from "graphology"
 import { SigmaContainer, useLoadGraph, useRegisterEvents, useSigma } from "@react-sigma/core"
 import "@react-sigma/core/lib/style.css"
@@ -26,16 +27,17 @@ const NODE_TYPE_COLORS: Record<string, string> = {
   other: "#94a3b8",     // slate-400
 }
 
-const NODE_TYPE_LABELS: Record<string, string> = {
-  entity: "Entity",
-  concept: "Concept",
-  source: "Source",
-  query: "Query",
-  synthesis: "Synthesis",
-  overview: "Overview",
-  comparison: "Comparison",
-  other: "Other",
-}
+/** Node type keys for legend order; labels come from i18n `graph.<type>`. */
+const NODE_TYPES = [
+  "entity",
+  "concept",
+  "source",
+  "query",
+  "synthesis",
+  "overview",
+  "comparison",
+  "other",
+] as const
 
 const COMMUNITY_COLORS = [
   "#60a5fa",  // blue-400
@@ -296,6 +298,7 @@ function ZoomControls() {
 // --- Main component ---
 
 export function GraphView() {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const dataVersion = useWikiStore((s) => s.dataVersion)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
@@ -337,12 +340,12 @@ export function GraphView() {
       setKnowledgeGaps(detectKnowledgeGaps(result.nodes, result.edges, result.communities))
       lastLoadedVersion.current = useWikiStore.getState().dataVersion
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to build graph"
+      const message = err instanceof Error ? err.message : t("graph.failedToBuild")
       setError(message)
     } finally {
       setLoading(false)
     }
-  }, [project])
+  }, [project, t])
 
   useEffect(() => {
     if (dataVersion !== lastLoadedVersion.current) {
@@ -460,7 +463,7 @@ export function GraphView() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <Network className="h-10 w-10 opacity-30" />
-        <p className="text-sm">Open a project to view the graph</p>
+        <p className="text-sm">{t("graph.openProject")}</p>
       </div>
     )
   }
@@ -469,7 +472,7 @@ export function GraphView() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <RefreshCw className="h-8 w-8 animate-spin opacity-50" />
-        <p className="text-sm">Building graph...</p>
+        <p className="text-sm">{t("graph.building")}</p>
       </div>
     )
   }
@@ -479,7 +482,7 @@ export function GraphView() {
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <Network className="h-10 w-10 opacity-30" />
         <p className="text-sm text-destructive">{error}</p>
-        <Button variant="outline" size="sm" onClick={loadGraph}>Retry</Button>
+        <Button variant="outline" size="sm" onClick={loadGraph}>{t("graph.retry")}</Button>
       </div>
     )
   }
@@ -488,8 +491,8 @@ export function GraphView() {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
         <Network className="h-10 w-10 opacity-30" />
-        <p className="text-sm">No pages yet</p>
-        <p className="text-xs">Import sources to start building the knowledge graph</p>
+        <p className="text-sm">{t("graph.noPages")}</p>
+        <p className="text-xs">{t("graph.importHint")}</p>
       </div>
     )
   }
@@ -501,11 +504,11 @@ export function GraphView() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <Network className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Knowledge Graph</span>
+            <span className="text-sm font-medium">{t("graph.knowledgeGraph")}</span>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="rounded bg-muted px-1.5 py-0.5">{nodes.length} pages</span>
-            <span className="rounded bg-muted px-1.5 py-0.5">{edges.length} links</span>
+            <span className="rounded bg-muted px-1.5 py-0.5">{nodes.length} {t("graph.pages")}</span>
+            <span className="rounded bg-muted px-1.5 py-0.5">{edges.length} {t("graph.links")}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -516,7 +519,7 @@ export function GraphView() {
             className="text-xs gap-1 h-7"
           >
             <Tag className="h-3 w-3" />
-            Type
+            {t("graph.type")}
           </Button>
           <Button
             variant={colorMode === "community" ? "secondary" : "ghost"}
@@ -525,7 +528,7 @@ export function GraphView() {
             className="text-xs gap-1 h-7"
           >
             <Layers className="h-3 w-3" />
-            Community
+            {t("graph.community")}
           </Button>
           {(surprisingConns.filter((c) => !dismissedInsights.has(c.key)).length > 0 || knowledgeGaps.length > 0) && (
             <Button
@@ -540,7 +543,7 @@ export function GraphView() {
               className="text-xs gap-1 h-7"
             >
               <Lightbulb className="h-3 w-3" />
-              Insights
+              {t("graph.insights")}
               <span className="rounded bg-muted px-1 text-[10px]">
                 {surprisingConns.filter((c) => !dismissedInsights.has(c.key)).length + knowledgeGaps.length}
               </span>
@@ -558,7 +561,7 @@ export function GraphView() {
         <div ref={graphContainerRef} className="relative flex-1 min-w-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
           {isResizing ? (
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              Resizing...
+              {t("graph.resizing")}
             </div>
           ) : (
           <ErrorBoundary>
@@ -604,7 +607,7 @@ export function GraphView() {
                   const w = attrs.weight ?? 1
                   result.color = "#1e293b"
                   result.size = Math.max(2, (attrs.size ?? 1) * 1.5)
-                  result.label = `relevance: ${w.toFixed(1)}`
+                  result.label = `${t("graph.relevance")}${w.toFixed(1)}`
                   result.forceLabel = true
                 }
                 return result
@@ -623,11 +626,11 @@ export function GraphView() {
           <div className="absolute bottom-3 left-3 rounded-lg border bg-background/90 backdrop-blur-sm px-3 py-2 text-xs shadow-sm max-w-[260px]">
             {colorMode === "type" ? (
               <>
-                <div className="mb-1.5 font-semibold text-foreground">Node Types</div>
+                <div className="mb-1.5 font-semibold text-foreground">{t("graph.nodeTypes")}</div>
                 <div className="flex flex-col gap-0.5">
-                  {Object.entries(NODE_TYPE_LABELS)
-                    .filter(([type]) => (typeCounts[type] ?? 0) > 0)
-                    .map(([type, label]) => (
+                  {NODE_TYPES
+                    .filter((type) => (typeCounts[type] ?? 0) > 0)
+                    .map((type) => (
                       <div
                         key={type}
                         className="flex items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-accent/50"
@@ -642,7 +645,7 @@ export function GraphView() {
                           }}
                         />
                         <span className={hoveredType === type ? "text-foreground font-medium" : "text-muted-foreground"}>
-                          {label}
+                          {t(`graph.${type}`)}
                         </span>
                         <span className="text-muted-foreground/60 ml-auto">{typeCounts[type]}</span>
                       </div>
@@ -651,7 +654,7 @@ export function GraphView() {
               </>
             ) : (
               <>
-                <div className="mb-1.5 font-semibold text-foreground">Communities</div>
+                <div className="mb-1.5 font-semibold text-foreground">{t("graph.communities")}</div>
                 <div className="flex flex-col gap-0.5">
                   {communities.map((c) => (
                     <div
@@ -666,11 +669,11 @@ export function GraphView() {
                         }}
                       />
                       <span className="text-muted-foreground truncate" title={c.topNodes.join(", ")}>
-                        {c.topNodes[0] ?? `Cluster ${c.id}`}
+                        {c.topNodes[0] ?? t("graph.cluster", { id: c.id })}
                       </span>
                       <span className="text-muted-foreground/60 ml-auto shrink-0">{c.nodeCount}</span>
                       {c.cohesion < 0.15 && c.nodeCount >= 3 && (
-                        <span className="text-amber-500 shrink-0" title={`Low cohesion: ${c.cohesion.toFixed(2)}`}>!</span>
+                        <span className="text-amber-500 shrink-0" title={t("graph.lowCohesion", { value: c.cohesion.toFixed(2) })}>!</span>
                       )}
                     </div>
                   ))}
@@ -687,7 +690,7 @@ export function GraphView() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Lightbulb className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-medium">Insights</span>
+                  <span className="text-sm font-medium">{t("graph.insights")}</span>
                 </div>
                 <button
                   className="p-1 rounded hover:bg-muted text-muted-foreground"
@@ -707,7 +710,7 @@ export function GraphView() {
                 <div>
                   <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-foreground">
                     <Link2 className="h-3.5 w-3.5 text-blue-500" />
-                    Surprising Connections
+                    {t("graph.surprisingConnections")}
                   </div>
                   <div className="flex flex-col gap-2">
                     {surprisingConns
@@ -752,7 +755,7 @@ export function GraphView() {
                 <div>
                   <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-foreground">
                     <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                    Knowledge Gaps
+                    {t("graph.knowledgeGaps")}
                   </div>
                   <div className="flex flex-col gap-2">
                     {knowledgeGaps.map((gap, i) => {
@@ -784,7 +787,7 @@ export function GraphView() {
                             }}
                           >
                             <Search className="h-3.5 w-3.5" />
-                            Deep Research
+                            {t("graph.deepResearch")}
                           </Button>
                         </div>
                       )
@@ -804,7 +807,7 @@ export function GraphView() {
             <div className="flex items-center justify-between border-b px-4 py-3">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">Deep Research</span>
+                <span className="font-medium text-sm">{t("graph.deepResearch")}</span>
               </div>
               {!researchDialog.loading && (
                 <button
@@ -819,12 +822,12 @@ export function GraphView() {
             {researchDialog.loading ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Generating research topic...
+                {t("graph.generatingTopic")}
               </div>
             ) : (
               <div className="p-4">
                 <div className="mb-3">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Research Topic</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("graph.researchTopic")}</label>
                   <input
                     type="text"
                     className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -837,7 +840,7 @@ export function GraphView() {
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">Search Queries</label>
+                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("graph.searchQueries")}</label>
                   <div className="flex flex-col gap-1.5">
                     {researchDialog.queries.map((q, idx) => (
                       <input
@@ -859,7 +862,7 @@ export function GraphView() {
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" size="sm" onClick={() => setResearchDialog(null)}>
-                    Cancel
+                    {t("graph.cancel")}
                   </Button>
                   <Button
                     variant="default"
@@ -868,7 +871,7 @@ export function GraphView() {
                     onClick={handleResearchConfirm}
                   >
                     <Search className="h-3.5 w-3.5" />
-                    Start Research
+                    {t("graph.startResearch")}
                   </Button>
                 </div>
               </div>

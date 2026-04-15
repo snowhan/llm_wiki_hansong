@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react"
+import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -6,7 +7,7 @@ import rehypeKatex from "rehype-katex"
 import "katex/dist/katex.min.css"
 import {
   Bot, User, FileText, BookmarkPlus, ChevronDown, ChevronRight, RefreshCw, Copy, Check,
-  Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, Layout, Globe,
+  Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, Layout, Globe, Paperclip,
 } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
@@ -58,6 +59,7 @@ interface ChatMessageProps {
 }
 
 export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMessageProps) {
+  const { t } = useTranslation()
   const isUser = message.role === "user"
   const isSystem = message.role === "system"
   const isAssistant = message.role === "assistant"
@@ -104,9 +106,9 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                 type="button"
                 onClick={onRegenerate}
                 className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                title="Regenerate this response"
+                title={t("chat.regenerateTitle")}
               >
-                <RefreshCw className="h-3 w-3" /> Regenerate
+                <RefreshCw className="h-3 w-3" /> {t("chat.regenerate")}
               </button>
             )}
           </div>
@@ -117,6 +119,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
 }
 
 function CopyButton({ content }: { content: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
@@ -137,15 +140,16 @@ function CopyButton({ content }: { content: string }) {
       type="button"
       onClick={handleCopy}
       className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-      title="Copy to clipboard"
+      title={t("chat.copyToClipboard")}
     >
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-      {copied ? "Copied!" : "Copy"}
+      {copied ? t("chat.copied") : t("chat.copy")}
     </button>
   )
 }
 
 function SaveToWikiButton({ content, visible }: { content: string; visible: boolean }) {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setFileTree = useWikiStore((s) => s.setFileTree)
   const [saved, setSaved] = useState(false)
@@ -158,7 +162,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
     try {
       // Generate slug from first line or first 50 chars
       const firstLine = content.split("\n")[0].replace(/^#+\s*/, "").trim()
-      const title = firstLine.slice(0, 60) || "Saved Query"
+      const title = firstLine.slice(0, 60) || t("chat.savedQuery")
       const slug = title
         .toLowerCase()
         .replace(/[^a-z0-9\s-]/g, "")
@@ -228,7 +232,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
 
       // Full auto-ingest: extract entities, concepts, cross-references from saved content
       const llmConfig = useWikiStore.getState().llmConfig
-      if (llmConfig.apiKey || llmConfig.provider === "ollama") {
+      if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "wps") {
         const { autoIngest } = await import("@/lib/ingest")
         autoIngest(pp, filePath, llmConfig).catch((err) =>
           console.error("Failed to auto-ingest saved query:", err)
@@ -239,7 +243,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
     } finally {
       setSaving(false)
     }
-  }, [project, content, saving, setFileTree])
+  }, [project, content, saving, setFileTree, t])
 
   if (!visible && !saved) return null
 
@@ -249,10 +253,10 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       onClick={handleSave}
       disabled={saving}
       className="self-start inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-      title="Save to wiki"
+      title={t("chat.saveToWiki")}
     >
       <BookmarkPlus className="h-3 w-3" />
-      {saved ? "Saved!" : saving ? "Saving..." : "Save to Wiki"}
+      {saved ? t("chat.saved") : saving ? t("chat.saving") : t("chat.saveToWiki")}
     </button>
   )
 }
@@ -286,6 +290,7 @@ function getRefType(path: string): string {
 }
 
 function CitedReferencesPanel({ content, savedReferences }: { content: string; savedReferences?: CitedPage[] }) {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const [expanded, setExpanded] = useState(false)
@@ -310,7 +315,7 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
         className="flex w-full items-center gap-1.5 px-2 py-1 text-muted-foreground hover:text-foreground transition-colors"
       >
         <FileText className="h-3 w-3 shrink-0" />
-        <span className="font-medium">References ({citedPages.length})</span>
+        <span className="font-medium">{t("chat.references")} ({citedPages.length})</span>
         {hasMore && (
           expanded
             ? <ChevronDown className="h-3 w-3 ml-auto" />
@@ -368,7 +373,7 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
             onClick={() => setExpanded(true)}
             className="w-full text-center text-[10px] text-muted-foreground hover:text-primary pt-0.5"
           >
-            +{citedPages.length - MAX_COLLAPSED} more...
+            {t("chat.more", { count: citedPages.length - MAX_COLLAPSED })}
           </button>
         )}
       </div>
@@ -559,6 +564,7 @@ function separateThinking(text: string): { thinking: string | null; answer: stri
 
 /** Streaming thinking: shows latest ~5 lines rolling upward with animation */
 function StreamingThinkingBlock({ content }: { content: string }) {
+  const { t } = useTranslation()
   const lines = content.split("\n").filter((l) => l.trim())
   const visibleLines = lines.slice(-5)
 
@@ -566,8 +572,8 @@ function StreamingThinkingBlock({ content }: { content: string }) {
     <div className="rounded-md border border-dashed border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 px-2.5 py-2">
       <div className="flex items-center gap-1.5 mb-1.5">
         <span className="text-sm animate-pulse">💭</span>
-        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Thinking...</span>
-        <span className="text-[10px] text-amber-600/50 dark:text-amber-500/40">{lines.length} lines</span>
+        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{t("chat.thinking")}</span>
+        <span className="text-[10px] text-amber-600/50 dark:text-amber-500/40">{t("chat.lines", { count: lines.length })}</span>
       </div>
       <div className="h-[5lh] overflow-hidden text-xs text-amber-800/70 dark:text-amber-300/60 font-mono leading-relaxed">
         {visibleLines.map((line, i) => (
@@ -587,6 +593,7 @@ function StreamingThinkingBlock({ content }: { content: string }) {
 
 /** Completed thinking: collapsed by default, click to expand */
 function ThinkingBlock({ content }: { content: string }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const lines = content.split("\n").filter((l) => l.trim())
 
@@ -598,7 +605,7 @@ function ThinkingBlock({ content }: { content: string }) {
         className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors"
       >
         <span className="text-sm">💭</span>
-        <span className="font-medium">Thought for {lines.length} lines</span>
+        <span className="font-medium">{t("chat.thoughtForLines", { count: lines.length })}</span>
         <span className="text-amber-600/60 dark:text-amber-500/60">
           {expanded ? "▼" : "▶"}
         </span>
@@ -651,6 +658,7 @@ function processContent(text: string): string {
 }
 
 function SourceRef({ fileName }: { fileName: string }) {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setFileContent = useWikiStore((s) => s.setFileContent)
@@ -692,15 +700,15 @@ function SourceRef({ fileName }: { fileName: string }) {
 
     // Fallback: just set the path even if we can't read it
     setSelectedFile(candidates[0])
-    setFileContent(`Unable to load: ${fileName}`)
-  }, [project, fileName, setSelectedFile, setFileContent, setActiveView])
+    setFileContent(t("chat.unableToLoad", { name: fileName }))
+  }, [project, fileName, setSelectedFile, setFileContent, setActiveView, t])
 
   return (
     <button
       type="button"
       onClick={handleClick}
       className="inline-flex items-center gap-0.5 rounded bg-accent/50 px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-accent transition-colors"
-      title={`Open source: ${fileName}`}
+      title={t("chat.openSource", { name: fileName })}
     >
       <Paperclip className="inline h-3 w-3" />
       {fileName}
@@ -709,6 +717,7 @@ function SourceRef({ fileName }: { fileName: string }) {
 }
 
 function WikiLink({ pageName, children }: { pageName: string; children: React.ReactNode }) {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setFileContent = useWikiStore((s) => s.setFileContent)
@@ -763,7 +772,7 @@ function WikiLink({ pageName, children }: { pageName: string; children: React.Re
 
   if (exists === false) {
     return (
-      <span className="inline text-muted-foreground" title={`Page not found: ${pageName}`}>
+      <span className="inline text-muted-foreground" title={t("chat.pageNotFound", { name: pageName })}>
         {children}
       </span>
     )
@@ -774,7 +783,7 @@ function WikiLink({ pageName, children }: { pageName: string; children: React.Re
       type="button"
       onClick={handleClick}
       className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-primary underline decoration-primary/30 hover:bg-primary/10 hover:decoration-primary"
-      title={`Open wiki page: ${pageName}`}
+      title={t("chat.openWikiPage", { name: pageName })}
     >
       <FileText className="inline h-3 w-3" />
       {children}

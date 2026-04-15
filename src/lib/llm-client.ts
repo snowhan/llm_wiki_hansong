@@ -1,4 +1,5 @@
 import type { LlmConfig } from "@/stores/wiki-store"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { getProviderConfig } from "./llm-providers"
 
 export type { ChatMessage } from "./llm-providers"
@@ -48,13 +49,11 @@ export async function streamChat(
 
   let response: Response
   try {
-    response = await fetch(providerConfig.url, {
+    response = await tauriFetch(providerConfig.url, {
       method: "POST",
       headers: providerConfig.headers,
       body: JSON.stringify(providerConfig.buildBody(messages)),
       signal: combinedSignal,
-      // @ts-ignore — keepalive hint for Tauri webview
-      keepalive: false,
     })
   } catch (err) {
     if (err instanceof Error && (err.name === "AbortError" || err.message === "Load failed")) {

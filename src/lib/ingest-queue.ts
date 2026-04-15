@@ -249,7 +249,7 @@ async function processNext(projectPath: string): Promise<void> {
   const llmConfig = useWikiStore.getState().llmConfig
 
   // Check if LLM is configured
-  if (!llmConfig.apiKey && llmConfig.provider !== "ollama" && llmConfig.provider !== "custom") {
+  if (!llmConfig.apiKey && llmConfig.provider !== "ollama" && llmConfig.provider !== "custom" && llmConfig.provider !== "wps") {
     next.status = "failed"
     next.error = "LLM not configured — set API key in Settings"
     processing = false

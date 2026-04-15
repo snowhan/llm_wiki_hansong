@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import { Send, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -10,6 +11,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInputProps) {
+  const { t } = useTranslation()
   const [value, setValue] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -47,7 +49,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
-        placeholder={placeholder ?? "Type a message... (Enter to send, Shift+Enter for newline)"}
+        placeholder={placeholder ?? t("chat.defaultPlaceholder")}
         disabled={isStreaming}
         rows={1}
         className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -59,7 +61,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
           size="icon"
           onClick={onStop}
           className="shrink-0"
-          title="Stop generation"
+          title={t("chat.stopGeneration")}
         >
           <Square className="h-4 w-4" />
         </Button>
@@ -69,7 +71,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
           onClick={handleSend}
           disabled={!value.trim()}
           className="shrink-0"
-          title="Send message"
+          title={t("chat.sendMessage")}
         >
           <Send className="h-4 w-4" />
         </Button>

@@ -1,4 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core"
+import { useTranslation } from "react-i18next"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
@@ -22,6 +23,7 @@ interface FilePreviewProps {
 }
 
 export function FilePreview({ filePath, textContent }: FilePreviewProps) {
+  const { t } = useTranslation()
   const category = getFileCategory(filePath)
   const fileName = getFileName(filePath)
 
@@ -33,13 +35,13 @@ export function FilePreview({ filePath, textContent }: FilePreviewProps) {
     case "audio":
       return <AudioPreview filePath={filePath} fileName={fileName} />
     case "pdf":
-      return <TextPreview filePath={filePath} content={textContent} label="PDF (extracted text)" />
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.pdfExtracted")} />
     case "code":
       return <CodePreview filePath={filePath} content={textContent} />
     case "data":
       return <CodePreview filePath={filePath} content={textContent} />
     case "text":
-      return <TextPreview filePath={filePath} content={textContent} label="Text" />
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.text")} />
     case "document":
       return <BinaryPlaceholder filePath={filePath} fileName={fileName} category={category} />
     default:
@@ -154,6 +156,7 @@ function BinaryPlaceholder({
   fileName: string
   category: FileCategory
 }) {
+  const { t } = useTranslation()
   const iconMap: Record<string, typeof FileText> = {
     document: FileSpreadsheet,
     unknown: FileQuestion,
@@ -170,7 +173,7 @@ function BinaryPlaceholder({
         <p className="mt-1 text-xs text-muted-foreground">{filePath}</p>
       </div>
       <p className="text-sm text-muted-foreground">
-        Preview not available for this file type
+        {t("preview.notAvailable")}
       </p>
     </div>
   )

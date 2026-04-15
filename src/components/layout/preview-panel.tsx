@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { X } from "lucide-react"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile } from "@/commands/fs"
@@ -8,6 +9,7 @@ import { FilePreview } from "@/components/editor/file-preview"
 import { getFileName } from "@/lib/path-utils"
 
 export function PreviewPanel() {
+  const { t } = useTranslation()
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const fileContent = useWikiStore((s) => s.fileContent)
   const setFileContent = useWikiStore((s) => s.setFileContent)
@@ -29,8 +31,8 @@ export function PreviewPanel() {
 
     readFile(selectedFile)
       .then(setFileContent)
-      .catch((err) => setFileContent(`Error loading file: ${err}`))
-  }, [selectedFile, setFileContent])
+      .catch((err) => setFileContent(t("preview.errorLoading", { err })))
+  }, [selectedFile, setFileContent, t])
 
   const handleSave = useCallback(
     (markdown: string) => {
@@ -54,7 +56,7 @@ export function PreviewPanel() {
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Select a file to preview
+        {t("preview.selectFile")}
       </div>
     )
   }

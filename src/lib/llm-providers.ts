@@ -175,6 +175,33 @@ export function getProviderConfig(config: LlmConfig): ProviderConfig {
         parseStream: parseOpenAiLine,
       }
 
+    case "wps": {
+      const wpsUrl = import.meta.env.VITE_WPS_GATEWAY_URL || "http://ai-gateway.wps.cn/api/v3"
+      const wpsToken = import.meta.env.VITE_WPS_GATEWAY_TOKEN || apiKey
+      const wpsUid = import.meta.env.VITE_WPS_GATEWAY_UID || ""
+      const wpsProduct = import.meta.env.VITE_WPS_GATEWAY_PRODUCT_NAME || ""
+      const wpsModel = model || import.meta.env.VITE_WPS_GATEWAY_MODEL || "azure/gpt-5.4"
+      const actionId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")
+
+      return {
+        url: `${wpsUrl}/chat/completions`,
+        headers: {
+          "Content-Type": JSON_CONTENT_TYPE,
+          Authorization: `Bearer ${wpsToken}`,
+          "Ai-Gateway-Uid": wpsUid,
+          "Ai-Gateway-Product-Name": wpsProduct,
+          "X-Action-Id": actionId,
+        },
+        buildBody: (messages) => ({
+          ...buildOpenAiBody(messages),
+          model: wpsModel,
+        }),
+        parseStream: parseOpenAiLine,
+      }
+    }
+
     case "custom":
       return {
         url: `${customEndpoint}/chat/completions`,

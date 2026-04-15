@@ -113,8 +113,20 @@ fn write_cache(original: &Path, text: &str) -> Result<(), String> {
 fn extract_pdf_text(path: &str) -> Result<String, String> {
     let bytes =
         fs::read(path).map_err(|e| format!("Failed to read PDF '{}': {}", path, e))?;
-    pdf_extract::extract_text_from_mem(&bytes)
-        .map_err(|e| format!("Failed to extract text from PDF '{}': {}", path, e))
+    match std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(&bytes)) {
+        Ok(Ok(text)) => Ok(text),
+        Ok(Err(e)) => Err(format!("Failed to extract text from PDF '{}': {}", path, e)),
+        Err(panic_info) => {
+            let msg = if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.clone()
+            } else if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.to_string()
+            } else {
+                "unknown panic".to_string()
+            };
+            Err(format!("PDF extraction crashed for '{}': {}", path, msg))
+        }
+    }
 }
 
 /// Extract text from Office Open XML formats, converting to Markdown.

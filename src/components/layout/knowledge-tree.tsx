@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { useTranslation } from "react-i18next"
 import {
   FileText, Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, ChevronRight, ChevronDown, Layout, Globe,
 } from "lucide-react"
@@ -16,19 +17,20 @@ interface WikiPageInfo {
   origin?: string
 }
 
-const TYPE_CONFIG: Record<string, { icon: typeof FileText; label: string; color: string; order: number }> = {
-  overview:    { icon: Layout,      label: "Overview",     color: "text-yellow-500", order: 0 },
-  entity:      { icon: Users,       label: "Entities",     color: "text-blue-500",   order: 1 },
-  concept:     { icon: Lightbulb,   label: "Concepts",     color: "text-purple-500", order: 2 },
-  source:      { icon: BookOpen,    label: "Sources",      color: "text-orange-500", order: 3 },
-  synthesis:   { icon: GitMerge,    label: "Synthesis",    color: "text-red-500",    order: 4 },
-  comparison:  { icon: BarChart3,   label: "Comparisons",  color: "text-emerald-500",order: 5 },
-  query:       { icon: HelpCircle,  label: "Queries",      color: "text-green-500",  order: 6 },
+const TYPE_CONFIG: Record<string, { icon: typeof FileText; labelKey: string; color: string; order: number }> = {
+  overview:    { icon: Layout,      labelKey: "knowledgeTree.overview",     color: "text-yellow-500", order: 0 },
+  entity:      { icon: Users,       labelKey: "knowledgeTree.entities",     color: "text-blue-500",   order: 1 },
+  concept:     { icon: Lightbulb,   labelKey: "knowledgeTree.concepts",     color: "text-purple-500", order: 2 },
+  source:      { icon: BookOpen,    labelKey: "knowledgeTree.sources",      color: "text-orange-500", order: 3 },
+  synthesis:   { icon: GitMerge,    labelKey: "knowledgeTree.synthesis",    color: "text-red-500",    order: 4 },
+  comparison:  { icon: BarChart3,   labelKey: "knowledgeTree.comparisons",  color: "text-emerald-500",order: 5 },
+  query:       { icon: HelpCircle,  labelKey: "knowledgeTree.queries",      color: "text-green-500",  order: 6 },
 }
 
-const DEFAULT_CONFIG = { icon: FileText, label: "Other", color: "text-muted-foreground", order: 99 }
+const DEFAULT_CONFIG = { icon: FileText, labelKey: "knowledgeTree.other", color: "text-muted-foreground", order: 99 }
 
 export function KnowledgeTree() {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
@@ -75,7 +77,7 @@ export function KnowledgeTree() {
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
-        No project open
+        {t("knowledgeTree.noProject")}
       </div>
     )
   }
@@ -113,7 +115,7 @@ export function KnowledgeTree() {
 
         {sortedGroups.length === 0 && (
           <div className="px-2 py-4 text-center text-xs text-muted-foreground">
-            No wiki pages yet. Import sources to get started.
+            {t("knowledgeTree.noPages")}
           </div>
         )}
 
@@ -134,7 +136,7 @@ export function KnowledgeTree() {
                   <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 )}
                 <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
-                <span className="flex-1 text-left font-medium">{config.label}</span>
+                <span className="flex-1 text-left font-medium">{t(config.labelKey)}</span>
                 <span className="text-xs text-muted-foreground">{items.length}</span>
               </button>
 
@@ -172,6 +174,7 @@ export function KnowledgeTree() {
 }
 
 function RawSourcesSection() {
+  const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const selectedFile = useWikiStore((s) => s.selectedFile)
@@ -200,7 +203,7 @@ function RawSourcesSection() {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
         <BookOpen className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-        <span className="flex-1 text-left font-medium text-muted-foreground">Raw Sources</span>
+        <span className="flex-1 text-left font-medium text-muted-foreground">{t("knowledgeTree.rawSources")}</span>
         <span className="text-xs text-muted-foreground">{sources.length}</span>
       </button>
       {expanded && (

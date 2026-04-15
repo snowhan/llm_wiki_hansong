@@ -13,6 +13,7 @@ const PROVIDERS = [
   { value: "anthropic" as const, label: "Anthropic", models: ["claude-sonnet-4-5-20250514", "claude-opus-4-5-20250514", "claude-haiku-4-5-20251001"] },
   { value: "google" as const, label: "Google", models: ["gemini-2.5-pro", "gemini-2.5-flash"] },
   { value: "minimax" as const, label: "MiniMax", models: ["MiniMax-M2.7", "MiniMax-M2.7-highspeed"] },
+  { value: "wps" as const, label: "WPS AI Gateway", models: ["azure/gpt-5.4"] },
   { value: "ollama" as const, label: "Ollama (Local)", models: [] },
   { value: "custom" as const, label: "Custom", models: [] },
 ]
@@ -49,6 +50,12 @@ export function SettingsView() {
   const [embeddingModel, setEmbeddingModel] = useState(embeddingConfig.model)
   const [saved, setSaved] = useState(false)
   const [currentLang, setCurrentLang] = useState(i18n.language)
+
+  function providerLabel(p: (typeof PROVIDERS)[0]) {
+    if (p.value === "ollama") return t("settings.ollamaLocal")
+    if (p.value === "custom") return t("settings.custom")
+    return p.label
+  }
 
   useEffect(() => {
     setProvider(llmConfig.provider)
@@ -133,7 +140,7 @@ export function SettingsView() {
                         : "border-border hover:bg-accent"
                     }`}
                   >
-                    {p.label}
+                    {providerLabel(p)}
                   </button>
                 ))}
               </div>
@@ -166,7 +173,7 @@ export function SettingsView() {
               </div>
             )}
 
-            {provider !== "ollama" && (
+            {provider !== "ollama" && provider !== "wps" && (
               <div className="space-y-2">
                 <Label htmlFor="apiKey">{t("settings.apiKey")}</Label>
                 <Input
@@ -177,10 +184,18 @@ export function SettingsView() {
                   placeholder={
                     provider === "custom"
                       ? t("settings.customApiKey")
-                      : t("settings.apiKeyPlaceholder", { provider: currentProvider?.label })
+                      : t("settings.apiKeyPlaceholder", {
+                      provider: currentProvider ? providerLabel(currentProvider) : "",
+                    })
                   }
                 />
               </div>
+            )}
+
+            {provider === "wps" && (
+              <p className="text-xs text-muted-foreground">
+                WPS AI Gateway 认证信息从 .env 文件读取（VITE_WPS_GATEWAY_TOKEN 等）
+              </p>
             )}
 
             <div className="space-y-2">
@@ -221,10 +236,8 @@ export function SettingsView() {
 
           {/* Context Window Size */}
           <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">Context Window</h3>
-            <p className="text-xs text-muted-foreground">
-              Maximum context size sent to the LLM. Larger context allows more wiki pages in each query but costs more tokens.
-            </p>
+            <h3 className="font-semibold">{t("settings.contextWindow")}</h3>
+            <p className="text-xs text-muted-foreground">{t("settings.contextWindowDesc")}</p>
 
             <div className="space-y-3">
               <ContextSizeSelector value={maxContextSize} onChange={setMaxContextSize} />
@@ -233,13 +246,11 @@ export function SettingsView() {
 
           {/* Web Search API section */}
           <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">Web Search (Deep Research)</h3>
-            <p className="text-xs text-muted-foreground">
-              Enable AI-powered web research to automatically find relevant sources for knowledge gaps.
-            </p>
+            <h3 className="font-semibold">{t("settings.webSearch")}</h3>
+            <p className="text-xs text-muted-foreground">{t("settings.webSearchDesc")}</p>
 
             <div className="space-y-2">
-              <Label>Search Provider</Label>
+              <Label>{t("settings.searchProvider")}</Label>
               <div className="flex flex-wrap gap-2">
                 {[
                   { value: "none" as const, label: "Disabled" },
@@ -254,7 +265,7 @@ export function SettingsView() {
                         : "border-border hover:bg-accent"
                     }`}
                   >
-                    {p.label}
+                    {p.value === "none" ? t("settings.disabled") : p.label}
                   </button>
                 ))}
               </div>
@@ -262,13 +273,13 @@ export function SettingsView() {
 
             {searchProvider !== "none" && (
               <div className="space-y-2">
-                <Label htmlFor="searchApiKey">API Key</Label>
+                <Label htmlFor="searchApiKey">{t("settings.searchApiKeyLabel")}</Label>
                 <Input
                   id="searchApiKey"
                   type="password"
                   value={searchApiKey}
                   onChange={(e) => setSearchApiKey(e.target.value)}
-                  placeholder="Enter your Tavily API key (tavily.com)"
+                  placeholder={t("settings.searchApiKeyPlaceholder")}
                 />
               </div>
             )}
@@ -277,7 +288,7 @@ export function SettingsView() {
           {/* Embedding Search section */}
           <div className="space-y-4 rounded-lg border p-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Vector Search (Embedding)</h3>
+              <h3 className="font-semibold">{t("settings.vectorSearch")}</h3>
               <button
                 onClick={() => setEmbeddingEnabled(!embeddingEnabled)}
                 className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
@@ -291,51 +302,45 @@ export function SettingsView() {
                 />
               </button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Enable semantic search using embeddings. Uses the same LLM provider endpoint. Improves search quality for synonym matching and cross-domain discovery.
-            </p>
+            <p className="text-xs text-muted-foreground">{t("settings.vectorSearchDesc")}</p>
             {embeddingEnabled && (
               <div className="space-y-3">
                 <div className="space-y-2">
-                  <Label>Endpoint</Label>
+                  <Label>{t("settings.endpoint")}</Label>
                   <Input
                     value={embeddingEndpoint}
                     onChange={(e) => setEmbeddingEndpoint(e.target.value)}
-                    placeholder="e.g. http://127.0.0.1:1234/v1/embeddings"
+                    placeholder={t("settings.endpointPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>API Key (optional)</Label>
+                  <Label>{t("settings.apiKeyOptional")}</Label>
                   <Input
                     type="password"
                     value={embeddingApiKey}
                     onChange={(e) => setEmbeddingApiKey(e.target.value)}
-                    placeholder="Leave empty for local models"
+                    placeholder={t("settings.leaveEmpty")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Model</Label>
+                  <Label>{t("settings.model")}</Label>
                   <Input
                     value={embeddingModel}
                     onChange={(e) => setEmbeddingModel(e.target.value)}
-                    placeholder="e.g. text-embedding-qwen3-embedding-0.6b"
+                    placeholder={t("settings.embeddingModelPlaceholder")}
                   />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Embedding service can be different from the chat LLM. Supports any OpenAI-compatible /v1/embeddings endpoint.
-                </p>
+                <p className="text-xs text-muted-foreground">{t("settings.embeddingDesc")}</p>
               </div>
             )}
           </div>
 
           {/* Chat History section */}
           <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">Chat History</h3>
-            <p className="text-xs text-muted-foreground">
-              Number of previous messages included when talking to AI. More = better context but uses more tokens.
-            </p>
+            <h3 className="font-semibold">{t("settings.chatHistory")}</h3>
+            <p className="text-xs text-muted-foreground">{t("settings.chatHistoryDesc")}</p>
             <div className="space-y-2">
-              <Label>Max conversation messages sent to AI</Label>
+              <Label>{t("settings.maxMessages")}</Label>
               <div className="flex flex-wrap gap-2">
                 {HISTORY_OPTIONS.map((n) => (
                   <button
@@ -352,7 +357,10 @@ export function SettingsView() {
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">
-                Currently: {maxHistoryMessages} messages ({maxHistoryMessages / 2} rounds of conversation)
+                {t("settings.currentlyMessages", {
+                  count: maxHistoryMessages,
+                  rounds: maxHistoryMessages / 2,
+                })}
               </p>
             </div>
           </div>
@@ -381,6 +389,14 @@ const CONTEXT_PRESETS = [
 ]
 
 function ContextSizeSelector({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const { t } = useTranslation()
+
+  function formatSize(chars: number): string {
+    if (chars >= 1000000) return t("settings.mChars", { count: (chars / 1000000).toFixed(1) })
+    if (chars >= 1000) return t("settings.kChars", { count: Math.round(chars / 1000) })
+    return t("settings.chars", { count: chars })
+  }
+
   // Find closest preset index
   const closestIndex = CONTEXT_PRESETS.reduce((best, preset, i) => {
     return Math.abs(preset.value - value) < Math.abs(CONTEXT_PRESETS[best].value - value) ? i : best
@@ -391,7 +407,7 @@ function ContextSizeSelector({ value, onChange }: { value: number; onChange: (v:
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium">{formatSize(value)}</span>
         <span className="text-xs text-muted-foreground">
-          ~{Math.floor(value * 0.6 / 1000)}K chars for wiki content
+          {t("settings.wikiContentChars", { count: Math.floor((value * 0.6) / 1000) })}
         </span>
       </div>
       <input
@@ -420,10 +436,4 @@ function ContextSizeSelector({ value, onChange }: { value: number; onChange: (v:
       </div>
     </div>
   )
-}
-
-function formatSize(chars: number): string {
-  if (chars >= 1000000) return `${(chars / 1000000).toFixed(1)}M characters`
-  if (chars >= 1000) return `${Math.round(chars / 1000)}K characters`
-  return `${chars} characters`
 }

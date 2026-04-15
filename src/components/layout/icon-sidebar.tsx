@@ -104,7 +104,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
                 </span>
               )}
             </TooltipTrigger>
-            <TooltipContent side="right">Deep Research</TooltipContent>
+            <TooltipContent side="right">{t("iconSidebar.deepResearch")}</TooltipContent>
           </Tooltip>
         </div>
         {/* Bottom: daemon status + settings + switch project */}
@@ -122,10 +122,10 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               />
             </TooltipTrigger>
             <TooltipContent side="right">
-              {daemonStatus === "running" && "Clip server running"}
-              {daemonStatus === "starting" && "Clip server starting..."}
-              {daemonStatus === "port_conflict" && "Port 19827 is occupied. Web Clipper unavailable."}
-              {daemonStatus === "error" && "Clip server error. Restarting..."}
+              {daemonStatus === "running" && t("iconSidebar.clipRunning")}
+              {daemonStatus === "starting" && t("iconSidebar.clipStarting")}
+              {daemonStatus === "port_conflict" && t("iconSidebar.clipPortConflict")}
+              {daemonStatus === "error" && t("iconSidebar.clipError")}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
