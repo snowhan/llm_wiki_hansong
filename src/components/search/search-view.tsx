@@ -107,7 +107,12 @@ function SearchResultCard({
   query: string
   onClick: () => void
 }) {
-  const shortPath = result.path.split("/wiki/").pop() ?? result.path
+  const { t } = useTranslation()
+  const rawShortPath = result.path.split("/wiki/").pop() ?? result.path
+  const shortPath = rawShortPath
+    .split("/")
+    .map((seg) => (seg.endsWith(".md") ? seg : t(`folderNames.${seg}`, { defaultValue: seg })))
+    .join("/")
 
   return (
     <button

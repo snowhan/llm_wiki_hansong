@@ -508,7 +508,7 @@ function SourceTree({
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                 )}
                 <Folder className="h-4 w-4 shrink-0 text-amber-500" />
-                <span className="truncate font-medium">{node.name}</span>
+                <span className="truncate font-medium">{t(`folderNames.${node.name}`, { defaultValue: node.name })}</span>
                 <span className="ml-auto text-[10px] text-muted-foreground/60 shrink-0">
                   {countFiles(node.children)}
                 </span>

@@ -318,5 +318,31 @@
   "common": {
     "cancel": "Cancel",
     "close": "Close"
+  },
+  "folderNames": {
+    "wiki": "wiki",
+    "raw": "raw",
+    "sources": "sources",
+    "assets": "assets",
+    "entities": "entities",
+    "concepts": "concepts",
+    "comparisons": "comparisons",
+    "synthesis": "synthesis",
+    "queries": "queries",
+    "meetings": "meetings",
+    "decisions": "decisions",
+    "projects": "projects",
+    "stakeholders": "stakeholders",
+    "methodology": "methodology",
+    "findings": "findings",
+    "thesis": "thesis",
+    "characters": "characters",
+    "themes": "themes",
+    "plot-threads": "plot-threads",
+    "chapters": "chapters",
+    "goals": "goals",
+    "habits": "habits",
+    "reflections": "reflections",
+    "journal": "journal"
   }
 }

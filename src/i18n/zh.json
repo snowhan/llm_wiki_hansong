@@ -318,5 +318,31 @@
   "common": {
     "cancel": "取消",
     "close": "关闭"
+  },
+  "folderNames": {
+    "wiki": "Wiki",
+    "raw": "原始资料",
+    "sources": "资料源",
+    "assets": "资源",
+    "entities": "实体",
+    "concepts": "概念",
+    "comparisons": "对比",
+    "synthesis": "综合",
+    "queries": "查询",
+    "meetings": "会议",
+    "decisions": "决策",
+    "projects": "项目",
+    "stakeholders": "干系人",
+    "methodology": "方法论",
+    "findings": "发现",
+    "thesis": "论点",
+    "characters": "角色",
+    "themes": "主题",
+    "plot-threads": "情节线",
+    "chapters": "章节",
+    "goals": "目标",
+    "habits": "习惯",
+    "reflections": "反思",
+    "journal": "日记"
   }
 }

@@ -6,6 +6,7 @@ import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 
 function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(depth < 1)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
@@ -27,7 +28,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
             <ChevronRight className="h-3.5 w-3.5 shrink-0" />
           )}
           <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-          <span className="truncate">{node.name}</span>
+          <span className="truncate">{t(`folderNames.${node.name}`, { defaultValue: node.name })}</span>
         </button>
         {expanded && node.children?.map((child) => (
           <TreeNode key={child.path} node={child} depth={depth + 1} />
