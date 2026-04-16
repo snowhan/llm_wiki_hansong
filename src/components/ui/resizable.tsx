@@ -1,56 +1,89 @@
-import {
-  Group,
-  Panel,
-  Separator,
-  type GroupProps,
-  type PanelProps,
-  type SeparatorProps,
-} from "react-resizable-panels"
+import Box from "@mui/material/Box"
+import type { BoxProps } from "@mui/material/Box"
+import { sxMerge } from "@/lib/mui-sx"
 
-import { cn } from "@/lib/utils"
+export type ResizablePanelGroupProps = BoxProps & {
+  direction?: "horizontal" | "vertical"
+}
 
 function ResizablePanelGroup({
+  direction = "horizontal",
   className,
-  direction,
+  sx,
   ...props
-}: GroupProps & { direction?: "horizontal" | "vertical" }) {
+}: ResizablePanelGroupProps) {
   return (
-    <Group
+    <Box
       data-slot="resizable-panel-group"
-      orientation={direction ?? "horizontal"}
-      className={cn(
-        "flex h-full w-full data-[orientation=vertical]:flex-col",
-        className
+      className={className}
+      sx={sxMerge(
+        {
+          display: "flex",
+          height: "100%",
+          width: "100%",
+          minHeight: 0,
+          minWidth: 0,
+          flexDirection: direction === "vertical" ? "column" : "row",
+        },
+        sx,
       )}
       {...props}
     />
   )
 }
 
-function ResizablePanel({ ...props }: PanelProps) {
-  return <Panel data-slot="resizable-panel" {...props} />
+export type ResizablePanelProps = BoxProps
+
+function ResizablePanel({ sx, ...props }: ResizablePanelProps) {
+  return (
+    <Box
+      data-slot="resizable-panel"
+      sx={sxMerge({ flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }, sx)}
+      {...props}
+    />
+  )
 }
 
-function ResizableHandle({
-  withHandle,
-  className,
-  ...props
-}: SeparatorProps & {
+export type ResizableHandleProps = BoxProps & {
   withHandle?: boolean
-}) {
+}
+
+function ResizableHandle({ withHandle, className, sx, ...props }: ResizableHandleProps) {
   return (
-    <Separator
+    <Box
       data-slot="resizable-handle"
-      className={cn(
-        "relative flex w-1.5 cursor-col-resize items-center justify-center bg-border/40 transition-colors hover:bg-primary/20 data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=horizontal]:cursor-row-resize",
-        className
+      className={className}
+      sx={sxMerge(
+        {
+          position: "relative",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 6,
+          cursor: "col-resize",
+          bgcolor: "action.selected",
+          opacity: 0.4,
+          transition: (t) => t.transitions.create("opacity"),
+          "&:hover": { opacity: 0.7 },
+        },
+        sx,
       )}
       {...props}
     >
-      {withHandle && (
-        <div className="z-10 flex h-8 w-1.5 shrink-0 rounded-full bg-border data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-8" />
-      )}
-    </Separator>
+      {withHandle ? (
+        <Box
+          sx={{
+            zIndex: 1,
+            width: 6,
+            height: 32,
+            flexShrink: 0,
+            borderRadius: 999,
+            bgcolor: "divider",
+          }}
+        />
+      ) : null}
+    </Box>
   )
 }
 

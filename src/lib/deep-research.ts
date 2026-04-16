@@ -6,8 +6,6 @@ import { useWikiStore, type LlmConfig, type SearchApiConfig } from "@/stores/wik
 import { useResearchStore } from "@/stores/research-store"
 import { normalizePath } from "@/lib/path-utils"
 
-let processing = false
-
 /**
  * Queue a deep research task. Automatically starts processing if under concurrency limit.
  */

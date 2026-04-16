@@ -1,19 +1,23 @@
-import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"
+import Divider from "@mui/material/Divider"
+import type { DividerProps } from "@mui/material/Divider"
+import { sxMerge } from "@/lib/mui-sx"
 
-import { cn } from "@/lib/utils"
+export type SeparatorProps = Omit<DividerProps, "orientation"> & {
+  orientation?: "horizontal" | "vertical"
+}
 
-function Separator({
-  className,
-  orientation = "horizontal",
-  ...props
-}: SeparatorPrimitive.Props) {
+function Separator({ className, orientation = "horizontal", flexItem, sx, ...props }: SeparatorProps) {
   return (
-    <SeparatorPrimitive
+    <Divider
       data-slot="separator"
+      className={className}
       orientation={orientation}
-      className={cn(
-        "shrink-0 bg-border data-horizontal:h-px data-horizontal:w-full data-vertical:w-px data-vertical:self-stretch",
-        className
+      flexItem={orientation === "vertical" ? flexItem ?? true : flexItem}
+      sx={sxMerge(
+        orientation === "vertical"
+          ? { alignSelf: "stretch", height: "auto" }
+          : { width: "100%" },
+        sx,
       )}
       {...props}
     />

@@ -1,4 +1,7 @@
 import { useState } from "react"
+import Box from "@mui/material/Box"
+import Tab from "@mui/material/Tab"
+import Tabs from "@mui/material/Tabs"
 import { useTranslation } from "react-i18next"
 import { KnowledgeTree } from "./knowledge-tree"
 import { FileTree } from "./file-tree"
@@ -8,32 +11,31 @@ export function SidebarPanel() {
   const [mode, setMode] = useState<"knowledge" | "files">("knowledge")
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 border-b">
-        <button
-          onClick={() => setMode("knowledge")}
-          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
-            mode === "knowledge"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("sidebar.knowledge")}
-        </button>
-        <button
-          onClick={() => setMode("files")}
-          className={`flex-1 px-3 py-1.5 text-xs font-medium transition-colors ${
-            mode === "files"
-              ? "border-b-2 border-primary text-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {t("sidebar.files")}
-        </button>
-      </div>
-      <div className="flex-1 overflow-hidden">
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      <Tabs
+        value={mode}
+        onChange={(_, v) => setMode(v)}
+        variant="fullWidth"
+        sx={{
+          flexShrink: 0,
+          minHeight: 36,
+          borderBottom: 1,
+          borderColor: "divider",
+          "& .MuiTab-root": {
+            minHeight: 36,
+            py: 0.75,
+            fontSize: 12,
+            fontWeight: 500,
+            textTransform: "none",
+          },
+        }}
+      >
+        <Tab value="knowledge" label={t("sidebar.knowledge")} />
+        <Tab value="files" label={t("sidebar.files")} />
+      </Tabs>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         {mode === "knowledge" ? <KnowledgeTree /> : <FileTree />}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

@@ -20,7 +20,7 @@ interface ActivityState {
 
 let counter = 0
 
-export const useActivityStore = create<ActivityState>((set, get) => ({
+export const useActivityStore = create<ActivityState>((set, _get) => ({
   items: [],
 
   addItem: (item) => {

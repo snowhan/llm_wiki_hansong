@@ -212,8 +212,8 @@ export async function buildRetrievalGraph(
   const inLinksMap = new Map<string, Set<string>>()
 
   for (const id of nodeIds) {
-    outLinksMap.set(id, new Set())
-    inLinksMap.set(id, new Set())
+    outLinksMap.set(id, new Set<string>())
+    inLinksMap.set(id, new Set<string>())
   }
 
   for (const raw of rawNodes) {
@@ -234,8 +234,8 @@ export async function buildRetrievalGraph(
       type: raw.type,
       path: raw.path,
       sources: Object.freeze([...raw.sources]),
-      outLinks: Object.freeze(outLinksMap.get(raw.id) ?? new Set()),
-      inLinks: Object.freeze(inLinksMap.get(raw.id) ?? new Set()),
+      outLinks: Object.freeze(outLinksMap.get(raw.id) ?? new Set<string>()) as ReadonlySet<string>,
+      inLinks: Object.freeze(inLinksMap.get(raw.id) ?? new Set<string>()) as ReadonlySet<string>,
     })
   }
 

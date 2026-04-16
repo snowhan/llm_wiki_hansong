@@ -1,58 +1,175 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button"
-import { cva, type VariantProps } from "class-variance-authority"
+import * as React from "react"
+import MuiButton from "@mui/material/Button"
+import type { ButtonProps as MuiButtonProps } from "@mui/material/Button"
+import { alpha } from "@mui/material/styles"
+import type { SxProps, Theme } from "@mui/material/styles"
+import { sxMerge } from "@/lib/mui-sx"
 
-import { cn } from "@/lib/utils"
+export type ButtonVariant =
+  | "default"
+  | "destructive"
+  | "outline"
+  | "secondary"
+  | "ghost"
+  | "link"
 
-const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-        outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-        ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
-        destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
+export type ButtonSize =
+  | "default"
+  | "xs"
+  | "sm"
+  | "lg"
+  | "icon"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon-lg"
+
+export type ButtonProps = Omit<MuiButtonProps, "variant" | "size" | "color"> & {
+  variant?: ButtonVariant
+  size?: ButtonSize
+}
+
+type Mapped = Pick<MuiButtonProps, "variant" | "color"> & { sxExtra?: SxProps<Theme> }
+
+function mapVariantToMui(variant: ButtonVariant): Mapped {
+  switch (variant) {
+    case "default":
+      return { variant: "contained", color: "primary" }
+    case "destructive":
+      return {
+        variant: "text",
+        color: "error",
+        sxExtra: {
+          bgcolor: (t: Theme) => alpha(t.palette.error.main, 0.12),
+          "&:hover": { bgcolor: (t: Theme) => alpha(t.palette.error.main, 0.2) },
+        },
+      }
+    case "outline":
+      return { variant: "outlined", color: "primary" }
+    case "secondary":
+      return {
+        variant: "contained",
+        color: "inherit",
+        sxExtra: {
+          bgcolor: "background.paper2",
+          color: "text.primary",
+          border: "1px solid",
+          borderColor: "divider",
+          boxShadow: "none",
+          "&:hover": { bgcolor: "action.hover", boxShadow: "none" },
+        },
+      }
+    case "ghost":
+      return {
+        variant: "text",
+        color: "inherit",
+        sxExtra: {
+          color: "text.primary",
+          "&:hover": { bgcolor: "action.hover" },
+        },
+      }
+    case "link":
+      return {
+        variant: "text",
+        color: "primary",
+        sxExtra: {
+          minWidth: "auto",
+          textDecoration: "underline",
+          textUnderlineOffset: 4,
+          "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+        },
+      }
+    default:
+      return { variant: "contained", color: "primary" }
   }
-)
+}
 
-function Button({
-  className,
-  variant = "default",
-  size = "default",
-  ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+function sizeSx(size: ButtonSize): SxProps<Theme> {
+  const iconSvg = {
+    "& .MuiSvgIcon-root, & svg": { fontSize: "inherit", width: "1em", height: "1em" },
+  }
+  switch (size) {
+    case "xs":
+      return {
+        minHeight: 24,
+        px: 1,
+        py: 0.25,
+        fontSize: "0.75rem",
+        gap: 0.5,
+        borderRadius: "min(10px, 10px)",
+        ...iconSvg,
+      }
+    case "sm":
+      return {
+        minHeight: 28,
+        px: 1.25,
+        py: 0.25,
+        fontSize: "0.8rem",
+        gap: 0.5,
+        borderRadius: "min(12px, 12px)",
+        ...iconSvg,
+      }
+    case "lg":
+      return { minHeight: 36, px: 1.25, py: 0.5, gap: 0.75, ...iconSvg }
+    case "icon":
+      return { minWidth: 32, width: 32, height: 32, p: 0, ...iconSvg }
+    case "icon-xs":
+      return {
+        minWidth: 24,
+        width: 24,
+        height: 24,
+        p: 0,
+        borderRadius: "min(10px, 10px)",
+        ...iconSvg,
+      }
+    case "icon-sm":
+      return {
+        minWidth: 28,
+        width: 28,
+        height: 28,
+        p: 0,
+        borderRadius: "min(12px, 12px)",
+        ...iconSvg,
+      }
+    case "icon-lg":
+      return { minWidth: 36, width: 36, height: 36, p: 0, ...iconSvg }
+    case "default":
+    default:
+      return { minHeight: 32, px: 1.25, py: 0.25, gap: 0.5, ...iconSvg }
+  }
+}
+
+/** Returns `sx` for the legacy variant/size API (for reuse outside `Button`). */
+export function buttonVariants(options: {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  className?: string
+}): { sx: SxProps<Theme> } {
+  const variant = options.variant ?? "default"
+  const size = options.size ?? "default"
+  const mapped = mapVariantToMui(variant)
+  const { sxExtra } = mapped
+  return {
+    sx: sxMerge(sizeSx(size), sxExtra ?? {}),
+  }
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  { variant = "default", size = "default", sx, ...props },
+  ref
+) {
+  const mapped = mapVariantToMui(variant)
+  const { sxExtra, variant: muiVariant, color } = mapped
+
   return (
-    <ButtonPrimitive
+    <MuiButton
+      ref={ref}
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      variant={muiVariant}
+      color={color === "inherit" ? "inherit" : color}
+      sx={sxMerge(sizeSx(size), sxExtra ?? {}, sx)}
       {...props}
     />
   )
-}
+})
 
-export { Button, buttonVariants }
+export { Button }

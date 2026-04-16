@@ -1,8 +1,14 @@
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import Box from "@mui/material/Box"
+import Button from "@mui/material/Button"
+import TextField from "@mui/material/TextField"
+import Typography from "@mui/material/Typography"
+import Stack from "@mui/material/Stack"
+import ToggleButton from "@mui/material/ToggleButton"
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup"
+import Switch from "@mui/material/Switch"
+import Slider from "@mui/material/Slider"
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
@@ -94,90 +100,103 @@ export function SettingsView() {
   }
 
   return (
-    <div className="h-full overflow-auto p-8">
-      <div className="mx-auto max-w-xl">
-        <h2 className="mb-6 text-2xl font-bold">{t("settings.title")}</h2>
+    <Box sx={{ height: 1, overflow: "auto", p: 4 }}>
+      <Box sx={{ mx: "auto", maxWidth: 600 }}>
+        <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
+          {t("settings.title")}
+        </Typography>
 
-        <div className="space-y-6">
+        <Stack spacing={3}>
           {/* Language section */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">{t("settings.language")}</h3>
-            <div className="flex flex-wrap gap-2">
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Typography sx={{ fontWeight: 600, mb: 2 }}>{t("settings.language")}</Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={currentLang}
+              onChange={(_, v) => v && handleLanguageChange(v)}
+            >
               {LANGUAGES.map((lang) => (
-                <button
-                  key={lang.value}
-                  onClick={() => handleLanguageChange(lang.value)}
-                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                    currentLang === lang.value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border hover:bg-accent"
-                  }`}
-                >
+                <ToggleButton key={lang.value} value={lang.value}>
                   {lang.label}
-                </button>
+                </ToggleButton>
               ))}
-            </div>
-            <p className="text-xs text-muted-foreground">{t("settings.languageHint")}</p>
-          </div>
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+              {t("settings.languageHint")}
+            </Typography>
+          </Box>
 
           {/* LLM Provider section */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">{t("settings.llmProvider")}</h3>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Typography sx={{ fontWeight: 600, mb: 2 }}>{t("settings.llmProvider")}</Typography>
 
-            <div className="space-y-2">
-              <Label>{t("settings.provider")}</Label>
-              <div className="flex flex-wrap gap-2">
-                {PROVIDERS.map((p) => (
-                  <button
-                    key={p.value}
-                    onClick={() => {
-                      setProvider(p.value)
-                      setModel(p.models[0] || "")
-                    }}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      provider === p.value
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    {providerLabel(p)}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              {t("settings.provider")}
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={provider}
+              onChange={(_, v) => {
+                if (!v) return
+                setProvider(v)
+                const p = PROVIDERS.find((x) => x.value === v)
+                setModel(p?.models[0] ?? "")
+              }}
+              sx={{ flexWrap: "wrap", gap: 0.5 }}
+            >
+              {PROVIDERS.map((p) => (
+                <ToggleButton key={p.value} value={p.value}>
+                  {providerLabel(p)}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
 
             {provider === "custom" && (
-              <div className="space-y-2">
-                <Label htmlFor="customEndpoint">{t("settings.customEndpoint")}</Label>
-                <Input
+              <Stack spacing={1} sx={{ mt: 2 }}>
+                <Typography variant="body2" component="label" htmlFor="customEndpoint">
+                  {t("settings.customEndpoint")}
+                </Typography>
+                <TextField
                   id="customEndpoint"
+                  size="small"
+                  fullWidth
                   value={customEndpoint}
                   onChange={(e) => setCustomEndpoint(e.target.value)}
                   placeholder="https://your-api.example.com/v1"
                 />
-                <p className="text-xs text-muted-foreground">
+                <Typography variant="caption" color="text.secondary">
                   {t("settings.customEndpointHint")}
-                </p>
-              </div>
+                </Typography>
+              </Stack>
             )}
 
             {provider === "ollama" && (
-              <div className="space-y-2">
-                <Label htmlFor="ollamaUrl">{t("settings.ollamaUrl")}</Label>
-                <Input
+              <Stack spacing={1} sx={{ mt: 2 }}>
+                <Typography variant="body2" component="label" htmlFor="ollamaUrl">
+                  {t("settings.ollamaUrl")}
+                </Typography>
+                <TextField
                   id="ollamaUrl"
+                  size="small"
+                  fullWidth
                   value={ollamaUrl}
                   onChange={(e) => setOllamaUrl(e.target.value)}
                   placeholder="http://localhost:11434"
                 />
-              </div>
+              </Stack>
             )}
 
             {provider !== "ollama" && provider !== "wps" && (
-              <div className="space-y-2">
-                <Label htmlFor="apiKey">{t("settings.apiKey")}</Label>
-                <Input
+              <Stack spacing={1} sx={{ mt: 2 }}>
+                <Typography variant="body2" component="label" htmlFor="apiKey">
+                  {t("settings.apiKey")}
+                </Typography>
+                <TextField
                   id="apiKey"
+                  size="small"
+                  fullWidth
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
@@ -185,192 +204,193 @@ export function SettingsView() {
                     provider === "custom"
                       ? t("settings.customApiKey")
                       : t("settings.apiKeyPlaceholder", {
-                      provider: currentProvider ? providerLabel(currentProvider) : "",
-                    })
+                          provider: currentProvider ? providerLabel(currentProvider) : "",
+                        })
                   }
                 />
-              </div>
+              </Stack>
             )}
 
             {provider === "wps" && (
-              <p className="text-xs text-muted-foreground">
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 2 }}>
                 WPS AI Gateway 认证信息从 .env 文件读取（VITE_WPS_GATEWAY_TOKEN 等）
-              </p>
+              </Typography>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="model">{t("settings.model")}</Label>
+            <Stack spacing={1} sx={{ mt: 2 }}>
+              <Typography variant="body2" component="label" htmlFor="model">
+                {t("settings.model")}
+              </Typography>
               {currentProvider && currentProvider.models.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2">
+                <Stack spacing={1}>
+                  <ToggleButtonGroup
+                    exclusive
+                    size="small"
+                    value={model}
+                    onChange={(_, v) => v && setModel(v)}
+                    sx={{ flexWrap: "wrap", gap: 0.5 }}
+                  >
                     {currentProvider.models.map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setModel(m)}
-                        className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                          model === m
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border hover:bg-accent"
-                        }`}
-                      >
+                      <ToggleButton key={m} value={m}>
                         {m}
-                      </button>
+                      </ToggleButton>
                     ))}
-                  </div>
-                  <Input
+                  </ToggleButtonGroup>
+                  <TextField
+                    size="small"
+                    fullWidth
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                     placeholder={t("settings.customModel")}
                   />
-                </div>
+                </Stack>
               ) : (
-                <Input
+                <TextField
                   id="model"
+                  size="small"
+                  fullWidth
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder={t("settings.modelPlaceholder")}
                 />
               )}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           {/* Context Window Size */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">{t("settings.contextWindow")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.contextWindowDesc")}</p>
-
-            <div className="space-y-3">
-              <ContextSizeSelector value={maxContextSize} onChange={setMaxContextSize} />
-            </div>
-          </div>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.contextWindow")}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+              {t("settings.contextWindowDesc")}
+            </Typography>
+            <ContextSizeSelector value={maxContextSize} onChange={setMaxContextSize} />
+          </Box>
 
           {/* Web Search API section */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">{t("settings.webSearch")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.webSearchDesc")}</p>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.webSearch")}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+              {t("settings.webSearchDesc")}
+            </Typography>
 
-            <div className="space-y-2">
-              <Label>{t("settings.searchProvider")}</Label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: "none" as const, label: "Disabled" },
-                  { value: "tavily" as const, label: "Tavily" },
-                ].map((p) => (
-                  <button
-                    key={p.value}
-                    onClick={() => setSearchProvider(p.value)}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      searchProvider === p.value
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    {p.value === "none" ? t("settings.disabled") : p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {t("settings.searchProvider")}
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={searchProvider}
+              onChange={(_, v) => v && setSearchProvider(v)}
+            >
+              <ToggleButton value="none">{t("settings.disabled")}</ToggleButton>
+              <ToggleButton value="tavily">Tavily</ToggleButton>
+            </ToggleButtonGroup>
 
             {searchProvider !== "none" && (
-              <div className="space-y-2">
-                <Label htmlFor="searchApiKey">{t("settings.searchApiKeyLabel")}</Label>
-                <Input
+              <Stack spacing={1} sx={{ mt: 2 }}>
+                <Typography variant="body2" component="label" htmlFor="searchApiKey">
+                  {t("settings.searchApiKeyLabel")}
+                </Typography>
+                <TextField
                   id="searchApiKey"
+                  size="small"
+                  fullWidth
                   type="password"
                   value={searchApiKey}
                   onChange={(e) => setSearchApiKey(e.target.value)}
                   placeholder={t("settings.searchApiKeyPlaceholder")}
                 />
-              </div>
+              </Stack>
             )}
-          </div>
+          </Box>
 
           {/* Embedding Search section */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">{t("settings.vectorSearch")}</h3>
-              <button
-                onClick={() => setEmbeddingEnabled(!embeddingEnabled)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                  embeddingEnabled ? "bg-primary" : "bg-muted"
-                }`}
-              >
-                <span
-                  className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
-                    embeddingEnabled ? "translate-x-4.5" : "translate-x-0.5"
-                  }`}
-                />
-              </button>
-            </div>
-            <p className="text-xs text-muted-foreground">{t("settings.vectorSearchDesc")}</p>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+              <Typography sx={{ fontWeight: 600 }}>{t("settings.vectorSearch")}</Typography>
+              <Switch
+                checked={embeddingEnabled}
+                onChange={(_, checked) => setEmbeddingEnabled(checked)}
+              />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+              {t("settings.vectorSearchDesc")}
+            </Typography>
             {embeddingEnabled && (
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label>{t("settings.endpoint")}</Label>
-                  <Input
+              <Stack spacing={1.5}>
+                <Stack spacing={0.5}>
+                  <Typography variant="body2">{t("settings.endpoint")}</Typography>
+                  <TextField
+                    size="small"
+                    fullWidth
                     value={embeddingEndpoint}
                     onChange={(e) => setEmbeddingEndpoint(e.target.value)}
                     placeholder={t("settings.endpointPlaceholder")}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.apiKeyOptional")}</Label>
-                  <Input
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="body2">{t("settings.apiKeyOptional")}</Typography>
+                  <TextField
+                    size="small"
+                    fullWidth
                     type="password"
                     value={embeddingApiKey}
                     onChange={(e) => setEmbeddingApiKey(e.target.value)}
                     placeholder={t("settings.leaveEmpty")}
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t("settings.model")}</Label>
-                  <Input
+                </Stack>
+                <Stack spacing={0.5}>
+                  <Typography variant="body2">{t("settings.model")}</Typography>
+                  <TextField
+                    size="small"
+                    fullWidth
                     value={embeddingModel}
                     onChange={(e) => setEmbeddingModel(e.target.value)}
                     placeholder={t("settings.embeddingModelPlaceholder")}
                   />
-                </div>
-                <p className="text-xs text-muted-foreground">{t("settings.embeddingDesc")}</p>
-              </div>
+                </Stack>
+                <Typography variant="caption" color="text.secondary">
+                  {t("settings.embeddingDesc")}
+                </Typography>
+              </Stack>
             )}
-          </div>
+          </Box>
 
           {/* Chat History section */}
-          <div className="space-y-4 rounded-lg border p-4">
-            <h3 className="font-semibold">{t("settings.chatHistory")}</h3>
-            <p className="text-xs text-muted-foreground">{t("settings.chatHistoryDesc")}</p>
-            <div className="space-y-2">
-              <Label>{t("settings.maxMessages")}</Label>
-              <div className="flex flex-wrap gap-2">
-                {HISTORY_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    onClick={() => setMaxHistoryMessages(n)}
-                    className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                      maxHistoryMessages === n
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border hover:bg-accent"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.currentlyMessages", {
-                  count: maxHistoryMessages,
-                  rounds: maxHistoryMessages / 2,
-                })}
-              </p>
-            </div>
-          </div>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+            <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.chatHistory")}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+              {t("settings.chatHistoryDesc")}
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              {t("settings.maxMessages")}
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={maxHistoryMessages}
+              onChange={(_, v) => v != null && setMaxHistoryMessages(v)}
+            >
+              {HISTORY_OPTIONS.map((n) => (
+                <ToggleButton key={n} value={n}>
+                  {n}
+                </ToggleButton>
+              ))}
+            </ToggleButtonGroup>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+              {t("settings.currentlyMessages", {
+                count: maxHistoryMessages,
+                rounds: maxHistoryMessages / 2,
+              })}
+            </Typography>
+          </Box>
 
-          <Button onClick={handleSave} className="w-full">
+          <Button variant="contained" fullWidth onClick={handleSave}>
             {saved ? t("settings.saved") : t("settings.save")}
           </Button>
-        </div>
-      </div>
-    </div>
+        </Stack>
+      </Box>
+    </Box>
   )
 }
 
@@ -402,38 +422,52 @@ function ContextSizeSelector({ value, onChange }: { value: number; onChange: (v:
     return Math.abs(preset.value - value) < Math.abs(CONTEXT_PRESETS[best].value - value) ? i : best
   }, 0)
 
+  const maxIdx = CONTEXT_PRESETS.length - 1
+
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium">{formatSize(value)}</span>
-        <span className="text-xs text-muted-foreground">
+    <Box>
+      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {formatSize(value)}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
           {t("settings.wikiContentChars", { count: Math.floor((value * 0.6) / 1000) })}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={CONTEXT_PRESETS.length - 1}
-        step={1}
+        </Typography>
+      </Stack>
+      <Slider
+        size="small"
         value={closestIndex}
-        onChange={(e) => onChange(CONTEXT_PRESETS[parseInt(e.target.value)].value)}
-        className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
-        style={{ background: `linear-gradient(to right, #4f46e5 ${(closestIndex / (CONTEXT_PRESETS.length - 1)) * 100}%, #e5e7eb ${(closestIndex / (CONTEXT_PRESETS.length - 1)) * 100}%)` }}
+        min={0}
+        max={maxIdx}
+        step={1}
+        marks
+        onChange={(_, v) => onChange(CONTEXT_PRESETS[typeof v === "number" ? v : 0].value)}
+        sx={{
+          color: "primary.main",
+          "& .MuiSlider-thumb": { width: 14, height: 14 },
+        }}
       />
-      <div className="flex justify-between mt-1">
+      <Stack direction="row" sx={{ justifyContent: "space-between", mt: 0.5, flexWrap: "wrap", gap: 0.25 }}>
         {CONTEXT_PRESETS.map((preset, i) => (
-          <button
+          <Button
             key={preset.value}
-            type="button"
+            size="small"
             onClick={() => onChange(preset.value)}
-            className={`text-[9px] px-0.5 ${
-              i === closestIndex ? "text-primary font-bold" : "text-muted-foreground/50"
-            }`}
+            sx={{
+              minWidth: 0,
+              px: 0.25,
+              py: 0,
+              fontSize: "9px",
+              textTransform: "none",
+              color: i === closestIndex ? "primary.main" : "text.secondary",
+              fontWeight: i === closestIndex ? 700 : 400,
+              opacity: i === closestIndex ? 1 : 0.5,
+            }}
           >
             {preset.label}
-          </button>
+          </Button>
         ))}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   )
 }

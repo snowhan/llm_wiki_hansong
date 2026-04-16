@@ -1,13 +1,16 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { open } from "@tauri-apps/plugin-dialog"
+import FolderOpenIcon from "@mui/icons-material/FolderOpen"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FolderOpen } from "lucide-react"
 import { createProject, writeFile, createDirectory } from "@/commands/fs"
 import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
@@ -70,31 +73,42 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={isOpen} onOpenChange={onOpenChange} maxWidth="sm" fullWidth>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{t("project.createTitle")}</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-4">
-          <div className="flex flex-col gap-2">
+        <Stack spacing={2} sx={{ py: 2 }}>
+          <Stack spacing={1}>
             <Label htmlFor="name">{t("project.name")}</Label>
             <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("project.namePlaceholder")} />
-          </div>
-          <div className="flex flex-col gap-2">
+          </Stack>
+          <Stack spacing={1}>
             <Label>{t("project.template")}</Label>
             <TemplatePicker selected={selectedTemplate} onSelect={setSelectedTemplate} />
-          </div>
-          <div className="flex flex-col gap-2">
+          </Stack>
+          <Stack spacing={1}>
             <Label htmlFor="path">{t("project.parentDir")}</Label>
-            <div className="flex gap-2">
-              <Input id="path" value={path} onChange={(e) => setPath(e.target.value)} placeholder={t("project.parentDirPlaceholder")} className="flex-1" />
-              <Button variant="outline" size="icon" onClick={handleBrowse} type="button">
-                <FolderOpen className="h-4 w-4" />
+            <Stack direction="row" spacing={1} sx={{ alignItems: "stretch" }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Input
+                  id="path"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder={t("project.parentDirPlaceholder")}
+                />
+              </Box>
+              <Button variant="outline" size="icon" onClick={handleBrowse} type="button" sx={{ flexShrink: 0 }}>
+                <FolderOpenIcon sx={{ fontSize: 18 }} />
               </Button>
-            </div>
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
+            </Stack>
+          </Stack>
+          {error ? (
+            <Typography variant="body2" color="error">
+              {error}
+            </Typography>
+          ) : null}
+        </Stack>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>{t("project.cancel")}</Button>
           <Button onClick={handleCreate} disabled={creating}>{creating ? t("project.creating") : t("project.create")}</Button>

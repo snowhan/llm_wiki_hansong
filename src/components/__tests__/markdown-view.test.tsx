@@ -2,34 +2,32 @@ import { describe, it, expect, vi } from "vitest"
 import { render, waitFor } from "@testing-library/react"
 import { MarkdownView } from "../ui/markdown-view"
 
-vi.mock("@/lib/markdown-renderer", () => ({
-  renderPreview: vi.fn(async (el: HTMLDivElement, src: string) => {
-    el.innerHTML = `<p>${src}</p>`
+vi.mock("@tiptap/react", () => ({
+  useEditor: () => ({
+    commands: { setContent: vi.fn() },
+    getHTML: () => "<p>test</p>",
+    getMarkdown: () => "",
+    destroy: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+    isDestroyed: false,
+    storage: { tableOfContents: { content: [] } },
   }),
-}))
-
-vi.mock("@/hooks/use-is-dark", () => ({
-  useIsDark: () => false,
-}))
-
-vi.mock("@/stores/wiki-store", () => ({
-  useWikiStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({ project: null, setSelectedFile: vi.fn(), setFileContent: vi.fn() }),
+  EditorContent: () => <div className="tiptap" data-testid="editor-content" />,
 }))
 
 describe("MarkdownView", () => {
-  it("renders content via Vditor preview", async () => {
-    const { container } = render(<MarkdownView content="hello" />)
+  it("renders TipTap content for markdown", async () => {
+    const { getByTestId } = render(<MarkdownView markdown="hello" />)
     await waitFor(() => {
-      expect(container.querySelector(".vditor-reset")).toBeTruthy()
-      expect(container.textContent).toContain("hello")
+      expect(getByTestId("editor-content")).toBeTruthy()
     })
   })
 
-  it("applies custom className", async () => {
-    const { container } = render(<MarkdownView content="test" className="custom-class" />)
+  it("accepts sx styling", async () => {
+    const { container } = render(<MarkdownView markdown="test" sx={{ fontSize: 12 }} />)
     await waitFor(() => {
-      expect(container.querySelector(".vditor-reset.custom-class")).toBeTruthy()
+      expect(container.querySelector(".tiptap")).toBeTruthy()
     })
   })
 })

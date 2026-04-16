@@ -1,6 +1,10 @@
 import { useState } from "react"
-import { ChevronRight, ChevronDown, File, Folder } from "lucide-react"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import ChevronRight from "@mui/icons-material/ChevronRight"
+import ExpandMore from "@mui/icons-material/ExpandMore"
+import InsertDriveFileOutlined from "@mui/icons-material/InsertDriveFileOutlined"
+import FolderOutlined from "@mui/icons-material/FolderOutlined"
 import { useWikiStore } from "@/stores/wiki-store"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
@@ -16,40 +20,70 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
 
   if (node.is_dir) {
     return (
-      <div>
-        <button
+      <Box>
+        <Box
+          component="button"
+          type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center gap-1 py-1 text-sm text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-          style={{ paddingLeft }}
+          sx={{
+            display: "flex",
+            width: "100%",
+            alignItems: "center",
+            gap: 0.5,
+            py: 0.5,
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            font: "inherit",
+            textAlign: "left",
+            color: "text.secondary",
+            pl: `${paddingLeft}px`,
+            "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+          }}
         >
           {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+            <ExpandMore sx={{ fontSize: 14, flexShrink: 0 }} />
           ) : (
-            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+            <ChevronRight sx={{ fontSize: 14, flexShrink: 0 }} />
           )}
-          <Folder className="h-3.5 w-3.5 shrink-0 text-blue-400" />
-          <span className="truncate">{t(`folderNames.${node.name}`, { defaultValue: node.name })}</span>
-        </button>
+          <FolderOutlined sx={{ fontSize: 14, flexShrink: 0, color: "info.light" }} />
+          <Typography component="span" variant="body2" noWrap sx={{ flex: 1 }}>
+            {t(`folderNames.${node.name}`, { defaultValue: node.name })}
+          </Typography>
+        </Box>
         {expanded && node.children?.map((child) => (
           <TreeNode key={child.path} node={child} depth={depth + 1} />
         ))}
-      </div>
+      </Box>
     )
   }
 
   return (
-    <button
+    <Box
+      component="button"
+      type="button"
       onClick={() => setSelectedFile(node.path)}
-      className={`flex w-full items-center gap-1 py-1 text-sm ${
-        isSelected
-          ? "bg-accent text-accent-foreground"
-          : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-      }`}
-      style={{ paddingLeft: paddingLeft + 14 }}
+      sx={{
+        display: "flex",
+        width: "100%",
+        alignItems: "center",
+        gap: 0.5,
+        py: 0.5,
+        border: "none",
+        background: isSelected ? "action.selected" : "none",
+        cursor: "pointer",
+        font: "inherit",
+        textAlign: "left",
+        color: isSelected ? "text.primary" : "text.secondary",
+        pl: `${paddingLeft + 14}px`,
+        "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+      }}
     >
-      <File className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate">{node.name}</span>
-    </button>
+      <InsertDriveFileOutlined sx={{ fontSize: 14, flexShrink: 0 }} />
+      <Typography component="span" variant="body2" noWrap sx={{ flex: 1 }}>
+        {node.name}
+      </Typography>
+    </Box>
   )
 }
 
@@ -60,22 +94,48 @@ export function FileTree() {
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+      <Box
+        sx={{
+          display: "flex",
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+          p: 2,
+          typography: "body2",
+          color: "text.secondary",
+        }}
+      >
         {t("fileTree.noProject")}
-      </div>
+      </Box>
     )
   }
 
   return (
-    <ScrollArea className="h-full min-w-0 overflow-hidden">
-      <div className="p-2">
-        <div className="mb-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
+    <Box
+      sx={{
+        height: "100%",
+        minWidth: 0,
+        overflow: "auto",
+      }}
+    >
+      <Box sx={{ p: 1 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            mb: 1,
+            px: 1,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            color: "text.secondary",
+          }}
+        >
           {project.name}
-        </div>
+        </Typography>
         {fileTree.map((node) => (
           <TreeNode key={node.path} node={node} depth={0} />
         ))}
-      </div>
-    </ScrollArea>
+      </Box>
+    </Box>
   )
 }

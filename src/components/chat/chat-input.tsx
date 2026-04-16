@@ -1,7 +1,10 @@
 import { useRef, useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import { Send, Square } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import Box from "@mui/material/Box"
+import IconButton from "@mui/material/IconButton"
+import TextField from "@mui/material/TextField"
+import SendIcon from "@mui/icons-material/Send"
+import StopIcon from "@mui/icons-material/Stop"
 
 interface ChatInputProps {
   onSend: (text: string) => void
@@ -13,7 +16,7 @@ interface ChatInputProps {
 export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInputProps) {
   const { t } = useTranslation()
   const [value, setValue] = useState("")
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setValue(e.target.value)
@@ -33,7 +36,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
   }, [value, isStreaming, onSend])
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
         handleSend()
@@ -43,39 +46,63 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
   )
 
   return (
-    <div className="flex items-end gap-2 border-t p-3">
-      <textarea
-        ref={textareaRef}
+    <Box
+      sx={{
+        display: "flex",
+        alignItems: "flex-end",
+        gap: 1,
+        borderTop: 1,
+        borderColor: "divider",
+        p: 1.5,
+      }}
+    >
+      <TextField
+        multiline
+        minRows={1}
+        inputRef={textareaRef}
         value={value}
         onChange={handleInput}
         onKeyDown={handleKeyDown}
         placeholder={placeholder ?? t("chat.defaultPlaceholder")}
         disabled={isStreaming}
-        rows={1}
-        className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-        style={{ maxHeight: "120px", overflowY: "auto" }}
+        fullWidth
+        variant="outlined"
+        size="small"
+        sx={{
+          flex: 1,
+          "& .MuiInputBase-root": {
+            bgcolor: "background.paper",
+          },
+          "& textarea": {
+            maxHeight: 120,
+            overflowY: "auto",
+            resize: "none",
+            fontSize: "0.875rem",
+          },
+        }}
       />
       {isStreaming ? (
-        <Button
-          variant="destructive"
-          size="icon"
+        <IconButton
+          color="error"
           onClick={onStop}
-          className="shrink-0"
           title={t("chat.stopGeneration")}
+          sx={{ flexShrink: 0 }}
+          size="small"
         >
-          <Square className="h-4 w-4" />
-        </Button>
+          <StopIcon sx={{ fontSize: 18 }} />
+        </IconButton>
       ) : (
-        <Button
-          size="icon"
+        <IconButton
+          color="primary"
           onClick={handleSend}
           disabled={!value.trim()}
-          className="shrink-0"
           title={t("chat.sendMessage")}
+          sx={{ flexShrink: 0 }}
+          size="small"
         >
-          <Send className="h-4 w-4" />
-        </Button>
+          <SendIcon sx={{ fontSize: 18 }} />
+        </IconButton>
       )}
-    </div>
+    </Box>
   )
 }

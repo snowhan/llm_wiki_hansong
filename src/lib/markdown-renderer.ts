@@ -1,61 +1,38 @@
-import VditorPreview from "vditor/dist/method.min"
-
-const CDN = "/vditor"
+import { generateHTML } from "@tiptap/html"
+import { MarkdownManager } from "@tiptap/markdown"
+import { getEditorExtensions } from "@/components/editor/editor-extensions"
 
 export interface RenderOptions {
   isDark?: boolean
 }
 
 /**
- * Render markdown to HTML string (async, via Vditor/Lute).
- * Used by MarkdownView for React-managed rendering.
+ * Render markdown to an HTML string using the same TipTap extensions as the editor.
  */
-export async function renderMarkdown(source: string, opts?: RenderOptions): Promise<string> {
-  const dark = opts?.isDark ?? false
-  return VditorPreview.md2html(source, {
-    mode: dark ? "dark" : "light",
-    cdn: CDN,
-    markdown: {
-      mark: true,
-      footnotes: true,
-      toc: false,
-      sanitize: false,
-    },
-    hljs: {
-      style: dark ? "native" : "github",
-      lineNumber: false,
-    },
-    math: {
-      engine: "KaTeX",
-    },
-  })
+export function renderMarkdownToHtml(markdown: string): string {
+  const extensions = getEditorExtensions({ readonly: true })
+  const manager = new MarkdownManager({ extensions })
+  const doc = manager.parse(markdown.length ? markdown : "\n")
+  return generateHTML(doc, extensions)
 }
 
 /**
- * Full DOM-based preview rendering (code highlight, math, etc.).
- * Used for non-streaming contexts where we want the richest output.
+ * @deprecated Prefer `renderMarkdownToHtml` (sync). Kept for callers expecting async + options.
+ */
+export async function renderMarkdown(
+  source: string,
+  _opts?: RenderOptions,
+): Promise<string> {
+  return renderMarkdownToHtml(source)
+}
+
+/**
+ * Render markdown into a DOM element (replaces innerHTML).
  */
 export async function renderPreview(
   element: HTMLDivElement,
   source: string,
-  opts?: RenderOptions,
+  _opts?: RenderOptions,
 ): Promise<void> {
-  const dark = opts?.isDark ?? false
-  await VditorPreview.preview(element, source, {
-    mode: dark ? "dark" : "light",
-    cdn: CDN,
-    markdown: {
-      mark: true,
-      footnotes: true,
-      toc: false,
-      sanitize: false,
-    },
-    hljs: {
-      style: dark ? "native" : "github",
-      lineNumber: false,
-    },
-    math: {
-      engine: "KaTeX",
-    },
-  })
+  element.innerHTML = renderMarkdownToHtml(source)
 }

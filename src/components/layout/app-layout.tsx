@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import { alpha, useTheme } from "@mui/material/styles"
 import { useWikiStore } from "@/stores/wiki-store"
 import { listDirectory } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
@@ -16,6 +19,7 @@ interface AppLayoutProps {
 }
 
 export function AppLayout({ onSwitchProject }: AppLayoutProps) {
+  const theme = useTheme()
   const project = useWikiStore((s) => s.project)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
@@ -55,12 +59,10 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
 
         if (isDraggingLeft.current) {
           const newWidth = e.clientX - rect.left
-          // Hard cap: 150 to 400px
           setLeftWidth(Math.max(150, Math.min(400, newWidth)))
         }
         if (isDraggingRight.current) {
           const newWidth = rect.right - e.clientX
-          // Hard cap: 250 to 50% of container
           setRightWidth(Math.max(250, Math.min(rect.width * 0.5, newWidth)))
         }
       }
@@ -83,61 +85,95 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
 
   const hasRightPanel = !!(selectedFile || researchPanelOpen)
 
-  return (
-    <div className="flex h-screen bg-background text-foreground">
-      <IconSidebar onSwitchProject={onSwitchProject} />
-      <div ref={containerRef} className="flex min-w-0 flex-1 overflow-hidden">
-        {/* Left: File tree + Activity */}
-        <div
-          className="flex shrink-0 flex-col overflow-hidden border-r"
-          style={{ width: leftWidth }}
-        >
-          <div className="flex-1 overflow-hidden">
-            <SidebarPanel />
-          </div>
-          <ActivityPanel />
-        </div>
-        <div
-          className="w-1.5 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/30 active:bg-primary/40"
-          onMouseDown={startDrag("left")}
-        />
+  const resizeHandleSx = {
+    width: 6,
+    flexShrink: 0,
+    cursor: "col-resize",
+    bgcolor: alpha(theme.palette.divider, 0.4),
+    transition: theme.transitions.create("background-color", { duration: theme.transitions.duration.shorter }),
+    "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.3) },
+    "&:active": { bgcolor: alpha(theme.palette.primary.main, 0.4) },
+  } as const
 
-        {/* Center: Chat or view (sources/settings/review) */}
-        <div className="min-w-0 flex-1 overflow-hidden">
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        height: "100vh",
+        bgcolor: "background.default",
+        color: "text.primary",
+      }}
+    >
+      <IconSidebar onSwitchProject={onSwitchProject} />
+      <Box
+        ref={containerRef}
+        sx={{ display: "flex", minWidth: 0, flex: 1, overflow: "hidden" }}
+      >
+        <Stack
+          direction="column"
+          sx={{
+            flexShrink: 0,
+            width: leftWidth,
+            overflow: "hidden",
+            borderRight: 1,
+            borderColor: "divider",
+          }}
+        >
+          <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <SidebarPanel />
+          </Box>
+          <ActivityPanel />
+        </Stack>
+        <Box onMouseDown={startDrag("left")} sx={resizeHandleSx} />
+
+        <Box sx={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
           <ErrorBoundary>
             <ContentArea />
           </ErrorBoundary>
-        </div>
+        </Box>
 
-        {/* Right panels */}
         {hasRightPanel && (
           <>
-            <div
-              className="w-1.5 shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/30 active:bg-primary/40"
-              onMouseDown={startDrag("right")}
-            />
-            <div
-              className="flex shrink-0 flex-col overflow-hidden border-l"
-              style={{ width: rightWidth }}
+            <Box onMouseDown={startDrag("right")} sx={resizeHandleSx} />
+            <Stack
+              direction="column"
+              sx={{
+                flexShrink: 0,
+                width: rightWidth,
+                overflow: "hidden",
+                borderLeft: 1,
+                borderColor: "divider",
+              }}
             >
               <ErrorBoundary>
-                {/* File preview on top (if file selected) */}
                 {selectedFile && (
-                  <div className={researchPanelOpen ? "flex-1 overflow-hidden border-b" : "flex-1 overflow-hidden"}>
+                  <Box
+                    sx={{
+                      flex: 1,
+                      minHeight: 0,
+                      overflow: "hidden",
+                      ...(researchPanelOpen ? { borderBottom: 1, borderColor: "divider" } : {}),
+                    }}
+                  >
                     <PreviewPanel />
-                  </div>
+                  </Box>
                 )}
-                {/* Research panel on bottom (if open) */}
                 {researchPanelOpen && (
-                  <div className={selectedFile ? "h-1/2 shrink-0 overflow-hidden" : "flex-1 overflow-hidden"}>
+                  <Box
+                    sx={
+                      selectedFile
+                        ? { height: "50%", flexShrink: 0, overflow: "hidden" }
+                        : { flex: 1, minHeight: 0, overflow: "hidden" }
+                    }
+                  >
                     <ResearchPanel />
-                  </div>
+                  </Box>
                 )}
               </ErrorBoundary>
-            </div>
+            </Stack>
           </>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

@@ -65,7 +65,7 @@ describe("saveChatHistory", () => {
     await saveChatHistory("/proj", convs, msgs)
 
     expect(mockWriteFile).toHaveBeenCalledTimes(2)
-    const paths = mockWriteFile.mock.calls.map(([p]: [string]) => p)
+    const paths = mockWriteFile.mock.calls.map((call) => call[0] as string)
     expect(paths.some((p: string) => p.includes("conversations.json"))).toBe(true)
     expect(paths.some((p: string) => p.includes("chats/c1.json"))).toBe(true)
   })

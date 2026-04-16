@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react"
-import { FolderOpen, Plus, Clock, X } from "lucide-react"
+import AddIcon from "@mui/icons-material/Add"
+import CloseIcon from "@mui/icons-material/Close"
+import FolderOpenIcon from "@mui/icons-material/FolderOpen"
+import ScheduleIcon from "@mui/icons-material/Schedule"
+import Box from "@mui/material/Box"
+import IconButton from "@mui/material/IconButton"
+import List from "@mui/material/List"
+import ListItemButton from "@mui/material/ListItemButton"
+import ListItemText from "@mui/material/ListItemText"
+import Paper from "@mui/material/Paper"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import { alpha } from "@mui/material/styles"
 import { Button } from "@/components/ui/button"
 import { getRecentProjects, removeFromRecentProjects } from "@/lib/project-store"
 import type { WikiProject } from "@/types/wiki"
@@ -31,62 +43,85 @@ export function WelcomeScreen({
   }
 
   return (
-    <div className="flex h-full items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-8 px-4">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">{t("app.title")}</h1>
-          <p className="mt-2 text-muted-foreground">
-            {t("app.subtitle")}
-          </p>
-        </div>
+    <Box
+      sx={{
+        display: "flex",
+        height: "100%",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <Stack spacing={4} sx={{ alignItems: "center", px: 2 }}>
+        <Box sx={{ textAlign: "center" }}>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+            {t("app.title")}
+          </Typography>
+          <Typography sx={{ mt: 1, color: "text.secondary" }}>{t("app.subtitle")}</Typography>
+        </Box>
 
-        <div className="flex gap-3">
-          <Button onClick={onCreateProject}>
-            <Plus className="mr-2 h-4 w-4" />
+        <Stack direction="row" spacing={1.5}>
+          <Button onClick={onCreateProject} startIcon={<AddIcon sx={{ fontSize: 18 }} />}>
             {t("welcome.newProject")}
           </Button>
-          <Button variant="outline" onClick={onOpenProject}>
-            <FolderOpen className="mr-2 h-4 w-4" />
+          <Button variant="outline" onClick={onOpenProject} startIcon={<FolderOpenIcon sx={{ fontSize: 18 }} />}>
             {t("welcome.openProject")}
           </Button>
-        </div>
+        </Stack>
 
         {recentProjects.length > 0 && (
-          <div className="w-full max-w-md">
-            <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              {t("welcome.recentProjects")}
-            </div>
-            <div className="rounded-lg border">
-              {recentProjects.map((proj) => (
-                <button
-                  key={proj.path}
-                  onClick={() => onSelectProject(proj)}
-                  className="group flex w-full items-center justify-between border-b px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{proj.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {proj.path}
-                    </div>
-                  </div>
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => handleRemoveRecent(e, proj.path)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRemoveRecent(e as unknown as React.MouseEvent, proj.path)
+          <Box sx={{ width: "100%", maxWidth: 448 }}>
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", mb: 1, color: "text.secondary" }}>
+              <ScheduleIcon sx={{ fontSize: 16 }} />
+              <Typography variant="body2">{t("welcome.recentProjects")}</Typography>
+            </Stack>
+            <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
+              <List disablePadding>
+                {recentProjects.map((proj, index) => (
+                  <ListItemButton
+                    key={proj.path}
+                    onClick={() => onSelectProject(proj)}
+                    sx={{
+                      py: 1.5,
+                      px: 2,
+                      borderBottom: index < recentProjects.length - 1 ? 1 : 0,
+                      borderColor: "divider",
+                      "&:hover": { bgcolor: "action.hover" },
+                      "& [data-remove-recent]": { opacity: 0 },
+                      "&:hover [data-remove-recent]": { opacity: 1 },
                     }}
-                    className="ml-2 shrink-0 rounded p-1 opacity-0 transition-opacity hover:bg-destructive/10 group-hover:opacity-100"
                   >
-                    <X className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+                    <ListItemText
+                      primary={proj.name}
+                      secondary={proj.path}
+                      slotProps={{
+                        primary: { variant: "body2", noWrap: true, sx: { fontWeight: 500 } },
+                        secondary: { variant: "caption", color: "text.secondary", noWrap: true },
+                      }}
+                      sx={{ flex: "1 1 auto", minWidth: 0, mr: 1 }}
+                    />
+                    <IconButton
+                      data-remove-recent
+                      size="small"
+                      aria-label={t("common.close")}
+                      onClick={(e) => handleRemoveRecent(e, proj.path)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRemoveRecent(e as unknown as React.MouseEvent, proj.path)
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        "&:hover": { bgcolor: (theme) => alpha(theme.palette.error.main, 0.1) },
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: 16, color: "text.secondary" }} />
+                    </IconButton>
+                  </ListItemButton>
+                ))}
+              </List>
+            </Paper>
+          </Box>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   )
 }

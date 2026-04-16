@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { runStructuralLint, runSemanticLint, type LintResult } from "../lint"
+import { runStructuralLint, runSemanticLint } from "../lint"
 import { readFile, listDirectory } from "@/commands/fs"
 import { useActivityStore } from "@/stores/activity-store"
 import type { FileNode } from "@/types/wiki"
@@ -83,7 +83,14 @@ describe("runStructuralLint", () => {
 })
 
 describe("runSemanticLint", () => {
-  const config = { provider: "openai" as const, apiKey: "key", model: "gpt-4", contextSize: 4096 }
+  const config = {
+    provider: "openai" as const,
+    apiKey: "key",
+    model: "gpt-4",
+    ollamaUrl: "http://localhost:11434",
+    customEndpoint: "",
+    maxContextSize: 4096,
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()

@@ -1,66 +1,124 @@
 "use client"
 
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import * as React from "react"
+import { isValidElement, Children } from "react"
+import MuiTooltip, { type TooltipProps as MuiTooltipProps } from "@mui/material/Tooltip"
+import Box from "@mui/material/Box"
 
-import { cn } from "@/lib/utils"
+const TooltipDelayContext = React.createContext<{ enterDelay: number; leaveDelay: number }>({
+  enterDelay: 0,
+  leaveDelay: 0,
+})
 
-function TooltipProvider({
-  delay = 0,
-  ...props
-}: TooltipPrimitive.Provider.Props) {
+export type TooltipProviderProps = {
+  children?: React.ReactNode
+  /** @deprecated Use `delayDuration` (matches common Radix-style APIs). */
+  delay?: number
+  /** Show tooltip after this many ms (maps to MUI `enterDelay`). */
+  delayDuration?: number
+}
+
+function TooltipProvider({ children, delay = 0, delayDuration }: TooltipProviderProps) {
+  const enterDelay = delayDuration ?? delay ?? 0
+  const value = React.useMemo(() => ({ enterDelay, leaveDelay: 0 }), [enterDelay])
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delay={delay}
-      {...props}
-    />
+    <TooltipDelayContext.Provider value={value}>
+      <Box data-slot="tooltip-provider" sx={{ display: "contents" }}>
+        {children}
+      </Box>
+    </TooltipDelayContext.Provider>
   )
 }
 
-function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+const TRIGGER_NAME = "TooltipTrigger"
+const CONTENT_NAME = "TooltipContent"
+
+export type TooltipContentProps = {
+  children?: React.ReactNode
+  side?: "top" | "bottom" | "left" | "right" | "inline-start" | "inline-end"
+  sideOffset?: number
+  align?: "start" | "center" | "end"
+  alignOffset?: number
+  className?: string
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+export type TooltipRootProps = Omit<MuiTooltipProps, "title" | "children"> & {
+  children?: React.ReactNode
 }
 
-function TooltipContent({
-  className,
-  side = "top",
-  sideOffset = 4,
-  align = "center",
-  alignOffset = 0,
-  children,
-  ...props
-}: TooltipPrimitive.Popup.Props &
-  Pick<
-    TooltipPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+function Tooltip({ children, ...muiProps }: TooltipRootProps) {
+  const { enterDelay, leaveDelay } = React.useContext(TooltipDelayContext)
+
+  let trigger: React.ReactElement | null = null
+  let title: React.ReactNode = null
+  let placement: MuiTooltipProps["placement"] = "top"
+
+  Children.forEach(children, (child) => {
+    if (!isValidElement(child)) return
+    const name = (child.type as { displayName?: string }).displayName
+    if (name === TRIGGER_NAME) {
+      trigger = child
+    } else if (name === CONTENT_NAME) {
+      const p = child.props as TooltipContentProps
+      title = p.children
+      placement = mapSideToPlacement(p.side)
+    }
+  })
+
+  if (!trigger) {
+    return null
+  }
+
+  const hasTitle = title != null && title !== ""
+
   return (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-        className="isolate z-50"
-      >
-        <TooltipPrimitive.Popup
-          data-slot="tooltip-content"
-          className={cn(
-            "z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs text-background has-data-[slot=kbd]:pr-1.5 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:rounded-sm data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
-            className
-          )}
-          {...props}
-        >
-          {children}
-          <TooltipPrimitive.Arrow className="z-50 size-2.5 translate-y-[calc(-50%-2px)] rotate-45 rounded-[2px] bg-foreground fill-foreground data-[side=bottom]:top-1 data-[side=inline-end]:top-1/2! data-[side=inline-end]:-left-1 data-[side=inline-end]:-translate-y-1/2 data-[side=inline-start]:top-1/2! data-[side=inline-start]:-right-1 data-[side=inline-start]:-translate-y-1/2 data-[side=left]:top-1/2! data-[side=left]:-right-1 data-[side=left]:-translate-y-1/2 data-[side=right]:top-1/2! data-[side=right]:-left-1 data-[side=right]:-translate-y-1/2 data-[side=top]:-bottom-2.5" />
-        </TooltipPrimitive.Popup>
-      </TooltipPrimitive.Positioner>
-    </TooltipPrimitive.Portal>
+    <MuiTooltip
+      {...muiProps}
+      data-slot="tooltip"
+      title={title ?? ""}
+      placement={placement}
+      enterDelay={enterDelay}
+      leaveDelay={leaveDelay}
+      disableHoverListener={!hasTitle}
+      disableFocusListener={!hasTitle}
+      disableTouchListener={!hasTitle}
+    >
+      {trigger}
+    </MuiTooltip>
   )
 }
+
+function mapSideToPlacement(side: TooltipContentProps["side"]): MuiTooltipProps["placement"] {
+  switch (side) {
+    case "top":
+      return "top"
+    case "bottom":
+      return "bottom"
+    case "left":
+      return "left"
+    case "right":
+      return "right"
+    case "inline-start":
+      return "left"
+    case "inline-end":
+      return "right"
+    default:
+      return "top"
+  }
+}
+
+export type TooltipTriggerProps = React.ComponentPropsWithoutRef<"button">
+
+const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
+  function TooltipTrigger({ type = "button", ...props }, ref) {
+    return <button ref={ref} type={type} data-slot="tooltip-trigger" {...props} />
+  }
+)
+TooltipTrigger.displayName = TRIGGER_NAME
+
+function TooltipContent(_props: TooltipContentProps) {
+  return null
+}
+TooltipContent.displayName = CONTENT_NAME
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }

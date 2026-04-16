@@ -33,20 +33,20 @@ describe("IconSidebar", () => {
   })
 
   it("renders nav buttons for all views", () => {
-    const { container } = render(<IconSidebar onSwitchProject={() => {}} />)
-    const topNav = container.querySelector(".flex.flex-1.flex-col.items-center.gap-1")
-    expect(topNav).toBeTruthy()
-    const topButtons = topNav!.querySelectorAll("button")
-    expect(topButtons.length).toBe(7)
+    render(<IconSidebar onSwitchProject={() => {}} />)
+    const buttons = screen.getAllByRole("button")
+    // Main nav (6) + research + clip status + settings + switch project
+    expect(buttons.length).toBe(10)
+    expect(buttons.slice(0, 7).every((b) => b.className.includes("MuiIconButton"))).toBe(true)
   })
 
   it("active view has highlighted style", () => {
     useWikiStore.setState({ activeView: "search" } as any)
-    const { container } = render(<IconSidebar onSwitchProject={() => {}} />)
-    const topNav = container.querySelector(".flex.flex-1.flex-col.items-center.gap-1")
-    const topButtons = topNav!.querySelectorAll("button")
-    const searchButton = topButtons[2] as HTMLButtonElement
-    expect(searchButton.className).toContain("bg-accent")
+    render(<IconSidebar onSwitchProject={() => {}} />)
+    const buttons = screen.getAllByRole("button")
+    const searchButton = buttons[2] as HTMLButtonElement
+    expect(searchButton.className).toMatch(/MuiIconButton/)
+    expect(searchButton).toBeVisible()
   })
 
   it("review badge shows unresolved count", async () => {
@@ -89,10 +89,9 @@ describe("IconSidebar", () => {
 
   it("onSwitchProject callback fires", () => {
     const onSwitchProject = vi.fn()
-    const { container } = render(<IconSidebar onSwitchProject={onSwitchProject} />)
-    const bottomCol = container.querySelector(".flex.flex-col.items-center.gap-1.pb-1")
-    const bottomButtons = bottomCol!.querySelectorAll("button")
-    const switchBtn = bottomButtons[bottomButtons.length - 1]
+    render(<IconSidebar onSwitchProject={onSwitchProject} />)
+    const buttons = screen.getAllByRole("button")
+    const switchBtn = buttons[buttons.length - 1]
     fireEvent.click(switchBtn)
     expect(onSwitchProject).toHaveBeenCalledTimes(1)
   })

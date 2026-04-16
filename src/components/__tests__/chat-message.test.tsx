@@ -6,8 +6,8 @@ import type { DisplayMessage } from "@/stores/chat-store"
 import { useWikiStore } from "@/stores/wiki-store"
 
 vi.mock("@/components/ui/markdown-view", () => ({
-  MarkdownView: ({ content }: { content: string }) => (
-    <div data-testid="md">{content}</div>
+  MarkdownView: ({ markdown }: { markdown: string }) => (
+    <div data-testid="md">{markdown}</div>
   ),
 }))
 

@@ -4,8 +4,8 @@ import { convertFileSrc } from "@tauri-apps/api/core"
 import { FilePreview } from "../editor/file-preview"
 
 vi.mock("../ui/markdown-view", () => ({
-  MarkdownView: ({ children, content }: { children?: React.ReactNode; content?: string }) => (
-    <div data-testid="markdown">{content ?? children}</div>
+  MarkdownView: ({ children, markdown }: { children?: React.ReactNode; markdown?: string }) => (
+    <div data-testid="markdown">{markdown ?? children}</div>
   ),
 }))
 

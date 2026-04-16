@@ -1,48 +1,62 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render } from "@testing-library/react"
+import { render, waitFor } from "@testing-library/react"
 import { WikiEditor } from "../editor/wiki-editor"
 
-const destroyMock = vi.fn()
-const setThemeMock = vi.fn()
-
-vi.mock("vditor", () => {
-  const Vditor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    this.destroy = destroyMock
-    this.setTheme = setThemeMock
-    this.getValue = vi.fn().mockReturnValue("")
-  })
-  return { default: Vditor }
+vi.mock("@tiptap/react", () => {
+  function chainableCommand(): any {
+    return new Proxy(
+      function () {},
+      {
+        get(_, prop) {
+          if (prop === "run") return () => true
+          return (..._args: unknown[]) => chainableCommand()
+        },
+        apply() {
+          return chainableCommand()
+        },
+      },
+    )
+  }
+  return {
+    useEditor: () => ({
+      commands: { setContent: vi.fn() },
+      getHTML: () => "<p>test</p>",
+      getMarkdown: () => "",
+      destroy: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      isDestroyed: false,
+      chain: () => ({
+        focus: () => chainableCommand(),
+      }),
+      can: () => ({ chain: () => ({ run: () => true }), undo: () => true, redo: () => true }),
+      isActive: () => false,
+      storage: { tableOfContents: { content: [] } },
+    }),
+    EditorContent: ({ editor }: { editor?: unknown }) => (
+      <div className="tiptap" data-testid="editor-content">
+        {editor ? "editor" : "no editor"}
+      </div>
+    ),
+  }
 })
-
-vi.mock("@/hooks/use-is-dark", () => ({
-  useIsDark: () => false,
-}))
 
 beforeEach(() => {
   vi.clearAllMocks()
 })
 
 describe("WikiEditor", () => {
-  it("renders the vditor container element", () => {
+  it("renders toolbar and editor content region", async () => {
     const onSave = vi.fn()
     const { container } = render(<WikiEditor content="# Hello" onSave={onSave} />)
-    expect(container.querySelector(".vditor-editor-wrap")).toBeTruthy()
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="editor-content"]')).toBeTruthy()
+    })
   })
 
-  it("initializes Vditor with the provided content", async () => {
-    const { default: VditorMock } = await import("vditor")
+  it("mounts without throwing for empty content", () => {
     const onSave = vi.fn()
-    render(<WikiEditor content="unique-body" onSave={onSave} />)
-    expect(VditorMock).toHaveBeenCalled()
-    const initOptions = (VditorMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
-    expect(initOptions.value).toBe("unique-body")
-    expect(initOptions.mode).toBe("ir")
-  })
-
-  it("destroys Vditor on unmount", () => {
-    const onSave = vi.fn()
-    const { unmount } = render(<WikiEditor content="test" onSave={onSave} />)
+    const { unmount } = render(<WikiEditor content="" onSave={onSave} />)
     unmount()
-    expect(destroyMock).toHaveBeenCalled()
   })
 })

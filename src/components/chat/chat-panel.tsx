@@ -1,18 +1,23 @@
 import { useRef, useEffect, useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { BookOpen, Plus, Trash2, MessageSquare } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import Button from "@mui/material/Button"
+import IconButton from "@mui/material/IconButton"
+import AddIcon from "@mui/icons-material/Add"
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
+import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined"
+import MenuBookIcon from "@mui/icons-material/MenuBook"
 import { ChatMessage, StreamingMessage, useSourceFiles } from "./chat-message"
 import { ChatInput } from "./chat-input"
 import { useChatStore, chatMessagesToLLM } from "@/stores/chat-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { streamChat, type ChatMessage as LLMMessage } from "@/lib/llm-client"
 import { executeIngestWrites } from "@/lib/ingest"
-import { listDirectory, readFile, writeFile, deleteFile } from "@/commands/fs"
+import { listDirectory, readFile, deleteFile } from "@/commands/fs"
 import { searchWiki } from "@/lib/search"
 import { buildRetrievalGraph, getRelatedNodes } from "@/lib/graph-relevance"
-import { useReviewStore } from "@/stores/review-store"
-import type { FileNode } from "@/types/wiki"
 import { normalizePath, getFileName, getRelativePath } from "@/lib/path-utils"
 import { detectLanguage } from "@/lib/detect-language"
 
@@ -47,76 +52,142 @@ function ConversationSidebar() {
   }
 
   return (
-    <div className="flex h-full w-[200px] flex-shrink-0 flex-col border-r bg-muted/30">
-      <div className="border-b p-2">
+    <Box
+      sx={{
+        display: "flex",
+        height: 1,
+        width: 200,
+        flexShrink: 0,
+        flexDirection: "column",
+        borderRight: 1,
+        borderColor: "divider",
+        bgcolor: (theme) =>
+          theme.palette.mode === "light" ? "action.hover" : "action.selected",
+      }}
+    >
+      <Box sx={{ borderBottom: 1, borderColor: "divider", p: 1 }}>
         <Button
-          variant="outline"
-          size="sm"
-          className="w-full gap-2"
+          variant="outlined"
+          size="small"
+          fullWidth
+          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
           onClick={() => createConversation()}
         >
-          <Plus className="h-3.5 w-3.5" />
           {t("chat.newChat")}
         </Button>
-      </div>
+      </Box>
 
-      <div className="flex-1 overflow-y-auto py-1">
+      <Box sx={{ flex: 1, overflowY: "auto", py: 0.5 }}>
         {sorted.length === 0 ? (
-          <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+          <Typography
+            variant="caption"
+            sx={{
+              display: "block",
+              px: 1.5,
+              py: 2,
+              textAlign: "center",
+              color: "text.secondary",
+            }}
+          >
             {t("chat.noConversations")}
-          </p>
+          </Typography>
         ) : (
           sorted.map((conv) => {
             const isActive = conv.id === activeConversationId
             const msgCount = getMessageCount(conv.id)
             return (
-              <div
+              <Box
                 key={conv.id}
-                className={`group relative mx-1 my-0.5 flex cursor-pointer flex-col rounded-md px-2 py-1.5 text-sm transition-colors ${
-                  isActive
-                    ? "bg-primary/10 text-primary"
-                    : "hover:bg-accent text-foreground"
-                }`}
                 onClick={() => setActiveConversation(conv.id)}
                 onMouseEnter={() => setHoveredId(conv.id)}
                 onMouseLeave={() => setHoveredId(null)}
+                sx={{
+                  position: "relative",
+                  mx: 0.5,
+                  my: 0.25,
+                  display: "flex",
+                  cursor: "pointer",
+                  flexDirection: "column",
+                  borderRadius: 1,
+                  px: 1,
+                  py: 0.75,
+                  fontSize: "0.875rem",
+                  transition: (theme) =>
+                    theme.transitions.create(["background-color", "color"], {
+                      duration: theme.transitions.duration.shorter,
+                    }),
+                  ...(isActive
+                    ? {
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "light"
+                            ? "rgba(25, 118, 210, 0.08)"
+                            : "rgba(144, 202, 249, 0.12)",
+                        color: "primary.main",
+                      }
+                    : {
+                        color: "text.primary",
+                        "&:hover": { bgcolor: "action.hover" },
+                      }),
+                }}
               >
-                <div className="flex items-start justify-between gap-1">
-                  <span className="line-clamp-2 flex-1 text-xs font-medium leading-snug">
+                <Stack direction="row" spacing={0.5} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      flex: 1,
+                      fontWeight: 600,
+                      lineHeight: 1.4,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                    }}
+                  >
                     {conv.title}
-                  </span>
+                  </Typography>
                   {hoveredId === conv.id && (
-                    <button
-                      className="flex-shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
+                    <IconButton
+                      size="small"
+                      sx={{
+                        flexShrink: 0,
+                        p: 0.25,
+                        color: "text.secondary",
+                        "&:hover": { color: "error.main" },
+                      }}
                       onClick={(e) => {
                         e.stopPropagation()
                         deleteConversation(conv.id)
-                        // Delete persisted chat file
                         const proj = useWikiStore.getState().project
                         if (proj) {
                           deleteFile(`${proj.path}/.llm-wiki/chats/${conv.id}.json`).catch(() => {})
                         }
                       }}
                     >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                      <DeleteOutlineOutlinedIcon sx={{ fontSize: 12 }} />
+                    </IconButton>
                   )}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                  <span>{formatDate(conv.updatedAt)}</span>
+                </Stack>
+                <Stack direction="row" spacing={0.75} sx={{ mt: 0.25, alignItems: "center" }}>
+                  <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
+                    {formatDate(conv.updatedAt)}
+                  </Typography>
                   {msgCount > 0 && (
                     <>
-                      <span>·</span>
-                      <span>{t("chat.msgs", { count: msgCount })}</span>
+                      <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
+                        ·
+                      </Typography>
+                      <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
+                        {t("chat.msgs", { count: msgCount })}
+                      </Typography>
                     </>
                   )}
-                </div>
-              </div>
+                </Stack>
+              </Box>
             )
           })
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
@@ -202,7 +273,7 @@ export function ChatPanel() {
           for (const line of lines) {
             const isHeader = line.startsWith("##")
             const lower = line.toLowerCase()
-            const isRelevant = tokens.some((t) => lower.includes(t))
+            const isRelevant = tokens.some((tok) => lower.includes(tok))
 
             if (isHeader || isRelevant) {
               if (keptSize + line.length + 1 <= INDEX_BUDGET) {
@@ -349,7 +420,7 @@ export function ChatPanel() {
         controller.signal,
       )
     },
-    [llmConfig, addMessage, setStreaming, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, t],
+    [llmConfig, addMessage, setStreaming, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, t, project],
   )
 
   const handleStop = useCallback(() => {
@@ -369,8 +440,6 @@ export function ChatPanel() {
     await new Promise((r) => setTimeout(r, 50))
     // Trigger send with the same text (handleSend will add a new user message,
     // so also remove the original to avoid duplication)
-    // Actually: just call handleSend — but it adds a user message. To avoid dupe,
-    // we remove the last user message too and let handleSend re-add it.
     const store = useChatStore.getState()
     const updatedActive = store.getActiveMessages()
     const lastUser = [...updatedActive].reverse().find((m) => m.role === "user")
@@ -402,25 +471,32 @@ export function ChatPanel() {
   const showWriteButton = mode === "ingest" && !isStreaming && hasAssistantMessages
 
   return (
-    <div className="flex h-full flex-row overflow-hidden">
+    <Stack direction="row" sx={{ height: 1, overflow: "hidden" }}>
       <ConversationSidebar />
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <Stack sx={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
         {!activeConversationId ? (
-          <div className="flex flex-1 items-center justify-center text-muted-foreground">
-            <div className="text-center">
-              <MessageSquare className="mx-auto mb-3 h-8 w-8 opacity-30" />
-              <p className="text-sm">{t("chat.startConversation")}</p>
-              <p className="mt-1 text-xs opacity-60">{t("chat.clickNewChat")}</p>
-            </div>
-          </div>
+          <Stack
+            sx={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              color: "text.secondary",
+            }}
+          >
+            <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 32, mb: 1.5, opacity: 0.3 }} />
+            <Typography variant="body2">{t("chat.startConversation")}</Typography>
+            <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.6 }}>
+              {t("chat.clickNewChat")}
+            </Typography>
+          </Stack>
         ) : (
           <>
-            <div
+            <Box
               ref={scrollContainerRef}
-              className="flex-1 overflow-y-auto px-3 py-2"
+              sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 1 }}
             >
-              <div className="flex flex-col gap-3">
+              <Stack spacing={1.5}>
                 {activeMessages.map((msg, idx) => {
                   // Check if this is the last assistant message
                   const isLastAssistant = msg.role === "assistant" &&
@@ -436,21 +512,21 @@ export function ChatPanel() {
                 })}
                 {isStreaming && <StreamingMessage content={streamingContent} />}
                 <div ref={bottomRef} />
-              </div>
-            </div>
+              </Stack>
+            </Box>
 
             {showWriteButton && (
-              <div className="border-t px-3 py-2">
+              <Box sx={{ borderTop: 1, borderColor: "divider", px: 1.5, py: 1 }}>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="outlined"
+                  size="small"
+                  fullWidth
+                  startIcon={<MenuBookIcon sx={{ fontSize: 18 }} />}
                   onClick={handleWriteToWiki}
-                  className="w-full gap-2"
                 >
-                  <BookOpen className="h-4 w-4" />
                   {t("chat.writeToWiki")}
                 </Button>
-              </div>
+              </Box>
             )}
           </>
         )}
@@ -465,73 +541,7 @@ export function ChatPanel() {
               : t("chat.placeholder")
           }
         />
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   )
-}
-
-/**
- * Check if the LLM marked its response as save-worthy.
- * If so, add a review item prompting the user to save it.
- */
-function checkSaveWorthy(response: string, question: string) {
-  const match = response.match(/<!--\s*save-worthy:\s*yes\s*\|\s*(.+?)\s*-->/)
-  if (!match) return
-
-  const reason = match[1]
-  const firstLine = response.split("\n").find((l) => l.trim() && !l.startsWith("<!--"))?.replace(/^#+\s*/, "").trim() ?? "Chat answer"
-  const title = firstLine.slice(0, 60)
-
-  const contentToSave = response
-  const questionText = question
-
-  useReviewStore.getState().addItem({
-    type: "suggestion",
-    title: `Save to Wiki: ${title}`,
-    description: `${reason}\n\nQuestion: "${questionText.slice(0, 100)}${questionText.length > 100 ? "..." : ""}"`,
-    options: [
-      { label: "Save to Wiki", action: `save:${encodeContent(contentToSave)}` },
-      { label: "Skip", action: "Skip" },
-    ],
-  })
-}
-
-function encodeContent(text: string): string {
-  return btoa(encodeURIComponent(text))
-}
-
-function flattenFileNames(nodes: FileNode[]): string[] {
-  const names: string[] = []
-  for (const node of nodes) {
-    if (node.is_dir && node.children) {
-      names.push(...flattenFileNames(node.children))
-    } else if (!node.is_dir) {
-      names.push(node.name)
-    }
-  }
-  return names
-}
-
-function flattenMdFiles(nodes: FileNode[]): FileNode[] {
-  const files: FileNode[] = []
-  for (const node of nodes) {
-    if (node.is_dir && node.children) {
-      files.push(...flattenMdFiles(node.children))
-    } else if (!node.is_dir && node.name.endsWith(".md")) {
-      files.push(node)
-    }
-  }
-  return files
-}
-
-function flattenAllFiles(nodes: FileNode[]): FileNode[] {
-  const files: FileNode[] = []
-  for (const node of nodes) {
-    if (node.is_dir && node.children) {
-      files.push(...flattenAllFiles(node.children))
-    } else if (!node.is_dir) {
-      files.push(node)
-    }
-  }
-  return files
 }

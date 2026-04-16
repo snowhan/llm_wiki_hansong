@@ -8,7 +8,14 @@ vi.mock("../llm-client", () => ({
 
 const { streamChat } = await import("../llm-client")
 
-const config: LlmConfig = { provider: "openai", apiKey: "key", model: "gpt-4", contextSize: 4096 }
+const config: LlmConfig = {
+  provider: "openai",
+  apiKey: "key",
+  model: "gpt-4",
+  ollamaUrl: "http://localhost:11434",
+  customEndpoint: "",
+  maxContextSize: 4096,
+}
 
 function mockStreamResponse(text: string) {
   vi.mocked(streamChat).mockImplementation(async (_cfg, _msgs, cb) => {

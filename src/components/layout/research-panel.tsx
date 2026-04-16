@@ -1,11 +1,22 @@
 import { useState, useRef, useEffect, useMemo } from "react"
 import { useTranslation } from "react-i18next"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import Button from "@mui/material/Button"
+import IconButton from "@mui/material/IconButton"
+import TextField from "@mui/material/TextField"
+import CircularProgress from "@mui/material/CircularProgress"
+import Search from "@mui/icons-material/Search"
+import ChevronRight from "@mui/icons-material/ChevronRight"
+import ExpandMore from "@mui/icons-material/ExpandMore"
+import Close from "@mui/icons-material/Close"
+import CheckCircle from "@mui/icons-material/CheckCircle"
+import ErrorOutlineOutlined from "@mui/icons-material/ErrorOutlineOutlined"
+import RadioButtonUnchecked from "@mui/icons-material/RadioButtonUnchecked"
+import Description from "@mui/icons-material/Description"
+import Send from "@mui/icons-material/Send"
+import { alpha } from "@mui/material/styles"
 import { MarkdownView } from "@/components/ui/markdown-view"
-import {
-  Search, Loader2, CheckCircle2, AlertCircle, ChevronRight, ChevronDown, X,
-  ExternalLink, FileText, Send,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useResearchStore, type ResearchTask } from "@/stores/research-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
@@ -38,49 +49,110 @@ export function ResearchPanel() {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">{t("research.title")}</span>
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 1.5,
+          py: 1,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Search sx={{ fontSize: 18, color: "text.secondary" }} />
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {t("research.title")}
+          </Typography>
           {(running.length > 0 || queued.length > 0) && (
-            <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{
+                borderRadius: "999px",
+                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.2),
+                px: 0.75,
+                py: 0.25,
+                fontWeight: 500,
+                color: "primary.main",
+              }}
+            >
               {t("research.active", { count: running.length })}
               {queued.length > 0 ? `, ${t("research.queued", { count: queued.length })}` : ""}
-            </span>
+            </Typography>
           )}
-        </div>
-        <button
+        </Box>
+        <IconButton
+          size="small"
           onClick={() => setPanelOpen(false)}
-          className="rounded p-1 text-muted-foreground hover:bg-accent"
+          sx={{ color: "text.secondary", "&:hover": { bgcolor: "action.hover" } }}
+          aria-label="Close"
         >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          <Close sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Box>
 
-      {/* Research input */}
-      <div className="flex shrink-0 items-center gap-1.5 border-b px-3 py-2">
-        <input
+      <Box
+        sx={{
+          display: "flex",
+          flexShrink: 0,
+          alignItems: "center",
+          gap: 0.75,
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 1.5,
+          py: 1,
+        }}
+      >
+        <TextField
+          size="small"
+          fullWidth
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") handleStartResearch() }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleStartResearch()
+          }}
           placeholder={t("research.enterTopic")}
-          className="flex-1 rounded border bg-background px-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+          variant="outlined"
+          sx={{ flex: 1, "& .MuiInputBase-input": { fontSize: 12, py: 0.75 } }}
         />
-        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleStartResearch} disabled={!inputValue.trim()}>
-          <Send className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+        <IconButton
+          size="small"
+          onClick={handleStartResearch}
+          disabled={!inputValue.trim()}
+          aria-label={t("review.startResearch")}
+          sx={{ color: "text.secondary" }}
+        >
+          <Send sx={{ fontSize: 18 }} />
+        </IconButton>
+      </Box>
 
-      <div className="flex-1 overflow-y-auto">
+      <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-xs text-muted-foreground">
-            <Search className="h-8 w-8 opacity-20" />
-            <p>{t("research.noTasks")}</p>
-            <p>{t("research.noTasksHint")}</p>
-          </div>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 1,
+              p: 4,
+              textAlign: "center",
+            }}
+          >
+            <Search sx={{ fontSize: 32, color: "text.disabled", opacity: 0.35 }} />
+            <Typography variant="caption" color="text.secondary">
+              {t("research.noTasks")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("research.noTasksHint")}
+            </Typography>
+          </Box>
         ) : (
-          <div className="flex flex-col gap-1 p-2">
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, p: 1 }}>
             {running.map((task) => (
               <ResearchTaskCard key={task.id} task={task} onRemove={removeTask} />
             ))}
@@ -90,16 +162,14 @@ export function ResearchPanel() {
             {done.map((task) => (
               <ResearchTaskCard key={task.id} task={task} onRemove={removeTask} />
             ))}
-          </div>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
-/** Separate <think>/<thinking> blocks from main content */
 function separateThinking(text: string): { thinking: string; answer: string } {
-  // Match <think>...</think> or <thinking>...</thinking>
   const thinkRegex = /^<think(?:ing)?>([\s\S]*?)(?:<\/think(?:ing)?>|$)/i
   const match = text.match(thinkRegex)
   if (match) {
@@ -116,14 +186,12 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
   const { thinking, answer } = useMemo(() => separateThinking(synthesis), [synthesis])
   const [thinkingCollapsed, setThinkingCollapsed] = useState(false)
 
-  // Auto-collapse thinking when answer starts appearing
   useEffect(() => {
     if (answer.length > 0 && thinking.length > 0 && !thinkingCollapsed) {
       setThinkingCollapsed(true)
     }
   }, [answer, thinking, thinkingCollapsed])
 
-  // Auto-scroll to bottom during streaming
   useEffect(() => {
     if (isStreaming && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -131,42 +199,87 @@ function SynthesisBlock({ synthesis, isStreaming }: { synthesis: string; isStrea
   }, [synthesis, isStreaming])
 
   return (
-    <div className="mb-2 flex flex-col min-h-0">
-      <div className="mb-1 font-medium text-muted-foreground">{t("research.synthesis")}</div>
-      <div
+    <Box sx={{ mb: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
+        {t("research.synthesis")}
+      </Typography>
+      <Box
         ref={scrollRef}
-        className="flex-1 overflow-y-auto rounded bg-muted/30 p-2 prose prose-xs prose-invert max-w-none"
-        style={{ maxHeight: "calc(100vh - 400px)", minHeight: "120px" }}
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          borderRadius: 1,
+          bgcolor: (theme) => alpha(theme.palette.action.hover, 0.5),
+          p: 1,
+          maxHeight: "calc(100vh - 400px)",
+          minHeight: 120,
+          "& .vditor-reset": {
+            fontSize: "0.875rem",
+            maxWidth: "none",
+          },
+        }}
       >
         {thinking && (
-          <div className="mb-2">
-            <button
+          <Box sx={{ mb: 1 }}>
+            <Box
+              component="button"
+              type="button"
               onClick={() => setThinkingCollapsed((v) => !v)}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                p: 0,
+                font: "inherit",
+                fontSize: 10,
+                color: "text.secondary",
+                "&:hover": { color: "text.primary" },
+              }}
             >
               {thinkingCollapsed ? (
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight sx={{ fontSize: 12 }} />
               ) : (
-                <ChevronDown className="h-3 w-3" />
+                <ExpandMore sx={{ fontSize: 12 }} />
               )}
               {t("research.thinking")}
               {isStreaming && !answer ? "..." : ""}
-            </button>
+            </Box>
             {!thinkingCollapsed && (
-              <div className="mt-1 rounded border border-muted px-2 py-1 text-[10px] text-muted-foreground opacity-70 leading-relaxed whitespace-pre-wrap">
+              <Box
+                sx={{
+                  mt: 0.5,
+                  borderRadius: 1,
+                  border: 1,
+                  borderColor: "divider",
+                  px: 1,
+                  py: 0.5,
+                  fontSize: 10,
+                  color: "text.secondary",
+                  opacity: 0.85,
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
                 {isStreaming && !answer
                   ? thinking.split("\n").slice(-5).join("\n")
                   : thinking}
-              </div>
+              </Box>
             )}
-          </div>
+          </Box>
         )}
         {answer && (
-          <MarkdownView content={answer} className="text-sm" />
+          <MarkdownView markdown={answer} sx={{ fontSize: "0.875rem" }} />
         )}
-        {isStreaming && <span className="animate-pulse">▊</span>}
-      </div>
-    </div>
+        {isStreaming && (
+          <Box component="span" sx={{ animation: "pulse 1s ease-in-out infinite", "@keyframes pulse": { "0%, 100%": { opacity: 1 }, "50%": { opacity: 0.3 } } }}>
+            ▊
+          </Box>
+        )}
+      </Box>
+    </Box>
   )
 }
 
@@ -180,12 +293,12 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
   const project = useWikiStore((s) => s.project)
 
   const statusIcon = {
-    queued: <div className="h-3 w-3 rounded-full border-2 border-muted-foreground" />,
-    searching: <Loader2 className="h-3 w-3 animate-spin text-blue-500" />,
-    synthesizing: <Loader2 className="h-3 w-3 animate-spin text-purple-500" />,
-    saving: <Loader2 className="h-3 w-3 animate-spin text-orange-500" />,
-    done: <CheckCircle2 className="h-3 w-3 text-emerald-500" />,
-    error: <AlertCircle className="h-3 w-3 text-destructive" />,
+    queued: <RadioButtonUnchecked sx={{ fontSize: 12, color: "text.secondary" }} />,
+    searching: <CircularProgress size={12} sx={{ color: "info.main" }} />,
+    synthesizing: <CircularProgress size={12} sx={{ color: "#9333ea" }} />,
+    saving: <CircularProgress size={12} sx={{ color: "warning.main" }} />,
+    done: <CheckCircle sx={{ fontSize: 12, color: "success.dark" }} />,
+    error: <ErrorOutlineOutlined sx={{ fontSize: 12, color: "error.main" }} />,
   }[task.status]
 
   const statusText =
@@ -216,77 +329,121 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
   }
 
   return (
-    <div className="rounded-lg border text-xs">
-      {/* Header */}
-      <button
+    <Box
+      sx={{
+        borderRadius: 2,
+        border: 1,
+        borderColor: "divider",
+        typography: "caption",
+      }}
+    >
+      <Box
+        component="button"
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/50"
+        sx={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          gap: 1,
+          px: 1.5,
+          py: 1,
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          font: "inherit",
+          textAlign: "left",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <ExpandMore sx={{ fontSize: 12, flexShrink: 0, color: "text.secondary" }} />
         ) : (
-          <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+          <ChevronRight sx={{ fontSize: 12, flexShrink: 0, color: "text.secondary" }} />
         )}
         {statusIcon}
-        <span className="flex-1 truncate font-medium">{task.topic}</span>
-        <span className="shrink-0 text-muted-foreground">{statusText}</span>
-      </button>
+        <Typography component="span" variant="caption" noWrap sx={{ flex: 1, fontWeight: 600 }}>
+          {task.topic}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+          {statusText}
+        </Typography>
+      </Box>
 
-      {/* Expanded content */}
       {expanded && (
-        <div className="border-t px-3 py-2">
-          {/* Error */}
+        <Box sx={{ borderTop: 1, borderColor: "divider", px: 1.5, py: 1 }}>
           {task.error && (
-            <p className="mb-2 text-destructive">{task.error}</p>
+            <Typography variant="caption" color="error" sx={{ display: "block", mb: 1 }}>
+              {task.error}
+            </Typography>
           )}
 
-          {/* Web results */}
           {task.webResults.length > 0 && (
-            <div className="mb-2">
-              <div className="mb-1 font-medium text-muted-foreground">
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, fontWeight: 500 }}>
                 {t("research.sources", { count: task.webResults.length })}
-              </div>
-              <div className="flex flex-col gap-1">
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
                 {task.webResults.map((r, i) => (
-                  <div key={i} className="flex items-start gap-1.5 rounded bg-muted/50 px-2 py-1">
-                    <span className="shrink-0 font-mono text-muted-foreground">[{i + 1}]</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{r.title}</div>
-                      <div className="truncate text-muted-foreground">{r.source}</div>
-                    </div>
-                  </div>
+                  <Box
+                    key={i}
+                    sx={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 0.75,
+                      borderRadius: 1,
+                      bgcolor: (theme) => alpha(theme.palette.action.hover, 0.5),
+                      px: 1,
+                      py: 0.5,
+                    }}
+                  >
+                    <Typography component="span" variant="caption" sx={{ flexShrink: 0, fontFamily: "monospace", color: "text.secondary" }}>
+                      [{i + 1}]
+                    </Typography>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography variant="caption" noWrap sx={{ fontWeight: 500 }}>
+                        {r.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
+                        {r.source}
+                      </Typography>
+                    </Box>
+                  </Box>
                 ))}
-              </div>
-            </div>
+              </Box>
+            </Box>
           )}
 
-          {/* Synthesis (streaming) */}
           {task.synthesis && (
             <SynthesisBlock synthesis={task.synthesis} isStreaming={task.status === "synthesizing"} />
           )}
 
-          {/* Actions */}
-          <div className="flex items-center gap-1.5 mt-2">
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mt: 1 }}>
             {task.savedPath && (
-              <Button variant="outline" size="sm" className="h-6 text-[11px] gap-1" onClick={handleOpenSaved}>
-                <FileText className="h-3 w-3" />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleOpenSaved}
+                sx={{ minHeight: 24, fontSize: 11, gap: 0.5, py: 0, px: 1 }}
+                startIcon={<Description sx={{ fontSize: 12 }} />}
+              >
                 {t("research.open")}
               </Button>
             )}
             {(task.status === "done" || task.status === "error") && (
               <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 text-[11px] gap-1 text-muted-foreground"
+                variant="text"
+                size="small"
                 onClick={() => onRemove(task.id)}
+                sx={{ minHeight: 24, fontSize: 11, gap: 0.5, py: 0, px: 1, color: "text.secondary" }}
+                startIcon={<Close sx={{ fontSize: 12 }} />}
               >
-                <X className="h-3 w-3" />
                 {t("research.remove")}
               </Button>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }

@@ -10,10 +10,9 @@ describe("cn", () => {
     expect(cn("base", false && "hidden", "active")).toBe("base active")
   })
 
-  it("merges Tailwind conflicting classes", () => {
+  it("concatenates all class names (no Tailwind merge)", () => {
     const result = cn("px-2 py-1", "px-4")
-    expect(result).toContain("px-4")
-    expect(result).not.toContain("px-2")
+    expect(result).toBe("px-2 py-1 px-4")
   })
 
   it("handles empty inputs", () => {
@@ -24,7 +23,7 @@ describe("cn", () => {
     expect(cn("a", undefined, null, "b")).toBe("a b")
   })
 
-  it("handles array inputs", () => {
-    expect(cn(["foo", "bar"])).toBe("foo bar")
+  it("handles array inputs spread as args", () => {
+    expect(cn(...["foo", "bar"])).toBe("foo bar")
   })
 })

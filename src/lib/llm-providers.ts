@@ -63,11 +63,11 @@ function parseGoogleLine(line: string): string | null {
   }
 }
 
-function buildOpenAiBody(messages: ChatMessage[]): unknown {
+function buildOpenAiBody(messages: ChatMessage[]): Record<string, unknown> {
   return { messages, stream: true }
 }
 
-function buildAnthropicBody(messages: ChatMessage[]): unknown {
+function buildAnthropicBody(messages: ChatMessage[]): Record<string, unknown> {
   const systemMessages = messages.filter((m) => m.role === "system")
   const conversationMessages = messages.filter((m) => m.role !== "system")
   const system = systemMessages.map((m) => m.content).join("\n") || undefined
@@ -80,7 +80,7 @@ function buildAnthropicBody(messages: ChatMessage[]): unknown {
   }
 }
 
-function buildGoogleBody(messages: ChatMessage[]): unknown {
+function buildGoogleBody(messages: ChatMessage[]): Record<string, unknown> {
   const systemMessages = messages.filter((m) => m.role === "system")
   const conversationMessages = messages.filter((m) => m.role !== "system")
 

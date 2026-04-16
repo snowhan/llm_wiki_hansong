@@ -28,7 +28,9 @@ const config: LlmConfig = {
   provider: "openai",
   apiKey: "test-key",
   model: "gpt-4",
-  contextSize: 4096,
+  ollamaUrl: "http://localhost:11434",
+  customEndpoint: "",
+  maxContextSize: 4096,
 }
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {

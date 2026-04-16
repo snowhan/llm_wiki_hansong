@@ -1,9 +1,28 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  Bot, User, FileText, BookmarkPlus, ChevronDown, ChevronRight, RefreshCw, Copy, Check,
-  Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, Layout, Globe, Paperclip,
-} from "lucide-react"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import Button from "@mui/material/Button"
+import { keyframes } from "@mui/material/styles"
+import type { SvgIconComponent } from "@mui/icons-material"
+import PersonIcon from "@mui/icons-material/Person"
+import SmartToyIcon from "@mui/icons-material/SmartToy"
+import DescriptionIcon from "@mui/icons-material/Description"
+import BookmarkAddIcon from "@mui/icons-material/BookmarkAdd"
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
+import ChevronRightIcon from "@mui/icons-material/ChevronRight"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import CheckIcon from "@mui/icons-material/Check"
+import GroupIcon from "@mui/icons-material/Group"
+import LightbulbIcon from "@mui/icons-material/Lightbulb"
+import MenuBookIcon from "@mui/icons-material/MenuBook"
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined"
+import MergeIcon from "@mui/icons-material/Merge"
+import BarChartIcon from "@mui/icons-material/BarChart"
+import ViewModuleIcon from "@mui/icons-material/ViewModule"
+import PublicIcon from "@mui/icons-material/Public"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { lastQueryPages } from "@/components/chat/chat-panel"
@@ -11,7 +30,6 @@ import type { DisplayMessage } from "@/stores/chat-store"
 import type { FileNode } from "@/types/wiki"
 
 import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
-import { enrichWithWikilinks } from "@/lib/enrich-wikilinks"
 import { normalizePath, getFileName } from "@/lib/path-utils"
 import { MarkdownView } from "@/components/ui/markdown-view"
 
@@ -54,6 +72,11 @@ interface ChatMessageProps {
   onRegenerate?: () => void
 }
 
+const pulseAnim = keyframes`
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+`
+
 export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMessageProps) {
   const { t } = useTranslation()
   const isUser = message.role === "user"
@@ -62,55 +85,105 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
   const [hovered, setHovered] = useState(false)
 
   return (
-    <div
-      className={`flex gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+    <Stack
+      spacing={1}
+      sx={{
+        flexDirection: isUser ? "row-reverse" : "row",
+        alignItems: "flex-start",
+      }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-          isSystem
-            ? "bg-accent text-accent-foreground"
+      <Box
+        sx={{
+          display: "flex",
+          height: 28,
+          width: 28,
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: "50%",
+          ...(isSystem
+            ? {
+                bgcolor: "action.selected",
+                color: "text.primary",
+              }
             : isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground"
-        }`}
+              ? {
+                  bgcolor: "primary.main",
+                  color: "primary.contrastText",
+                }
+              : {
+                  bgcolor: "action.hover",
+                  color: "text.secondary",
+                }),
+        }}
       >
-        {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
-      </div>
-      <div className="max-w-[80%] flex flex-col gap-1.5">
-        <div
-          className={`rounded-lg px-3 py-2 text-sm ${
-            isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-foreground"
-          }`}
+        {isUser ? <PersonIcon sx={{ fontSize: 16 }} /> : <SmartToyIcon sx={{ fontSize: 16 }} />}
+      </Box>
+      <Stack spacing={0.75} sx={{ maxWidth: "80%" }}>
+        <Box
+          sx={{
+            borderRadius: 2,
+            px: 1.5,
+            py: 1,
+            fontSize: "0.875rem",
+            ...(isUser
+              ? {
+                  bgcolor: "primary.main",
+                  color: "primary.contrastText",
+                }
+              : {
+                  bgcolor: "action.hover",
+                  color: "text.primary",
+                }),
+          }}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap break-words">{message.content}</p>
+            <Typography
+              component="div"
+              variant="body2"
+              sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+            >
+              {message.content}
+            </Typography>
           ) : (
             <MarkdownContent content={message.content} />
           )}
-        </div>
+        </Box>
         {isAssistant && <CitedReferencesPanel content={message.content} savedReferences={message.references} />}
         {isAssistant && hovered && (
-          <div className="flex items-center gap-1">
+          <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap", alignItems: "center" }}>
             <CopyButton content={message.content} />
             <SaveToWikiButton content={message.content} visible={true} />
             {isLastAssistant && onRegenerate && (
-              <button
+              <Button
                 type="button"
+                size="small"
                 onClick={onRegenerate}
-                className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                 title={t("chat.regenerateTitle")}
+                sx={{
+                  minWidth: 0,
+                  px: 1,
+                  py: 0.25,
+                  fontSize: "0.6875rem",
+                  textTransform: "none",
+                  color: "text.secondary",
+                  "&:hover": {
+                    color: "primary.main",
+                    bgcolor: (theme) =>
+                      theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+                  },
+                }}
+                startIcon={<RefreshIcon sx={{ fontSize: 12 }} />}
               >
-                <RefreshCw className="h-3 w-3" /> {t("chat.regenerate")}
-              </button>
+                {t("chat.regenerate")}
+              </Button>
             )}
-          </div>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   )
 }
 
@@ -132,15 +205,28 @@ function CopyButton({ content }: { content: string }) {
   }, [content])
 
   return (
-    <button
+    <Button
       type="button"
+      size="small"
       onClick={handleCopy}
-      className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
       title={t("chat.copyToClipboard")}
+      sx={{
+        minWidth: 0,
+        px: 1,
+        py: 0.25,
+        fontSize: "0.6875rem",
+        textTransform: "none",
+        color: "text.secondary",
+        "&:hover": {
+          color: "primary.main",
+          bgcolor: (theme) =>
+            theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+        },
+      }}
+      startIcon={copied ? <CheckIcon sx={{ fontSize: 12 }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
     >
-      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {copied ? t("chat.copied") : t("chat.copy")}
-    </button>
+    </Button>
   )
 }
 
@@ -244,16 +330,29 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
   if (!visible && !saved) return null
 
   return (
-    <button
+    <Button
       type="button"
       onClick={handleSave}
       disabled={saving}
-      className="self-start inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
       title={t("chat.saveToWiki")}
+      sx={{
+        alignSelf: "flex-start",
+        minWidth: 0,
+        px: 1,
+        py: 0.25,
+        fontSize: "0.6875rem",
+        textTransform: "none",
+        color: "text.secondary",
+        "&:hover": {
+          color: "primary.main",
+          bgcolor: (theme) =>
+            theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+        },
+      }}
+      startIcon={<BookmarkAddIcon sx={{ fontSize: 12 }} />}
     >
-      <BookmarkPlus className="h-3 w-3" />
       {saved ? t("chat.saved") : saving ? t("chat.saving") : t("chat.saveToWiki")}
-    </button>
+    </Button>
   )
 }
 
@@ -262,15 +361,15 @@ interface CitedPage {
   path: string
 }
 
-const REF_TYPE_CONFIG: Record<string, { icon: typeof FileText; color: string }> = {
-  entity: { icon: Users, color: "text-blue-500" },
-  concept: { icon: Lightbulb, color: "text-purple-500" },
-  source: { icon: BookOpen, color: "text-orange-500" },
-  query: { icon: HelpCircle, color: "text-green-500" },
-  synthesis: { icon: GitMerge, color: "text-red-500" },
-  comparison: { icon: BarChart3, color: "text-teal-500" },
-  overview: { icon: Layout, color: "text-yellow-500" },
-  clip: { icon: Globe, color: "text-blue-400" },
+const REF_TYPE_CONFIG: Record<string, { Icon: SvgIconComponent; sxColor: Record<string, string> }> = {
+  entity: { Icon: GroupIcon, sxColor: { color: "info.main" } },
+  concept: { Icon: LightbulbIcon, sxColor: { color: "secondary.main" } },
+  source: { Icon: MenuBookIcon, sxColor: { color: "warning.main" } },
+  query: { Icon: HelpOutlineOutlinedIcon, sxColor: { color: "success.main" } },
+  synthesis: { Icon: MergeIcon, sxColor: { color: "error.light" } },
+  comparison: { Icon: BarChartIcon, sxColor: { color: "success.light" } },
+  overview: { Icon: ViewModuleIcon, sxColor: { color: "warning.light" } },
+  clip: { Icon: PublicIcon, sxColor: { color: "info.light" } },
 }
 
 function getRefType(path: string): string {
@@ -304,29 +403,57 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
   const hasMore = citedPages.length > MAX_COLLAPSED
 
   return (
-    <div className="rounded-md border border-border/60 bg-muted/30 text-xs mb-1">
-      <button
+    <Box
+      sx={{
+        borderRadius: 1,
+        border: 1,
+        borderColor: "divider",
+        bgcolor: (theme) =>
+          theme.palette.mode === "light" ? "rgba(0,0,0,0.02)" : "rgba(255,255,255,0.04)",
+        fontSize: "0.75rem",
+        mb: 0.5,
+      }}
+    >
+      <Button
         type="button"
+        fullWidth
         onClick={() => hasMore && setExpanded(!expanded)}
-        className="flex w-full items-center gap-1.5 px-2 py-1 text-muted-foreground hover:text-foreground transition-colors"
+        sx={{
+          justifyContent: "flex-start",
+          gap: 0.75,
+          px: 1,
+          py: 0.5,
+          minHeight: 0,
+          textTransform: "none",
+          fontSize: "0.75rem",
+          color: "text.secondary",
+          "&:hover": { color: "text.primary", bgcolor: "action.hover" },
+        }}
+        startIcon={<DescriptionIcon sx={{ fontSize: 12, flexShrink: 0 }} />}
+        endIcon={
+          hasMore ? (
+            expanded ? (
+              <ExpandMoreIcon sx={{ fontSize: 12, ml: "auto" }} />
+            ) : (
+              <ChevronRightIcon sx={{ fontSize: 12, ml: "auto" }} />
+            )
+          ) : undefined
+        }
       >
-        <FileText className="h-3 w-3 shrink-0" />
-        <span className="font-medium">{t("chat.references")} ({citedPages.length})</span>
-        {hasMore && (
-          expanded
-            ? <ChevronDown className="h-3 w-3 ml-auto" />
-            : <ChevronRight className="h-3 w-3 ml-auto" />
-        )}
-      </button>
-      <div className="px-2 pb-1.5">
+        <Typography component="span" variant="caption" sx={{ fontWeight: 600 }}>
+          {t("chat.references")} ({citedPages.length})
+        </Typography>
+      </Button>
+      <Box sx={{ px: 1, pb: 1 }}>
         {visiblePages.map((page, i) => {
           const refType = getRefType(page.path)
           const config = REF_TYPE_CONFIG[refType] ?? REF_TYPE_CONFIG.source
-          const Icon = config.icon
+          const RefIcon = config.Icon
           return (
-            <button
+            <Button
               key={page.path}
               type="button"
+              fullWidth
               onClick={async () => {
                 if (!project) return
                 const pp = normalizePath(project.path)
@@ -354,26 +481,63 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
                 // Last resort: set the original path anyway
                 setSelectedFile(`${pp}/${page.path}`)
               }}
-              className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-accent/50 transition-colors"
               title={page.path}
+              sx={{
+                display: "flex",
+                width: 1,
+                alignItems: "center",
+                gap: 0.75,
+                borderRadius: 1,
+                px: 0.5,
+                py: 0.25,
+                minHeight: 0,
+                justifyContent: "flex-start",
+                textTransform: "none",
+                fontSize: "0.75rem",
+                color: "text.primary",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
             >
-              <span className="text-[10px] text-muted-foreground/60 w-4 shrink-0 text-right">[{i + 1}]</span>
-              <Icon className={`h-3 w-3 shrink-0 ${config.color}`} />
-              <span className="truncate text-foreground/80">{page.title}</span>
-            </button>
+              <Typography
+                variant="caption"
+                sx={{
+                  fontSize: "0.625rem",
+                  color: "text.secondary",
+                  width: 16,
+                  flexShrink: 0,
+                  textAlign: "right",
+                  opacity: 0.7,
+                }}
+              >
+                [{i + 1}]
+              </Typography>
+              <RefIcon sx={{ fontSize: 12, flexShrink: 0, ...config.sxColor }} />
+              <Typography variant="caption" sx={{ flex: 1, minWidth: 0, textAlign: "left" }} noWrap>
+                {page.title}
+              </Typography>
+            </Button>
           )
         })}
         {hasMore && !expanded && (
-          <button
+          <Button
             type="button"
+            fullWidth
             onClick={() => setExpanded(true)}
-            className="w-full text-center text-[10px] text-muted-foreground hover:text-primary pt-0.5"
+            sx={{
+              mt: 0.25,
+              py: 0.25,
+              fontSize: "0.625rem",
+              textTransform: "none",
+              color: "text.secondary",
+              minHeight: 0,
+              "&:hover": { color: "primary.main" },
+            }}
           >
             {t("chat.more", { count: citedPages.length - MAX_COLLAPSED })}
-          </button>
+          </Button>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
@@ -459,22 +623,52 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
   const isThinking = thinking !== null && answer.length === 0
 
   return (
-    <div className="flex gap-2 flex-row">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        <Bot className="h-4 w-4" />
-      </div>
-      <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-muted text-foreground">
+    <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+      <Box
+        sx={{
+          display: "flex",
+          height: 28,
+          width: 28,
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: "50%",
+          bgcolor: "action.hover",
+          color: "text.secondary",
+        }}
+      >
+        <SmartToyIcon sx={{ fontSize: 16 }} />
+      </Box>
+      <Box
+        sx={{
+          maxWidth: "80%",
+          borderRadius: 2,
+          px: 1.5,
+          py: 1,
+          fontSize: "0.875rem",
+          bgcolor: "action.hover",
+          color: "text.primary",
+        }}
+      >
         {isThinking ? (
           <StreamingThinkingBlock content={thinking} />
         ) : (
           <>
             {thinking && <ThinkingBlock content={thinking} />}
             <MarkdownContent content={answer} />
-            <span className="animate-pulse">▊</span>
+            <Box
+              component="span"
+              sx={{
+                display: "inline-block",
+                animation: `${pulseAnim} 1.5s ease-in-out infinite`,
+              }}
+            >
+              ▊
+            </Box>
           </>
         )}
-      </div>
-    </div>
+      </Box>
+    </Stack>
   )
 }
 
@@ -483,24 +677,48 @@ function MarkdownContent({ content }: { content: string }) {
   const { thinking, answer } = useMemo(() => separateThinking(cleaned), [cleaned])
   const processed = useMemo(() => processContent(answer), [answer])
 
+  const project = useWikiStore((s) => s.project)
+  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const setFileContent = useWikiStore((s) => s.setFileContent)
+
+  const onWikilinkClick = useCallback(
+    async (pageName: string) => {
+      if (!project) return
+      const pp = normalizePath(project.path)
+      const dirs = ["entities", "concepts", "sources", "synthesis", "comparisons", "queries", ""]
+      for (const dir of dirs) {
+        const tryPath = dir ? `${pp}/wiki/${dir}/${pageName}.md` : `${pp}/wiki/${pageName}.md`
+        try {
+          const fc = await readFile(tryPath)
+          setSelectedFile(tryPath)
+          setFileContent(fc)
+          return
+        } catch {
+          // try next
+        }
+      }
+    },
+    [project, setSelectedFile, setFileContent],
+  )
+
   return (
-    <div>
+    <Box>
       {thinking && <ThinkingBlock content={thinking} />}
       <MarkdownView
-        content={processed}
-        className="chat-markdown text-sm"
-        enableWikilinks
+        markdown={processed}
+        sx={{ fontSize: "0.875rem" }}
+        onWikilinkClick={onWikilinkClick}
       />
-    </div>
+    </Box>
   )
 }
 
 /**
- * Separate <think>...</think> blocks from the main answer.
+ * Separate <redacted_thinking>...</redacted_thinking> blocks from the main answer.
  * Handles multiple think blocks and partial (unclosed) thinking during streaming.
  */
 function separateThinking(text: string): { thinking: string | null; answer: string } {
-  // Match complete <think>...</think> and <thinking>...</thinking> blocks
+  // Match complete <redacted_thinking>...</redacted_thinking> and <thinking>...</thinking> blocks
   const thinkRegex = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi
   const thinkParts: string[] = []
   let answer = text
@@ -511,7 +729,7 @@ function separateThinking(text: string): { thinking: string | null; answer: stri
   }
   answer = answer.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, "").trim()
 
-  // Handle unclosed <think> or <thinking> tag (streaming in progress)
+  // Handle unclosed <redacted_thinking> or <thinking> tag (streaming in progress)
   const unclosedMatch = answer.match(/<think(?:ing)?>([\s\S]*)$/i)
   if (unclosedMatch) {
     thinkParts.push(unclosedMatch[1].trim())
@@ -529,25 +747,63 @@ function StreamingThinkingBlock({ content }: { content: string }) {
   const visibleLines = lines.slice(-5)
 
   return (
-    <div className="rounded-md border border-dashed border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20 px-2.5 py-2">
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <span className="text-sm animate-pulse">💭</span>
-        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">{t("chat.thinking")}</span>
-        <span className="text-[10px] text-amber-600/50 dark:text-amber-500/40">{t("chat.lines", { count: lines.length })}</span>
-      </div>
-      <div className="h-[5lh] overflow-hidden text-xs text-amber-800/70 dark:text-amber-300/60 font-mono leading-relaxed">
+    <Box
+      sx={{
+        borderRadius: 1,
+        border: "1px dashed",
+        borderColor: (theme) =>
+          theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.35)" : "rgba(251, 191, 36, 0.35)",
+        bgcolor: (theme) =>
+          theme.palette.mode === "light" ? "rgba(255, 251, 235, 0.9)" : "rgba(120, 53, 15, 0.15)",
+        px: 1.25,
+        py: 1,
+      }}
+    >
+      <Stack direction="row" spacing={0.75} sx={{ mb: 1, alignItems: "center" }}>
+        <Box
+          component="span"
+          sx={{ fontSize: "0.875rem", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
+        >
+          💭
+        </Box>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: "warning.dark" }}>
+          {t("chat.thinking")}
+        </Typography>
+        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "warning.main", opacity: 0.6 }}>
+          {t("chat.lines", { count: lines.length })}
+        </Typography>
+      </Stack>
+      <Box
+        sx={{
+          height: "5lh",
+          overflow: "hidden",
+          fontSize: "0.75rem",
+          fontFamily: "ui-monospace, monospace",
+          lineHeight: 1.6,
+          color: "warning.dark",
+        }}
+      >
         {visibleLines.map((line, i) => (
-          <div
+          <Box
             key={lines.length - 5 + i}
-            className="truncate"
-            style={{ opacity: 0.4 + (i / visibleLines.length) * 0.6 }}
+            sx={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              opacity: 0.4 + (i / Math.max(visibleLines.length, 1)) * 0.6,
+            }}
           >
             {line}
-          </div>
+          </Box>
         ))}
-        <span className="animate-pulse text-amber-500">▊</span>
-      </div>
-    </div>
+        <Box
+          component="span"
+          sx={{ color: "warning.main", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
+        >
+          ▊
+        </Box>
+      </Box>
+    </Box>
   )
 }
 
@@ -558,24 +814,64 @@ function ThinkingBlock({ content }: { content: string }) {
   const lines = content.split("\n").filter((l) => l.trim())
 
   return (
-    <div className="mb-2 rounded-md border border-dashed border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
-      <button
+    <Box
+      sx={{
+        mb: 1,
+        borderRadius: 1,
+        border: "1px dashed",
+        borderColor: (theme) =>
+          theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.35)" : "rgba(251, 191, 36, 0.35)",
+        bgcolor: (theme) =>
+          theme.palette.mode === "light" ? "rgba(255, 251, 235, 0.9)" : "rgba(120, 53, 15, 0.15)",
+      }}
+    >
+      <Button
         type="button"
+        fullWidth
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-400 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors"
+        sx={{
+          justifyContent: "flex-start",
+          gap: 0.75,
+          px: 1.25,
+          py: 0.75,
+          minHeight: 0,
+          textTransform: "none",
+          fontSize: "0.75rem",
+          color: "warning.dark",
+          "&:hover": { bgcolor: (theme) => (theme.palette.mode === "light" ? "rgba(251, 191, 36, 0.2)" : "rgba(120, 53, 15, 0.25)") },
+        }}
       >
-        <span className="text-sm">💭</span>
-        <span className="font-medium">{t("chat.thoughtForLines", { count: lines.length })}</span>
-        <span className="text-amber-600/60 dark:text-amber-500/60">
+        <Box component="span" sx={{ fontSize: "0.875rem" }}>
+          💭
+        </Box>
+        <Typography variant="caption" sx={{ flex: 1, textAlign: "left", fontWeight: 600 }}>
+          {t("chat.thoughtForLines", { count: lines.length })}
+        </Typography>
+        <Typography variant="caption" sx={{ color: "warning.main", opacity: 0.7 }}>
           {expanded ? "▼" : "▶"}
-        </span>
-      </button>
+        </Typography>
+      </Button>
       {expanded && (
-        <div className="border-t border-amber-500/20 px-2.5 py-2 text-xs text-amber-800/80 dark:text-amber-300/70 whitespace-pre-wrap max-h-64 overflow-y-auto font-mono leading-relaxed">
+        <Box
+          sx={{
+            borderTop: "1px solid",
+            borderColor: (theme) =>
+              theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.2)" : "rgba(251, 191, 36, 0.2)",
+            px: 1.25,
+            py: 1,
+            fontSize: "0.75rem",
+            color: "warning.dark",
+            whiteSpace: "pre-wrap",
+            maxHeight: 256,
+            overflowY: "auto",
+            fontFamily: "ui-monospace, monospace",
+            lineHeight: 1.6,
+          }}
+        >
           {content}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -605,149 +901,15 @@ function processContent(text: string): string {
   // Fix malformed wikilinks like [[name] (missing closing bracket)
   result = result.replace(/\[\[([^\]]+)\](?!\])/g, "[[$1]]")
 
-  // Convert [[wikilinks]] to HTML links with data-wikilink attribute
+  // Convert [[wikilinks]] to markdown links (wiki: scheme) for TipTap Link + MarkdownView
   result = result.replace(
     /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g,
     (_match, pageName: string, displayText?: string) => {
       const display = displayText?.trim() || pageName.trim()
-      const escaped = pageName.trim().replace(/"/g, "&quot;")
-      return `<a data-wikilink="${escaped}">${display}</a>`
-    }
+      const target = pageName.trim()
+      return `[${display}](wiki:${encodeURIComponent(target)})`
+    },
   )
 
   return result
-}
-
-function SourceRef({ fileName }: { fileName: string }) {
-  const { t } = useTranslation()
-  const project = useWikiStore((s) => s.project)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
-  const setFileContent = useWikiStore((s) => s.setFileContent)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
-
-  const handleClick = useCallback(async (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    if (!project) return
-    const pp = normalizePath(project.path)
-
-    // Try exact match first, then search with the name as given
-    const candidates = [
-      `${pp}/raw/sources/${fileName}`,
-    ]
-
-    // If fileName has no extension, try to find a matching file
-    if (!fileName.includes(".")) {
-      for (const sf of cachedSourceFiles) {
-        const stem = sf.replace(/\.[^.]+$/, "")
-        if (stem === fileName || sf.startsWith(fileName)) {
-          candidates.unshift(`${pp}/raw/sources/${sf}`)
-        }
-      }
-    }
-
-    setActiveView("wiki")
-
-    for (const path of candidates) {
-      try {
-        const content = await readFile(path)
-        setSelectedFile(path)
-        setFileContent(content)
-        return
-      } catch {
-        // try next
-      }
-    }
-
-    // Fallback: just set the path even if we can't read it
-    setSelectedFile(candidates[0])
-    setFileContent(t("chat.unableToLoad", { name: fileName }))
-  }, [project, fileName, setSelectedFile, setFileContent, setActiveView, t])
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="inline-flex items-center gap-0.5 rounded bg-accent/50 px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-accent transition-colors"
-      title={t("chat.openSource", { name: fileName })}
-    >
-      <Paperclip className="inline h-3 w-3" />
-      {fileName}
-    </button>
-  )
-}
-
-function WikiLink({ pageName, children }: { pageName: string; children: React.ReactNode }) {
-  const { t } = useTranslation()
-  const project = useWikiStore((s) => s.project)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
-  const setFileContent = useWikiStore((s) => s.setFileContent)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
-  const [exists, setExists] = useState<boolean | null>(null)
-  const resolvedPath = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (!project) return
-    const pp = normalizePath(project.path)
-    const candidates = [
-      `${pp}/wiki/entities/${pageName}.md`,
-      `${pp}/wiki/concepts/${pageName}.md`,
-      `${pp}/wiki/sources/${pageName}.md`,
-      `${pp}/wiki/queries/${pageName}.md`,
-      `${pp}/wiki/comparisons/${pageName}.md`,
-      `${pp}/wiki/synthesis/${pageName}.md`,
-      `${pp}/wiki/${pageName}.md`,
-    ]
-
-    let cancelled = false
-    async function check() {
-      for (const path of candidates) {
-        try {
-          await readFile(path)
-          if (!cancelled) {
-            resolvedPath.current = path
-            setExists(true)
-          }
-          return
-        } catch {
-          // try next
-        }
-      }
-      if (!cancelled) setExists(false)
-    }
-    check()
-    return () => { cancelled = true }
-  }, [project, pageName])
-
-  const handleClick = useCallback(async () => {
-    if (!resolvedPath.current) return
-    try {
-      const content = await readFile(resolvedPath.current)
-      setSelectedFile(resolvedPath.current)
-      setFileContent(content)
-      setActiveView("wiki")
-    } catch {
-      // ignore
-    }
-  }, [setSelectedFile, setFileContent, setActiveView])
-
-  if (exists === false) {
-    return (
-      <span className="inline text-muted-foreground" title={t("chat.pageNotFound", { name: pageName })}>
-        {children}
-      </span>
-    )
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-primary underline decoration-primary/30 hover:bg-primary/10 hover:decoration-primary"
-      title={t("chat.openWikiPage", { name: pageName })}
-    >
-      <FileText className="inline h-3 w-3" />
-      {children}
-    </button>
-  )
 }

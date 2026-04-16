@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import type { ReactNode } from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import { GraphView } from "../graph/graph-view"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -18,7 +19,7 @@ vi.mock("@/lib/graph-insights", () => ({
 const mockLoadGraph = vi.fn()
 
 vi.mock("@react-sigma/core", () => ({
-  SigmaContainer: ({ children }: { children?: unknown }) => (
+  SigmaContainer: ({ children }: { children?: ReactNode }) => (
     <div data-testid="sigma">{children}</div>
   ),
   useLoadGraph: () => mockLoadGraph,

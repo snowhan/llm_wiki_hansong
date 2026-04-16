@@ -6,8 +6,6 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { streamChat } from "@/lib/llm-client"
 import { searchWiki } from "@/lib/search"
-import { detectLanguage } from "@/lib/detect-language"
-import { buildRetrievalGraph, getRelatedNodes } from "@/lib/graph-relevance"
 
 vi.mock("../chat/chat-message", () => ({
   ChatMessage: ({ message }: { message: { id: string; role: string; content: string } }) => (

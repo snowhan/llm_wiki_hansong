@@ -91,7 +91,7 @@ describe("useChatStore", () => {
     })
 
     it("finalizeStream adds assistant message and resets", () => {
-      const id = useChatStore.getState().createConversation()
+      useChatStore.getState().createConversation()
       useChatStore.getState().setStreaming(true)
       useChatStore.getState().finalizeStream("Full response", [{ title: "Ref", path: "/ref.md" }])
       const s = useChatStore.getState()

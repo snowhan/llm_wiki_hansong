@@ -1,77 +1,96 @@
-import { useEffect, useRef, useCallback, type MouseEvent } from "react"
-import { renderPreview } from "@/lib/markdown-renderer"
-import { useWikiStore } from "@/stores/wiki-store"
-import { readFile } from "@/commands/fs"
-import { normalizePath } from "@/lib/path-utils"
-import { useIsDark } from "@/hooks/use-is-dark"
-import { cn } from "@/lib/utils"
+import "katex/dist/katex.min.css"
+import { Box, type SxProps, type Theme } from "@mui/material"
+import { EditorContent } from "@tiptap/react"
+import { useCallback, type MouseEvent } from "react"
+import { useTiptap } from "@/components/editor/use-tiptap"
 
-interface MarkdownViewProps {
-  content: string
-  className?: string
-  enableWikilinks?: boolean
+export interface MarkdownViewProps {
+  /** Markdown source to render. */
+  markdown: string
+  /** Called when a `wiki:` link is activated (see wikilink preprocessing). */
+  onWikilinkClick?: (path: string) => void
+  sx?: SxProps<Theme>
 }
 
-export function MarkdownView({ content, className, enableWikilinks = false }: MarkdownViewProps) {
-  const project = useWikiStore((s) => s.project)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
-  const setFileContent = useWikiStore((s) => s.setFileContent)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const isDark = useIsDark()
+/**
+ * Convert `[[Page]]` / `[[Page|Label]]` wiki syntax into markdown links using the `wiki:` scheme.
+ */
+export function wikiLinksToMarkdownLinks(markdown: string): string {
+  const src = markdown ?? ""
+  return src.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, page: string, alt?: string) => {
+    const target = page.trim()
+    const label = (alt ?? page).trim()
+    return `[${label}](wiki:${encodeURIComponent(target)})`
+  })
+}
 
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    if (!content) {
-      el.innerHTML = ""
-      return
-    }
+export function MarkdownView({ markdown, onWikilinkClick, sx }: MarkdownViewProps) {
+  const prepared = wikiLinksToMarkdownLinks(markdown)
 
-    let cancelled = false
-    renderPreview(el, content, { isDark }).then(() => {
-      if (cancelled) return
-    })
-
-    return () => { cancelled = true }
-  }, [content, isDark])
+  const { editor } = useTiptap({
+    content: prepared,
+    editable: false,
+  })
 
   const handleClick = useCallback(
-    async (e: MouseEvent<HTMLDivElement>) => {
-      if (!enableWikilinks || !project) return
-      const target = (e.target as HTMLElement).closest("a[data-wikilink]") as HTMLAnchorElement | null
-      if (!target) return
+    (e: MouseEvent<HTMLDivElement>) => {
+      if (!onWikilinkClick) return
+      const el = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null
+      if (!el) return
+      const href = el.getAttribute("href")
+      if (!href) return
+      const lower = href.toLowerCase()
+      if (!lower.startsWith("wiki:")) return
       e.preventDefault()
       e.stopPropagation()
-
-      const pageName = target.getAttribute("data-wikilink") ?? ""
-      if (!pageName) return
-
-      const pp = normalizePath(project.path)
-      const dirs = ["entities", "concepts", "sources", "synthesis", "comparisons", "queries", ""]
-      for (const dir of dirs) {
-        const tryPath = dir ? `${pp}/wiki/${dir}/${pageName}.md` : `${pp}/wiki/${pageName}.md`
-        try {
-          const fc = await readFile(tryPath)
-          setSelectedFile(tryPath)
-          setFileContent(fc)
-          return
-        } catch {
-          // try next
-        }
-      }
+      const raw = href.slice(href.indexOf(":") + 1)
+      onWikilinkClick(decodeURIComponent(raw))
     },
-    [project, enableWikilinks, setSelectedFile, setFileContent],
+    [onWikilinkClick],
   )
 
   return (
-    <div
-      ref={containerRef}
-      className={cn(
-        "vditor-reset",
-        isDark && "vditor-reset--dark",
-        className,
-      )}
+    <Box
       onClick={handleClick}
-    />
+      sx={{
+        "& .tiptap": {
+          outline: "none",
+          cursor: "default",
+          "& p": { margin: "0.35em 0" },
+          "& h1, & h2, & h3": { margin: "0.65em 0 0.3em" },
+          "& pre": {
+            backgroundColor: "action.hover",
+            borderRadius: 1,
+            padding: 1,
+            overflow: "auto",
+          },
+          "& blockquote": {
+            borderLeft: "3px solid",
+            borderColor: "divider",
+            marginLeft: 0,
+            paddingLeft: 2,
+            color: "text.secondary",
+          },
+          "& img": { maxWidth: "100%", height: "auto" },
+          "& table": {
+            borderCollapse: "collapse",
+            width: "100%",
+          },
+          "& th, & td": {
+            border: "1px solid",
+            borderColor: "divider",
+            padding: "6px 8px",
+          },
+          "& a": {
+            color: "primary.main",
+            textDecoration: "underline",
+            cursor: onWikilinkClick ? "pointer" : "inherit",
+          },
+        },
+        ...sx,
+      }}
+    >
+      <EditorContent editor={editor} />
+    </Box>
   )
 }

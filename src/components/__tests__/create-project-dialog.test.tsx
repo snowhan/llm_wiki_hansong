@@ -3,7 +3,6 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { act } from "react"
 import { CreateProjectDialog } from "../project/create-project-dialog"
 import { createProject } from "@/commands/fs"
-import { getTemplate } from "@/lib/templates"
 
 vi.mock("@/commands/fs", () => ({
   readFile: vi.fn(),

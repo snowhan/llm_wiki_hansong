@@ -1,6 +1,9 @@
 import { useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { X } from "lucide-react"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import IconButton from "@mui/material/IconButton"
+import Close from "@mui/icons-material/Close"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile } from "@/commands/fs"
 import { getFileCategory, isBinary } from "@/lib/file-types"
@@ -55,9 +58,18 @@ export function PreviewPanel() {
 
   if (!selectedFile) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+      <Box
+        sx={{
+          display: "flex",
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+          typography: "body2",
+          color: "text.secondary",
+        }}
+      >
         {t("preview.selectFile")}
-      </div>
+      </Box>
     )
   }
 
@@ -65,19 +77,31 @@ export function PreviewPanel() {
   const fileName = getFileName(selectedFile)
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-3 py-1.5">
-        <span className="truncate text-xs text-muted-foreground" title={selectedFile}>
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 1.5,
+          py: 0.75,
+        }}
+      >
+        <Typography variant="caption" noWrap sx={{ color: "text.secondary", flex: 1, minWidth: 0 }} title={selectedFile}>
           {fileName}
-        </span>
-        <button
+        </Typography>
+        <IconButton
+          size="small"
           onClick={() => setSelectedFile(null)}
-          className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent"
+          sx={{ flexShrink: 0, color: "text.secondary", "&:hover": { bgcolor: "action.hover" } }}
+          aria-label="Close"
         >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      <div className="flex-1 min-w-0 overflow-auto">
+          <Close sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0, overflow: "auto" }}>
         {category === "markdown" ? (
           <WikiEditor
             key={selectedFile}
@@ -91,7 +115,7 @@ export function PreviewPanel() {
             textContent={fileContent}
           />
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

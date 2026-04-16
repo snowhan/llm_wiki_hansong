@@ -1,29 +1,38 @@
 import { useState, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  Link2Off,
-  Unlink,
-  ArrowUpRight,
-  AlertTriangle,
-  Info,
-  RefreshCw,
-  CheckCircle2,
-  BrainCircuit,
-  Wrench,
-  Trash2,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import Button from "@mui/material/Button"
+import Checkbox from "@mui/material/Checkbox"
+import FormControlLabel from "@mui/material/FormControlLabel"
+import LinkOffIcon from "@mui/icons-material/LinkOff"
+import OpenInNewIcon from "@mui/icons-material/OpenInNew"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import CheckCircleOutlineOutlinedIcon from "@mui/icons-material/CheckCircleOutlineOutlined"
+import PsychologyIcon from "@mui/icons-material/Psychology"
+import BuildIcon from "@mui/icons-material/Build"
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
+import type { SvgIconComponent } from "@mui/icons-material"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { runStructuralLint, runSemanticLint, type LintResult } from "@/lib/lint"
 import { readFile, writeFile, deleteFile, listDirectory } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
+import { keyframes } from "@mui/material/styles"
 
-const typeConfig: Record<string, { icon: typeof AlertTriangle; labelKey: string }> = {
-  orphan: { icon: Unlink, labelKey: "lint.orphan" },
-  "broken-link": { icon: Link2Off, labelKey: "lint.brokenLink" },
-  "no-outlinks": { icon: ArrowUpRight, labelKey: "lint.noOutlinks" },
-  semantic: { icon: BrainCircuit, labelKey: "lint.semanticIssue" },
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`
+
+const typeConfig: Record<string, { icon: SvgIconComponent; labelKey: string }> = {
+  orphan: { icon: LinkOffIcon, labelKey: "lint.orphan" },
+  "broken-link": { icon: LinkOffIcon, labelKey: "lint.brokenLink" },
+  "no-outlinks": { icon: OpenInNewIcon, labelKey: "lint.noOutlinks" },
+  semantic: { icon: PsychologyIcon, labelKey: "lint.semanticIssue" },
 }
 
 export function LintView() {
@@ -196,54 +205,113 @@ export function LintView() {
   const infos = results.filter((r) => r.severity === "info")
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="shrink-0 flex items-center justify-between border-b px-4 py-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">{t("lint.wikiLint")}</h2>
+    <Stack sx={{ height: 1 }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 2,
+          py: 1.5,
+        }}
+      >
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            {t("lint.wikiLint")}
+          </Typography>
           {hasRun && results.length > 0 && (
-            <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+            <Typography
+              component="span"
+              variant="caption"
+              sx={{
+                borderRadius: 999,
+                px: 1,
+                py: 0.25,
+                bgcolor: (theme) =>
+                  theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.2)" : "rgba(251, 191, 36, 0.15)",
+                color: "warning.dark",
+                fontWeight: 600,
+              }}
+            >
               {t("lint.issues", { count: results.length })}
-            </span>
+            </Typography>
           )}
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-            <input
-              type="checkbox"
-              className="h-3 w-3"
-              checked={runSemantic}
-              onChange={(e) => setRunSemantic(e.target.checked)}
-            />
-            {t("lint.semantic")}
-          </label>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={runSemantic}
+                onChange={(e) => setRunSemantic(e.target.checked)}
+              />
+            }
+            label={<Typography variant="caption" color="text.secondary">{t("lint.semantic")}</Typography>}
+          />
           <Button
-            size="sm"
+            size="small"
+            variant="contained"
             onClick={handleRunLint}
             disabled={running || !project}
+            startIcon={
+              <RefreshIcon
+                sx={{
+                  fontSize: 16,
+                  ...(running ? { animation: `${spin} 1s linear infinite` } : {}),
+                }}
+              />
+            }
           >
-            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${running ? "animate-spin" : ""}`} />
             {running ? t("lint.running") : t("lint.runLint")}
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
-      <div className="flex-1 overflow-y-auto">
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
         {!hasRun ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
-            <CheckCircle2 className="h-8 w-8 text-muted-foreground/30" />
-            <p>{t("lint.runLintHint")}</p>
-            <p className="text-xs">{t("lint.checksHint")}</p>
-          </div>
+          <Stack
+            sx={{
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 1,
+              p: 4,
+              textAlign: "center",
+            }}
+          >
+            <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 36, color: "text.disabled", opacity: 0.4 }} />
+            <Typography variant="body2" color="text.secondary">
+              {t("lint.runLintHint")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("lint.checksHint")}
+            </Typography>
+          </Stack>
         ) : results.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
-            <CheckCircle2 className="h-8 w-8 text-emerald-500/60" />
-            <p className="text-emerald-600 dark:text-emerald-400 font-medium">{t("lint.allClearTitle")}</p>
-            <p className="text-xs">{t("lint.noIssuesFound")}</p>
-          </div>
+          <Stack
+            sx={{
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 1,
+              p: 4,
+              textAlign: "center",
+            }}
+          >
+            <CheckCircleOutlineOutlinedIcon sx={{ fontSize: 36, color: "success.main", opacity: 0.7 }} />
+            <Typography variant="body2" sx={{ fontWeight: 600, color: "success.main" }}>
+              {t("lint.allClearTitle")}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {t("lint.noIssuesFound")}
+            </Typography>
+          </Stack>
         ) : (
-          <div className="flex flex-col gap-2 p-3">
+          <Stack spacing={1} sx={{ p: 1.5 }}>
             {warnings.length > 0 && (
-              <SectionHeader icon={AlertTriangle} label={t("lint.warnings")} count={warnings.length} color="text-amber-500" />
+              <SectionHeader icon={WarningAmberIcon} label={t("lint.warnings")} count={warnings.length} color="warning.main" />
             )}
             {warnings.map((result, i) => (
               <LintCard
@@ -257,7 +325,7 @@ export function LintView() {
               />
             ))}
             {infos.length > 0 && (
-              <SectionHeader icon={Info} label={t("lint.info")} count={infos.length} color="text-blue-500" />
+              <SectionHeader icon={InfoOutlinedIcon} label={t("lint.info")} count={infos.length} color="info.main" />
             )}
             {infos.map((result, i) => {
               const realIndex = warnings.length + i
@@ -273,10 +341,10 @@ export function LintView() {
                 />
               )
             })}
-          </div>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Box>
+    </Stack>
   )
 }
 
@@ -286,16 +354,18 @@ function SectionHeader({
   count,
   color,
 }: {
-  icon: typeof AlertTriangle
+  icon: SvgIconComponent
   label: string
   count: number
   color: string
 }) {
   return (
-    <div className={`flex items-center gap-1.5 px-1 py-1 text-xs font-semibold ${color}`}>
-      <Icon className="h-3.5 w-3.5" />
-      {label} ({count})
-    </div>
+    <Stack direction="row" spacing={0.75} sx={{ px: 0.5, py: 0.5, alignItems: "center", color }}>
+      <Icon sx={{ fontSize: 14 }} />
+      <Typography variant="caption" sx={{ fontWeight: 700 }}>
+        {label} ({count})
+      </Typography>
+    </Stack>
   )
 }
 
@@ -319,67 +389,91 @@ function LintCard({
   const Icon = config.icon
 
   return (
-    <div className="rounded-lg border p-3 text-sm">
-      <div className="mb-1.5 flex items-start gap-2">
+    <Box
+      sx={{
+        borderRadius: 2,
+        border: 1,
+        borderColor: "divider",
+        p: 1.5,
+        fontSize: "0.875rem",
+      }}
+    >
+      <Stack direction="row" spacing={1} sx={{ mb: 0.75, alignItems: "flex-start" }}>
         <Icon
-          className={`mt-0.5 h-4 w-4 shrink-0 ${
-            result.severity === "warning" ? "text-amber-500" : "text-blue-500"
-          }`}
+          sx={{
+            mt: 0.25,
+            fontSize: 18,
+            flexShrink: 0,
+            color: result.severity === "warning" ? "warning.main" : "info.main",
+          }}
         />
-        <div className="flex-1 min-w-0">
-          <div className="font-medium truncate">{result.page}</div>
-          <div className="text-[11px] text-muted-foreground">{t(config.labelKey)}</div>
-        </div>
-      </div>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+            {result.page}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {t(config.labelKey)}
+          </Typography>
+        </Box>
+      </Stack>
 
-      <p className="mb-2 text-xs text-muted-foreground">{result.detail}</p>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+        {result.detail}
+      </Typography>
 
       {result.affectedPages && result.affectedPages.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1">
+        <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.5, mb: 1 }}>
           {result.affectedPages.map((page) => (
-            <button
+            <Button
               key={page}
               type="button"
+              size="small"
               onClick={() => onOpenPage(page)}
-              className="inline-flex items-center gap-0.5 rounded bg-accent/60 px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-accent transition-colors"
+              sx={{
+                minWidth: 0,
+                px: 0.75,
+                py: 0.25,
+                fontSize: "0.75rem",
+                textTransform: "none",
+                fontWeight: 600,
+                color: "primary.main",
+                bgcolor: "action.selected",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
             >
               {page}
-            </button>
+            </Button>
           ))}
-        </div>
+        </Stack>
       )}
 
-      <div className="flex items-center gap-1.5 mt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-6 text-xs gap-1"
-          onClick={() => onOpenPage(result.page)}
-        >
+      <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap", gap: 0.75, mt: 1 }}>
+        <Button variant="outlined" size="small" sx={{ minHeight: 28, fontSize: "0.75rem" }} onClick={() => onOpenPage(result.page)}>
           {t("lint.open")}
         </Button>
         <Button
-          variant="outline"
-          size="sm"
-          className="h-6 text-xs gap-1"
+          variant="outlined"
+          size="small"
+          sx={{ minHeight: 28, fontSize: "0.75rem", gap: 0.5 }}
           disabled={fixing}
           onClick={() => onFix(result, index)}
+          startIcon={<BuildIcon sx={{ fontSize: 14 }} />}
         >
-          <Wrench className="h-3 w-3" />
           {fixing ? t("lint.fixing") : t("lint.fix")}
         </Button>
         {onDelete && (
           <Button
-            variant="outline"
-            size="sm"
-            className="h-6 text-xs gap-1 text-destructive hover:text-destructive"
+            variant="outlined"
+            size="small"
+            color="error"
+            sx={{ minHeight: 28, fontSize: "0.75rem", gap: 0.5 }}
             onClick={() => onDelete(result, index)}
+            startIcon={<DeleteOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
           >
-            <Trash2 className="h-3 w-3" />
             {t("lint.delete")}
           </Button>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Box>
   )
 }

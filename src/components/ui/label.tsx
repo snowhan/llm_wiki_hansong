@@ -1,14 +1,25 @@
-import * as React from "react"
+import FormLabel from "@mui/material/FormLabel"
+import type { FormLabelProps } from "@mui/material/FormLabel"
+import { sxMerge } from "@/lib/mui-sx"
 
-import { cn } from "@/lib/utils"
-
-function Label({ className, ...props }: React.ComponentProps<"label">) {
+function Label({ className, sx, ...props }: FormLabelProps) {
   return (
-    <label
+    <FormLabel
       data-slot="label"
-      className={cn(
-        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
-        className
+      className={className}
+      sx={sxMerge(
+        {
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          fontSize: "0.875rem",
+          lineHeight: 1,
+          fontWeight: 500,
+          mb: 0,
+          color: "text.primary",
+          "&.Mui-disabled": { opacity: 0.5 },
+        },
+        sx,
       )}
       {...props}
     />

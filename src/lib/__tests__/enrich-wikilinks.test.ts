@@ -13,7 +13,14 @@ vi.mock("../ingest", () => ({
 }))
 
 const { streamChat } = await import("../llm-client")
-const config: LlmConfig = { provider: "openai", apiKey: "key", model: "gpt-4", contextSize: 4096 }
+const config: LlmConfig = {
+  provider: "openai",
+  apiKey: "key",
+  model: "gpt-4",
+  ollamaUrl: "http://localhost:11434",
+  customEndpoint: "",
+  maxContextSize: 4096,
+}
 
 describe("enrichWithWikilinks", () => {
   beforeEach(() => {

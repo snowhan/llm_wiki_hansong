@@ -1,8 +1,18 @@
 import { useState, useEffect } from "react"
-import {
-  FileText, FolderOpen, Search, Network, ClipboardCheck, Settings, ArrowLeftRight, ClipboardList, Globe,
-} from "lucide-react"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import Box from "@mui/material/Box"
+import Stack from "@mui/material/Stack"
+import Tooltip from "@mui/material/Tooltip"
+import IconButton from "@mui/material/IconButton"
+import Description from "@mui/icons-material/Description"
+import FolderOpen from "@mui/icons-material/FolderOpen"
+import Search from "@mui/icons-material/Search"
+import AccountTree from "@mui/icons-material/AccountTree"
+import CheckCircleOutlineOutlined from "@mui/icons-material/CheckCircleOutlineOutlined"
+import FormatListBulleted from "@mui/icons-material/FormatListBulleted"
+import Explore from "@mui/icons-material/Explore"
+import Settings from "@mui/icons-material/Settings"
+import SwapHoriz from "@mui/icons-material/SwapHoriz"
+import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useResearchStore } from "@/stores/research-store"
@@ -10,15 +20,17 @@ import { useTranslation } from "react-i18next"
 import logoImg from "@/assets/logo.jpg"
 import type { WikiState } from "@/stores/wiki-store"
 
+type NavIcon = React.ComponentType<SvgIconProps>
+
 type NavView = WikiState["activeView"]
 
-const NAV_ITEMS: { view: NavView; icon: typeof FileText; labelKey: string }[] = [
-  { view: "wiki", icon: FileText, labelKey: "nav.wiki" },
+const NAV_ITEMS: { view: NavView; icon: NavIcon; labelKey: string }[] = [
+  { view: "wiki", icon: Description, labelKey: "nav.wiki" },
   { view: "sources", icon: FolderOpen, labelKey: "nav.sources" },
   { view: "search", icon: Search, labelKey: "nav.search" },
-  { view: "graph", icon: Network, labelKey: "nav.graph" },
-  { view: "lint", icon: ClipboardCheck, labelKey: "nav.lint" },
-  { view: "review", icon: ClipboardList, labelKey: "nav.review" },
+  { view: "graph", icon: AccountTree, labelKey: "nav.graph" },
+  { view: "lint", icon: CheckCircleOutlineOutlined, labelKey: "nav.lint" },
+  { view: "review", icon: FormatListBulleted, labelKey: "nav.review" },
 ]
 
 interface IconSidebarProps {
@@ -34,7 +46,6 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
   const toggleResearchPanel = useResearchStore((s) => s.setPanelOpen)
 
-  // Daemon health check
   const [daemonStatus, setDaemonStatus] = useState<string>("starting")
   useEffect(() => {
     const check = async () => {
@@ -51,107 +62,186 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
     return () => clearInterval(interval)
   }, [])
 
+  const navButtonSx = (active: boolean) => ({
+    position: "relative",
+    width: 40,
+    height: 40,
+    borderRadius: 1,
+    color: active ? "text.primary" : "text.secondary",
+    bgcolor: active ? "action.selected" : "transparent",
+    "&:hover": {
+      bgcolor: active ? "action.selected" : "action.hover",
+      color: "text.primary",
+    },
+  })
+
   return (
-    <TooltipProvider delayDuration={300}>
-      <div className="flex h-full w-12 flex-col items-center border-r bg-muted/50 py-2">
-        {/* Logo */}
-        <div className="mb-2 flex items-center justify-center">
-          <img
-            src={logoImg}
-            alt="LLM Wiki"
-            className="h-8 w-8 rounded-[22%]"
-          />
-        </div>
-        {/* Top: main nav items + Deep Research */}
-        <div className="flex flex-1 flex-col items-center gap-1">
-          {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => (
-            <Tooltip key={view}>
-              <TooltipTrigger
+    <Stack
+      direction="column"
+      sx={{
+        alignItems: "center",
+        height: "100%",
+        width: 48,
+        flexShrink: 0,
+        borderRight: 1,
+        borderColor: "divider",
+        bgcolor: (theme) => theme.palette.action.hover,
+        py: 1,
+      }}
+    >
+      <Box sx={{ mb: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Box
+          component="img"
+          src={logoImg}
+          alt="LLM Wiki"
+          sx={{ height: 32, width: 32, borderRadius: "22%" }}
+        />
+      </Box>
+
+      <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", flex: 1, width: "100%" }}>
+        {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => (
+          <Tooltip key={view} title={<>{t(labelKey)}{view === "review" && pendingCount > 0 ? ` (${pendingCount})` : ""}</>} placement="right" enterDelay={300}>
+            <Box sx={{ position: "relative" }}>
+              <IconButton
+                size="small"
                 onClick={() => setActiveView(view)}
-                className={`relative flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
-                  activeView === view
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                }`}
+                sx={navButtonSx(activeView === view)}
               >
-                <Icon className="h-5 w-5" />
-                {view === "review" && pendingCount > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-                    {pendingCount > 99 ? "99+" : pendingCount}
-                  </span>
-                )}
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                {t(labelKey)}
-                {view === "review" && pendingCount > 0 && ` (${pendingCount})`}
-              </TooltipContent>
-            </Tooltip>
-          ))}
-          {/* Deep Research — same row as other nav items */}
-          <Tooltip>
-            <TooltipTrigger
-              onClick={() => toggleResearchPanel(!researchPanelOpen)}
-              className={`relative flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
-                researchPanelOpen
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-              }`}
-            >
-              <Globe className="h-5 w-5" />
-              {researchActiveCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">
-                  {researchActiveCount}
-                </span>
+                <Icon sx={{ fontSize: 20 }} />
+              </IconButton>
+              {view === "review" && pendingCount > 0 && (
+                <Box
+                  component="span"
+                  sx={{
+                    position: "absolute",
+                    top: 2,
+                    right: 2,
+                    minWidth: 16,
+                    height: 16,
+                    px: 0.25,
+                    borderRadius: "999px",
+                    bgcolor: "primary.main",
+                    color: "primary.contrastText",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {pendingCount > 99 ? "99+" : pendingCount}
+                </Box>
               )}
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("iconSidebar.deepResearch")}</TooltipContent>
+            </Box>
           </Tooltip>
-        </div>
-        {/* Bottom: daemon status + settings + switch project */}
-        <div className="flex flex-col items-center gap-1 pb-1">
-          {/* Daemon status indicator */}
-          <Tooltip>
-            <TooltipTrigger className="flex h-6 w-6 items-center justify-center">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  daemonStatus === "running" ? "bg-emerald-500" :
-                  daemonStatus === "starting" ? "bg-amber-400 animate-pulse" :
-                  daemonStatus === "port_conflict" ? "bg-red-500" :
-                  "bg-red-500 animate-pulse"
-                }`}
-              />
-            </TooltipTrigger>
-            <TooltipContent side="right">
+        ))}
+
+        <Tooltip title={t("iconSidebar.deepResearch")} placement="right" enterDelay={300}>
+          <Box sx={{ position: "relative" }}>
+            <IconButton
+              size="small"
+              onClick={() => toggleResearchPanel(!researchPanelOpen)}
+              sx={navButtonSx(researchPanelOpen)}
+            >
+              <Explore sx={{ fontSize: 20 }} />
+            </IconButton>
+            {researchActiveCount > 0 && (
+              <Box
+                component="span"
+                sx={{
+                  position: "absolute",
+                  top: 2,
+                  right: 2,
+                  minWidth: 16,
+                  height: 16,
+                  px: 0.25,
+                  borderRadius: "999px",
+                  bgcolor: "info.main",
+                  color: "info.contrastText",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  lineHeight: 1,
+                  pointerEvents: "none",
+                }}
+              >
+                {researchActiveCount}
+              </Box>
+            )}
+          </Box>
+        </Tooltip>
+      </Stack>
+
+      <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", pb: 0.5, width: "100%" }}>
+        <Tooltip
+          title={
+            <>
               {daemonStatus === "running" && t("iconSidebar.clipRunning")}
               {daemonStatus === "starting" && t("iconSidebar.clipStarting")}
               {daemonStatus === "port_conflict" && t("iconSidebar.clipPortConflict")}
               {daemonStatus === "error" && t("iconSidebar.clipError")}
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              onClick={() => setActiveView("settings")}
-              className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors ${
-                activeView === "settings"
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-              }`}
-            >
-              <Settings className="h-5 w-5" />
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("nav.settings")}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              onClick={onSwitchProject}
-              className="flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/50 hover:text-accent-foreground"
-            >
-              <ArrowLeftRight className="h-5 w-5" />
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("nav.switchProject")}</TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-    </TooltipProvider>
+            </>
+          }
+          placement="right"
+          enterDelay={300}
+        >
+          <IconButton size="small" sx={{ width: 24, height: 24, p: 0 }}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: "50%",
+                bgcolor:
+                  daemonStatus === "running"
+                    ? "success.dark"
+                    : daemonStatus === "starting"
+                      ? "warning.main"
+                      : daemonStatus === "port_conflict"
+                        ? "error.main"
+                        : "error.main",
+                animation:
+                  daemonStatus === "starting" || (daemonStatus !== "running" && daemonStatus !== "port_conflict")
+                    ? "pulse 1.5s ease-in-out infinite"
+                    : "none",
+                "@keyframes pulse": {
+                  "0%, 100%": { opacity: 1 },
+                  "50%": { opacity: 0.45 },
+                },
+              }}
+            />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t("nav.settings")} placement="right" enterDelay={300}>
+          <IconButton
+            size="small"
+            onClick={() => setActiveView("settings")}
+            sx={navButtonSx(activeView === "settings")}
+          >
+            <Settings sx={{ fontSize: 20 }} />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t("nav.switchProject")} placement="right" enterDelay={300}>
+          <IconButton
+            size="small"
+            onClick={onSwitchProject}
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: 1,
+              color: "text.secondary",
+              "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+            }}
+          >
+            <SwapHoriz sx={{ fontSize: 20 }} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+    </Stack>
   )
 }

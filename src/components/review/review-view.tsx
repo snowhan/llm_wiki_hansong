@@ -1,29 +1,39 @@
 import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
+import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined"
+import CheckIcon from "@mui/icons-material/Check"
+import CloseIcon from "@mui/icons-material/Close"
+import ContentCopyIcon from "@mui/icons-material/ContentCopy"
+import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined"
+import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import CheckCircleIcon from "@mui/icons-material/CheckCircle"
+import Box from "@mui/material/Box"
+import Chip from "@mui/material/Chip"
+import IconButton from "@mui/material/IconButton"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import type { SvgIconProps } from "@mui/material/SvgIcon"
+import Button from "@mui/material/Button"
+import i18n from "@/i18n"
 import { queueResearch } from "@/lib/deep-research"
-import {
-  AlertTriangle,
-  Copy,
-  FileQuestion,
-  CheckCircle2,
-  Lightbulb,
-  MessageSquare,
-  X,
-  Check,
-  Trash2,
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { writeFile, readFile, listDirectory, deleteFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
 
-const typeConfig: Record<ReviewItem["type"], { icon: typeof AlertTriangle; labelKey: string; color: string }> = {
-  contradiction: { icon: AlertTriangle, labelKey: "review.contradiction", color: "text-amber-500" },
-  duplicate: { icon: Copy, labelKey: "review.possibleDuplicate", color: "text-blue-500" },
-  "missing-page": { icon: FileQuestion, labelKey: "review.missingPage", color: "text-purple-500" },
-  confirm: { icon: MessageSquare, labelKey: "review.needsConfirmation", color: "text-foreground" },
-  suggestion: { icon: Lightbulb, labelKey: "review.suggestion", color: "text-emerald-500" },
+type MuiIcon = React.ComponentType<SvgIconProps>
+
+const typeConfig: Record<
+  ReviewItem["type"],
+  { icon: MuiIcon; labelKey: string; color: string }
+> = {
+  contradiction: { icon: WarningAmberIcon, labelKey: "review.contradiction", color: "warning.main" },
+  duplicate: { icon: ContentCopyIcon, labelKey: "review.possibleDuplicate", color: "info.main" },
+  "missing-page": { icon: HelpOutlineOutlinedIcon, labelKey: "review.missingPage", color: "secondary.main" },
+  confirm: { icon: ChatBubbleOutlineOutlinedIcon, labelKey: "review.needsConfirmation", color: "text.primary" },
+  suggestion: { icon: LightbulbOutlinedIcon, labelKey: "review.suggestion", color: "success.main" },
 }
 
 export function ReviewView() {
@@ -37,7 +47,6 @@ export function ReviewView() {
 
   const handleResolve = useCallback(async (id: string, action: string) => {
     const pp = project ? normalizePath(project.path) : ""
-    // Deep Research — must be checked FIRST before any fuzzy matching
     if (action === "__deep_research__" && project) {
       const searchConfig = useWikiStore.getState().searchApiConfig
       if (searchConfig.provider === "none" || !searchConfig.apiKey) {
@@ -47,7 +56,6 @@ export function ReviewView() {
       const item = items.find((i) => i.id === id)
       if (item) {
         const llmConfig = useWikiStore.getState().llmConfig
-        // Use pre-generated search queries if available, otherwise fall back to title
         const topic = item.title.replace(/^(Save to Wiki|Create|Research)[:\s]*/i, "").trim() || item.description.split("\n")[0]
         queueResearch(pp, topic, llmConfig, searchConfig, item.searchQueries)
         resolveItem(id, t("review.queuedForResearch"))
@@ -58,18 +66,15 @@ export function ReviewView() {
     }
 
     if (action.startsWith("save:") && project) {
-      // Decode and save the content to wiki
       try {
         const encoded = action.slice(5)
         const content = decodeURIComponent(atob(encoded))
 
-        // Strip hidden comments
         const cleanContent = content
           .replace(/<!--\s*save-worthy:.*?-->/g, "")
           .replace(/<!--\s*sources:.*?-->/g, "")
           .trimEnd()
 
-        // Generate filename
         const firstLine = cleanContent.split("\n").find((l) => l.trim() && !l.startsWith("<!--"))?.replace(/^#+\s*/, "").trim() ?? t("chat.savedQuery")
         const title = firstLine.slice(0, 60)
         const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 50)
@@ -80,7 +85,6 @@ export function ReviewView() {
         const frontmatter = `---\ntype: query\ntitle: "${title.replace(/"/g, '\\"')}"\ncreated: ${date}\ntags: []\n---\n\n`
         await writeFile(filePath, frontmatter + cleanContent)
 
-        // Update index
         const indexPath = `${pp}/wiki/index.md`
         let indexContent = ""
         try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
@@ -92,13 +96,11 @@ export function ReviewView() {
         }
         await writeFile(indexPath, indexContent)
 
-        // Append log
         const logPath = `${pp}/wiki/log.md`
         let logContent = ""
         try { logContent = await readFile(logPath) } catch { logContent = "# Wiki Log\n" }
         await writeFile(logPath, logContent.trimEnd() + `\n- ${date}: Saved query page \`${fileName}\`\n`)
 
-        // Refresh tree
         const tree = await listDirectory(pp)
         setFileTree(tree)
 
@@ -108,7 +110,6 @@ export function ReviewView() {
         resolveItem(id, t("review.saveFailed"))
       }
     } else if (action.startsWith("open:") && project) {
-      // Open a page for editing
       const page = action.slice(5)
       const candidates = [
         `${pp}/wiki/${page}`,
@@ -127,7 +128,6 @@ export function ReviewView() {
       }
       resolveItem(id, action)
     } else if (action.startsWith("delete:") && project) {
-      // Delete a file
       const filePath = action.slice(7)
       try {
         await deleteFile(filePath)
@@ -139,10 +139,8 @@ export function ReviewView() {
         resolveItem(id, t("review.deleteFailed"))
       }
     } else if (actionLooksLikeResearch(action) && project) {
-      // Actions with "research" trigger deep research, not just page creation
       const searchConfig = useWikiStore.getState().searchApiConfig
       if (searchConfig.provider === "none" || !searchConfig.apiKey) {
-        // No search API — fall through to create a page instead
         const item = items.find((i) => i.id === id)
         if (item) {
           handleResolve(id, "__create_page__:" + action)
@@ -159,60 +157,10 @@ export function ReviewView() {
         resolveItem(id, action)
       }
     } else if (action.startsWith("__create_page__:") && project) {
-      // Explicit create page fallback
       const realAction = action.slice("__create_page__:".length)
       await createPageFromReview(id, realAction, items, pp)
     } else if (actionLooksLikeCreate(action) && project) {
-      // Create a wiki page from the review item's content
-      const item = items.find((i) => i.id === id)
-      if (item) {
-        try {
-          const title = item.title.replace(/^(Create|Save|Add)[:\s]*/i, "").trim() || t("review.untitled")
-          const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 50)
-          const date = new Date().toISOString().slice(0, 10)
-
-          // Determine page type from review type or action text
-          const pageType = detectPageType(action, item.type)
-          const dir = pageType === "query" ? "queries" : pageType === "entity" ? "entities" : pageType === "concept" ? "concepts" : "queries"
-          const fileName = `${slug}-${date}.md`
-          const filePath = `${pp}/wiki/${dir}/${fileName}`
-
-          const frontmatter = `---\ntype: ${pageType}\ntitle: "${title.replace(/"/g, '\\"')}"\ncreated: ${date}\ntags: []\nrelated: []\n---\n\n`
-          const body = `# ${title}\n\n${item.description}\n`
-          await writeFile(filePath, frontmatter + body)
-
-          // Update index
-          const indexPath = `${pp}/wiki/index.md`
-          let indexContent = ""
-          try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
-          const sectionHeader = `## ${dir.charAt(0).toUpperCase() + dir.slice(1)}`
-          const entry = `- [[${dir}/${slug}-${date}|${title}]]`
-          if (indexContent.includes(sectionHeader)) {
-            indexContent = indexContent.replace(new RegExp(`(${sectionHeader}\n)`), `$1${entry}\n`)
-          } else {
-            indexContent = indexContent.trimEnd() + `\n\n${sectionHeader}\n${entry}\n`
-          }
-          await writeFile(indexPath, indexContent)
-
-          // Log
-          const logPath = `${pp}/wiki/log.md`
-          let logContent = ""
-          try { logContent = await readFile(logPath) } catch { logContent = "# Wiki Log\n" }
-          await writeFile(logPath, logContent.trimEnd() + `\n- ${date}: Created ${pageType} page \`${fileName}\` from review\n`)
-
-          // Refresh
-          const tree = await listDirectory(pp)
-          setFileTree(tree)
-          useWikiStore.getState().bumpDataVersion()
-
-          resolveItem(id, `Created: wiki/${dir}/${fileName}`)
-        } catch (err) {
-          console.error("Failed to create page from review:", err)
-          resolveItem(id, t("review.createFailed"))
-        }
-      } else {
-        resolveItem(id, action)
-      }
+      await createPageFromReview(id, action, items, pp)
     } else {
       resolveItem(id, action)
     }
@@ -222,57 +170,61 @@ export function ReviewView() {
   const resolved = items.filter((i) => i.resolved)
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-sm font-semibold">
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: 1, borderColor: "divider", px: 2, py: 1.5 }}>
+        <Typography variant="body2" component="h2" sx={{ fontWeight: 600 }}>
           {t("review.title")}
           {pending.length > 0 && (
-            <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
-              {pending.length}
-            </span>
+            <Chip
+              component="span"
+              size="small"
+              label={pending.length}
+              sx={{
+                ml: 1,
+                height: 22,
+                fontSize: "0.75rem",
+                bgcolor: "primary.main",
+                color: "primary.contrastText",
+              }}
+            />
           )}
-        </h2>
+        </Typography>
         {resolved.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearResolved} className="text-xs">
-            <Trash2 className="mr-1 h-3 w-3" />
+          <Button
+            color="inherit"
+            size="small"
+            onClick={clearResolved}
+            startIcon={<DeleteOutlineOutlinedIcon sx={{ fontSize: 14 }} />}
+            sx={{ fontSize: "0.75rem", textTransform: "none" }}
+          >
             {t("review.clearResolved")}
           </Button>
         )}
-      </div>
+      </Box>
 
-      <div className="flex-1 overflow-y-auto">
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
-            <CheckCircle2 className="h-8 w-8 text-muted-foreground/30" />
-            <p>{t("review.allClear")}</p>
-          </div>
+          <Stack spacing={1} sx={{ p: 4, textAlign: "center", color: "text.secondary", alignItems: "center", justifyContent: "center" }}>
+            <CheckCircleIcon sx={{ fontSize: 32, color: "action.disabled" }} />
+            <Typography variant="body2">{t("review.allClear")}</Typography>
+          </Stack>
         ) : (
-          <div className="flex flex-col gap-2 p-3">
+          <Stack spacing={1} sx={{ p: 1.5 }}>
             {pending.map((item) => (
-              <ReviewCard
-                key={item.id}
-                item={item}
-                onResolve={handleResolve}
-                onDismiss={dismissItem}
-              />
+              <ReviewCard key={item.id} item={item} onResolve={handleResolve} onDismiss={dismissItem} />
             ))}
             {resolved.length > 0 && pending.length > 0 && (
-              <div className="my-2 text-center text-xs text-muted-foreground">
+              <Typography variant="caption" sx={{ my: 1, textAlign: "center", color: "text.secondary" }}>
                 {t("review.resolved")}
-              </div>
+              </Typography>
             )}
             {resolved.map((item) => (
-              <ReviewCard
-                key={item.id}
-                item={item}
-                onResolve={handleResolve}
-                onDismiss={dismissItem}
-              />
+              <ReviewCard key={item.id} item={item} onResolve={handleResolve} onDismiss={dismissItem} />
             ))}
-          </div>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
@@ -290,40 +242,47 @@ function ReviewCard({
   const Icon = config.icon
 
   return (
-    <div
-      className={`rounded-lg border p-3 text-sm transition-opacity ${
-        item.resolved ? "opacity-50" : ""
-      }`}
+    <Box
+      sx={{
+        borderRadius: 2,
+        border: 1,
+        borderColor: "divider",
+        p: 1.5,
+        fontSize: "0.875rem",
+        opacity: item.resolved ? 0.5 : 1,
+        transition: (theme) => theme.transitions.create("opacity"),
+      }}
     >
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Icon className={`h-4 w-4 shrink-0 ${config.color}`} aria-label={t(config.labelKey)} />
-          <span className="font-medium">{item.title}</span>
-        </div>
-        <button
-          onClick={() => onDismiss(item.id)}
-          className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: "flex-start", justifyContent: "space-between" }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Icon sx={{ fontSize: 18, flexShrink: 0, color: config.color }} aria-label={t(config.labelKey)} />
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            {item.title}
+          </Typography>
+        </Stack>
+        <IconButton size="small" onClick={() => onDismiss(item.id)} sx={{ color: "text.secondary" }}>
+          <CloseIcon sx={{ fontSize: 16 }} />
+        </IconButton>
+      </Stack>
 
-      <p className="mb-3 text-xs text-muted-foreground">{item.description}</p>
+      <Typography variant="caption" sx={{ display: "block", mb: 1.5, color: "text.secondary" }}>
+        {item.description}
+      </Typography>
 
       {item.affectedPages && item.affectedPages.length > 0 && (
-        <div className="mb-3 text-xs text-muted-foreground">
+        <Typography variant="caption" sx={{ display: "block", mb: 1.5, color: "text.secondary" }}>
           {t("review.pages")}
           {item.affectedPages.join(", ")}
-        </div>
+        </Typography>
       )}
 
       {!item.resolved ? (
-        <div className="flex flex-wrap gap-1.5">
+        <Stack direction="row" useFlexGap sx={{ flexWrap: "wrap", gap: 0.75 }}>
           {(item.type === "suggestion" || item.type === "missing-page") && (
             <Button
-              variant="default"
-              size="sm"
-              className="h-7 text-xs gap-1"
+              variant="contained"
+              size="small"
+              sx={{ minHeight: 28, fontSize: "0.75rem", textTransform: "none" }}
               onClick={() => onResolve(item.id, "__deep_research__")}
             >
               {t("review.deepResearch")}
@@ -332,28 +291,28 @@ function ReviewCard({
           {item.options.map((opt) => (
             <Button
               key={opt.action}
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
+              variant="outlined"
+              size="small"
+              sx={{ minHeight: 28, fontSize: "0.75rem", textTransform: "none" }}
               onClick={() => onResolve(item.id, opt.action)}
             >
               {opt.label}
             </Button>
           ))}
-        </div>
+        </Stack>
       ) : (
-        <div className="flex items-center gap-1 text-xs text-emerald-600">
-          <Check className="h-3 w-3" />
-          {item.resolvedAction}
-        </div>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+          <CheckIcon sx={{ fontSize: 14, color: "success.main" }} />
+          <Typography variant="caption" color="success.main">
+            {item.resolvedAction}
+          </Typography>
+        </Stack>
       )}
-    </div>
+    </Box>
   )
 }
 
-/** Detect if an action implies deep research (web search + LLM synthesis) */
 function actionLooksLikeResearch(action: string): boolean {
-  // Skip internal action identifiers
   if (action.startsWith("__")) return false
   const lower = action.toLowerCase()
   return (
@@ -367,7 +326,6 @@ function actionLooksLikeResearch(action: string): boolean {
   )
 }
 
-/** Detect if an action is a dismissal (no-op) or should create a page */
 function actionIsDismissal(action: string): boolean {
   const lower = action.toLowerCase()
   return (
@@ -383,11 +341,9 @@ function actionIsDismissal(action: string): boolean {
 }
 
 function actionLooksLikeCreate(action: string): boolean {
-  // Anything that isn't a dismissal should create a page
   return !actionIsDismissal(action)
 }
 
-/** Infer wiki page type from action text and review item type */
 function detectPageType(action: string, reviewType: string): string {
   const lower = action.toLowerCase()
   if (lower.includes("entity") || lower.includes("实体")) return "entity"
@@ -397,6 +353,60 @@ function detectPageType(action: string, reviewType: string): string {
   if (reviewType === "missing-page") return "concept"
   if (reviewType === "contradiction") return "query"
   if (reviewType === "suggestion") return "query"
-  // Default: research/investigate/create → query
   return "query"
+}
+
+async function createPageFromReview(
+  id: string,
+  realAction: string,
+  items: ReviewItem[],
+  pp: string,
+) {
+  const resolveItem = useReviewStore.getState().resolveItem
+  const setFileTree = useWikiStore.getState().setFileTree
+  const item = items.find((i) => i.id === id)
+  if (!item) {
+    resolveItem(id, realAction)
+    return
+  }
+  try {
+    const title = item.title.replace(/^(Create|Save|Add)[:\s]*/i, "").trim() || i18n.t("review.untitled")
+    const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 50)
+    const date = new Date().toISOString().slice(0, 10)
+
+    const pageType = detectPageType(realAction, item.type)
+    const dir = pageType === "query" ? "queries" : pageType === "entity" ? "entities" : pageType === "concept" ? "concepts" : "queries"
+    const fileName = `${slug}-${date}.md`
+    const filePath = `${pp}/wiki/${dir}/${fileName}`
+
+    const frontmatter = `---\ntype: ${pageType}\ntitle: "${title.replace(/"/g, '\\"')}"\ncreated: ${date}\ntags: []\nrelated: []\n---\n\n`
+    const body = `# ${title}\n\n${item.description}\n`
+    await writeFile(filePath, frontmatter + body)
+
+    const indexPath = `${pp}/wiki/index.md`
+    let indexContent = ""
+    try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
+    const sectionHeader = `## ${dir.charAt(0).toUpperCase() + dir.slice(1)}`
+    const entry = `- [[${dir}/${slug}-${date}|${title}]]`
+    if (indexContent.includes(sectionHeader)) {
+      indexContent = indexContent.replace(new RegExp(`(${sectionHeader}\n)`), `$1${entry}\n`)
+    } else {
+      indexContent = indexContent.trimEnd() + `\n\n${sectionHeader}\n${entry}\n`
+    }
+    await writeFile(indexPath, indexContent)
+
+    const logPath = `${pp}/wiki/log.md`
+    let logContent = ""
+    try { logContent = await readFile(logPath) } catch { logContent = "# Wiki Log\n" }
+    await writeFile(logPath, logContent.trimEnd() + `\n- ${date}: Created ${pageType} page \`${fileName}\` from review\n`)
+
+    const tree = await listDirectory(pp)
+    setFileTree(tree)
+    useWikiStore.getState().bumpDataVersion()
+
+    resolveItem(id, `Created: wiki/${dir}/${fileName}`)
+  } catch (err) {
+    console.error("Failed to create page from review:", err)
+    resolveItem(id, i18n.t("review.createFailed"))
+  }
 }

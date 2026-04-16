@@ -17,7 +17,7 @@ describe("setupAutoSave", () => {
     vi.clearAllMocks()
     useWikiStore.setState({ project: { name: "test", path: "/test" } } as any)
     useReviewStore.setState({ items: [] })
-    useChatStore.setState({ conversations: [], messages: {}, isStreaming: false })
+    useChatStore.setState({ conversations: [], messages: [], isStreaming: false })
   })
 
   afterEach(() => { vi.useRealTimers() })
@@ -32,7 +32,7 @@ describe("setupAutoSave", () => {
 
   it("saves chat history after 2s debounce", () => {
     setupAutoSave()
-    useChatStore.setState({ conversations: [{ id: "c1", title: "t", createdAt: 0, updatedAt: 0 }], messages: {}, isStreaming: false })
+    useChatStore.setState({ conversations: [{ id: "c1", title: "t", createdAt: 0, updatedAt: 0 }], messages: [], isStreaming: false })
     expect(saveChatHistory).not.toHaveBeenCalled()
     vi.advanceTimersByTime(2000)
     expect(saveChatHistory).toHaveBeenCalled()

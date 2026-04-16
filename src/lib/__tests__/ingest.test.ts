@@ -32,7 +32,14 @@ describe("ingest", () => {
 
     useWikiStore.setState({
       project: { name: "test", path: "/test" },
-      llmConfig: { provider: "openai", apiKey: "key", model: "m", contextSize: 4096 },
+      llmConfig: {
+        provider: "openai",
+        apiKey: "key",
+        model: "m",
+        ollamaUrl: "http://localhost:11434",
+        customEndpoint: "",
+        maxContextSize: 4096,
+      },
       embeddingConfig: { enabled: false, endpoint: "", apiKey: "", model: "" },
       bumpDataVersion: vi.fn(),
       setFileTree: vi.fn(),
@@ -65,7 +72,9 @@ describe("ingest", () => {
       provider: "openai",
       apiKey: "key",
       model: "m",
-      contextSize: 4096,
+      ollamaUrl: "http://localhost:11434",
+      customEndpoint: "",
+      maxContextSize: 4096,
     })
     expect(result).toEqual(["wiki/entities/foo.md"])
     expect(streamChat).not.toHaveBeenCalled()
@@ -106,7 +115,9 @@ describe("ingest", () => {
       provider: "openai",
       apiKey: "key",
       model: "m",
-      contextSize: 4096,
+      ollamaUrl: "http://localhost:11434",
+      customEndpoint: "",
+      maxContextSize: 4096,
     })
 
     expect(result.length).toBeGreaterThanOrEqual(0)

@@ -15,10 +15,12 @@ describe("TemplatePicker", () => {
 
   it("highlights the selected template", () => {
     const onSelect = vi.fn()
-    const { container } = render(<TemplatePicker selected="reading" onSelect={onSelect} />)
-    const buttons = container.querySelectorAll("button")
-    const readingBtn = [...buttons].find((b) => b.textContent?.includes("Reading"))
-    expect(readingBtn?.className).toMatch(/ring-primary/)
+    render(<TemplatePicker selected="reading" onSelect={onSelect} />)
+    const readingBtn = screen.getByRole("button", { name: /Reading/i })
+    expect(readingBtn.className).toMatch(/MuiButtonBase/)
+    const card = readingBtn.closest(".MuiCard-root")
+    expect(card).toBeTruthy()
+    expect(card?.className).toMatch(/MuiCard/)
   })
 
   it("calls onSelect with template id on click", () => {

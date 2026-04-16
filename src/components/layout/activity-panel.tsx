@@ -1,22 +1,40 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  ChevronUp, ChevronDown, Loader2, CheckCircle2, AlertCircle,
-  FileText, Users, Lightbulb, BookOpen, GitMerge, BarChart3, HelpCircle, Layout,
-  RotateCcw, X, Clock,
-} from "lucide-react"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import IconButton from "@mui/material/IconButton"
+import CircularProgress from "@mui/material/CircularProgress"
+import LinearProgress from "@mui/material/LinearProgress"
+import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp"
+import KeyboardArrowDown from "@mui/icons-material/KeyboardArrowDown"
+import CheckCircle from "@mui/icons-material/CheckCircle"
+import ErrorOutlineOutlined from "@mui/icons-material/ErrorOutlineOutlined"
+import Description from "@mui/icons-material/Description"
+import PeopleOutlineOutlined from "@mui/icons-material/PeopleOutlineOutlined"
+import LightbulbOutlined from "@mui/icons-material/LightbulbOutlined"
+import MenuBook from "@mui/icons-material/MenuBook"
+import MergeType from "@mui/icons-material/MergeType"
+import BarChart from "@mui/icons-material/BarChart"
+import HelpOutlineOutlined from "@mui/icons-material/HelpOutlineOutlined"
+import ViewModule from "@mui/icons-material/ViewModule"
+import RotateLeft from "@mui/icons-material/RotateLeft"
+import Close from "@mui/icons-material/Close"
+import AccessTime from "@mui/icons-material/AccessTime"
+import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useActivityStore, type ActivityItem } from "@/stores/activity-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { normalizePath, getFileName } from "@/lib/path-utils"
 import { getQueue, getQueueSummary, retryTask, cancelTask, type IngestTask } from "@/lib/ingest-queue"
 
-const FILE_TYPE_ICONS: Record<string, typeof FileText> = {
-  sources: BookOpen,
-  entities: Users,
-  concepts: Lightbulb,
-  queries: HelpCircle,
-  synthesis: GitMerge,
-  comparisons: BarChart3,
+type IconComp = React.ComponentType<SvgIconProps>
+
+const FILE_TYPE_ICONS: Record<string, IconComp> = {
+  sources: MenuBook,
+  entities: PeopleOutlineOutlined,
+  concepts: LightbulbOutlined,
+  queries: HelpOutlineOutlined,
+  synthesis: MergeType,
+  comparisons: BarChart,
 }
 
 const DIR_TYPE_KEYS: Record<string, string> = {
@@ -28,15 +46,15 @@ const DIR_TYPE_KEYS: Record<string, string> = {
   comparisons: "knowledgeTree.comparisons",
 }
 
-function getFileTypeInfo(path: string): { icon: typeof FileText; typeKey: string } {
-  for (const [dir, icon] of Object.entries(FILE_TYPE_ICONS)) {
+function getFileTypeInfo(path: string): { icon: IconComp; typeKey: string } {
+  for (const [dir, Icon] of Object.entries(FILE_TYPE_ICONS)) {
     if (path.includes(`/${dir}/`) || path.startsWith(`wiki/${dir}/`)) {
-      return { icon, typeKey: DIR_TYPE_KEYS[dir] ?? "activity.file" }
+      return { icon: Icon, typeKey: DIR_TYPE_KEYS[dir] ?? "activity.file" }
     }
   }
-  if (path.includes("index.md")) return { icon: Layout, typeKey: "activity.index" }
-  if (path.includes("log.md")) return { icon: FileText, typeKey: "activity.log" }
-  return { icon: FileText, typeKey: "activity.file" }
+  if (path.includes("index.md")) return { icon: ViewModule, typeKey: "activity.index" }
+  if (path.includes("log.md")) return { icon: Description, typeKey: "activity.log" }
+  return { icon: Description, typeKey: "activity.file" }
 }
 
 export function ActivityPanel() {
@@ -51,7 +69,6 @@ export function ActivityPanel() {
   const runningCount = items.filter((i) => i.status === "running").length
   const hasItems = items.length > 0
 
-  // Poll queue state
   useEffect(() => {
     const interval = setInterval(() => {
       setQueueTasks([...getQueue()])
@@ -62,7 +79,6 @@ export function ActivityPanel() {
   const queueSummary = getQueueSummary()
   const hasQueue = queueSummary.total > 0
 
-  // All hooks must be before any conditional return
   const handleRetry = useCallback((taskId: string) => {
     if (!project) return
     retryTask(normalizePath(project.path), taskId)
@@ -73,7 +89,6 @@ export function ActivityPanel() {
     cancelTask(normalizePath(project.path), taskId)
   }, [project])
 
-  // Auto-expand when a new task starts running
   useEffect(() => {
     if (runningCount > 0 && prevRunningRef.current === 0) {
       setExpanded(true)
@@ -88,7 +103,6 @@ export function ActivityPanel() {
 
   const latestItem = items[0]
 
-  // Build status text
   let statusText = ""
   if (queueSummary.processing > 0 || queueSummary.pending > 0) {
     const done = queueSummary.total - queueSummary.pending - queueSummary.processing
@@ -104,51 +118,78 @@ export function ActivityPanel() {
 
   const isActive = runningCount > 0 || queueSummary.processing > 0 || queueSummary.pending > 0
 
+  const progressPct =
+    queueSummary.total > 0
+      ? ((queueSummary.total - queueSummary.pending - queueSummary.processing) / queueSummary.total) * 100
+      : 0
+
   return (
-    <div className="border-t bg-muted/30">
-      <button
+    <Box sx={{ borderTop: 1, borderColor: "divider", bgcolor: (theme) => theme.palette.action.hover }}>
+      <Box
+        component="button"
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent/50"
+        sx={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          gap: 1,
+          px: 1.5,
+          py: 0.75,
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          font: "inherit",
+          fontSize: 12,
+          color: "text.secondary",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
       >
         {isActive ? (
-          <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+          <CircularProgress size={12} sx={{ flexShrink: 0 }} />
         ) : queueSummary.failed > 0 ? (
-          <AlertCircle className="h-3 w-3 shrink-0 text-destructive" />
+          <ErrorOutlineOutlined sx={{ fontSize: 12, flexShrink: 0, color: "error.main" }} />
         ) : (
-          <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+          <CheckCircle sx={{ fontSize: 12, flexShrink: 0, color: "success.dark" }} />
         )}
-        <span className="flex-1 truncate text-left">{statusText}</span>
+        <Typography variant="caption" noWrap sx={{ flex: 1, textAlign: "left" }}>
+          {statusText}
+        </Typography>
         {expanded ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
+          <KeyboardArrowDown sx={{ fontSize: 12, flexShrink: 0 }} />
         ) : (
-          <ChevronUp className="h-3 w-3 shrink-0" />
+          <KeyboardArrowUp sx={{ fontSize: 12, flexShrink: 0 }} />
         )}
-      </button>
+      </Box>
 
       {expanded && (
-        <div className="max-h-64 overflow-y-auto border-t">
-          {/* Queue progress bar */}
+        <Box sx={{ maxHeight: 256, overflowY: "auto", borderTop: 1, borderColor: "divider" }}>
           {hasQueue && (queueSummary.processing > 0 || queueSummary.pending > 0) && (
-            <div className="px-3 py-1.5 border-b border-border/50">
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                <span>{t("activity.ingestQueue")}</span>
-                <span>
+            <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: (theme) => theme.palette.divider }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary">
+                  {t("activity.ingestQueue")}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
                   {t("activity.complete", {
                     done: queueSummary.total - queueSummary.pending - queueSummary.processing,
                     total: queueSummary.total,
                   })}
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${((queueSummary.total - queueSummary.pending - queueSummary.processing) / Math.max(queueSummary.total, 1)) * 100}%` }}
-                />
-              </div>
-            </div>
+                </Typography>
+              </Box>
+              <LinearProgress
+                variant="determinate"
+                value={progressPct}
+                sx={{
+                  height: 6,
+                  borderRadius: 999,
+                  bgcolor: "action.selected",
+                  "& .MuiLinearProgress-bar": { borderRadius: 999, bgcolor: "primary.main" },
+                }}
+              />
+            </Box>
           )}
 
-          {/* Queue tasks */}
           {queueTasks.filter((task) => task.status === "processing").map((task) => (
             <QueueRow key={task.id} task={task} onRetry={handleRetry} onCancel={handleCancel} />
           ))}
@@ -159,9 +200,7 @@ export function ActivityPanel() {
             <QueueRow key={task.id} task={task} onRetry={handleRetry} onCancel={handleCancel} />
           ))}
 
-          {/* Activity items */}
           {items.map((item) => {
-            // Find matching queue task for cancel button
             const matchingTask = item.status === "running"
               ? queueTasks.find((task) => task.status === "processing" && getFileName(task.sourcePath) === item.title)
               : undefined
@@ -174,16 +213,29 @@ export function ActivityPanel() {
             )
           })}
           {items.some((i) => i.status !== "running") && (
-            <button
+            <Box
+              component="button"
+              type="button"
               onClick={clearDone}
-              className="w-full px-3 py-1 text-center text-[10px] text-muted-foreground hover:underline"
+              sx={{
+                width: "100%",
+                px: 1.5,
+                py: 0.5,
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                font: "inherit",
+                fontSize: 10,
+                color: "text.secondary",
+                textDecoration: "underline",
+              }}
             >
               {t("activity.clearCompleted")}
-            </button>
+            </Box>
           )}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -192,44 +244,56 @@ function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id:
   const fileName = getFileName(task.sourcePath)
 
   return (
-    <div className="px-3 py-2 text-xs border-b border-border/50">
-      <div className="flex items-center gap-2">
-        <div className="shrink-0">
-          {task.status === "processing" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-          {task.status === "pending" && <Clock className="h-3 w-3 text-muted-foreground" />}
-          {task.status === "failed" && <AlertCircle className="h-3 w-3 text-destructive" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{fileName}</div>
+    <Box sx={{ px: 1.5, py: 1, typography: "caption", borderBottom: 1, borderColor: (theme) => theme.palette.divider }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ flexShrink: 0 }}>
+          {task.status === "processing" && <CircularProgress size={12} sx={{ color: "primary.main" }} />}
+          {task.status === "pending" && <AccessTime sx={{ fontSize: 12, color: "text.secondary" }} />}
+          {task.status === "failed" && <ErrorOutlineOutlined sx={{ fontSize: 12, color: "error.main" }} />}
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="caption" noWrap sx={{ fontWeight: 600, display: "block" }}>
+            {fileName}
+          </Typography>
           {task.folderContext && (
-            <div className="text-[10px] text-muted-foreground/70 truncate">{task.folderContext}</div>
+            <Typography variant="caption" color="text.secondary" sx={{ opacity: 0.85, display: "block" }} noWrap>
+              {task.folderContext}
+            </Typography>
           )}
           {task.status === "failed" && task.error && (
-            <div className="text-[10px] text-destructive mt-0.5 truncate">{task.error}</div>
+            <Typography variant="caption" color="error" sx={{ mt: 0.25, display: "block" }} noWrap>
+              {task.error}
+            </Typography>
           )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
+        </Box>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
           {task.status === "failed" && (
-            <button
+            <IconButton
+              size="small"
               onClick={() => onRetry(task.id)}
-              className="p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
               title={t("activity.retry")}
+              sx={{ p: 0.25, color: "text.secondary", "&:hover": { color: "text.primary", bgcolor: "action.hover" } }}
             >
-              <RotateCcw className="h-3 w-3" />
-            </button>
+              <RotateLeft sx={{ fontSize: 12 }} />
+            </IconButton>
           )}
           {(task.status === "pending" || task.status === "processing") && (
-            <button
+            <IconButton
+              size="small"
               onClick={() => onCancel(task.id)}
-              className="p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
               title={t("activity.cancel")}
+              sx={{
+                p: 0.25,
+                color: "text.secondary",
+                "&:hover": { color: "error.main", bgcolor: (theme) => theme.palette.error.main + "33" },
+              }}
             >
-              <X className="h-3 w-3" />
-            </button>
+              <Close sx={{ fontSize: 12 }} />
+            </IconButton>
           )}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   )
 }
 
@@ -246,49 +310,78 @@ function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => 
   }
 
   return (
-    <div className="px-3 py-2 text-xs border-b border-border/50 last:border-b-0">
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5 shrink-0">
-          {item.status === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-          {item.status === "done" && <CheckCircle2 className="h-3 w-3 text-emerald-500" />}
-          {item.status === "error" && <AlertCircle className="h-3 w-3 text-destructive" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-medium">{item.title}</div>
-          <div className="text-muted-foreground mt-0.5">{item.detail}</div>
-        </div>
+    <Box sx={{ px: 1.5, py: 1, typography: "caption", borderBottom: 1, borderColor: (theme) => theme.palette.divider }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+        <Box sx={{ mt: 0.25, flexShrink: 0 }}>
+          {item.status === "running" && <CircularProgress size={12} sx={{ color: "primary.main" }} />}
+          {item.status === "done" && <CheckCircle sx={{ fontSize: 12, color: "success.dark" }} />}
+          {item.status === "error" && <ErrorOutlineOutlined sx={{ fontSize: 12, color: "error.main" }} />}
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, display: "block" }}>
+            {item.title}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, display: "block" }}>
+            {item.detail}
+          </Typography>
+        </Box>
         {item.status === "running" && onCancel && (
-          <button
+          <IconButton
+            size="small"
             onClick={onCancel}
-            className="shrink-0 p-0.5 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
             title={t("activity.cancel")}
+            sx={{
+              flexShrink: 0,
+              p: 0.25,
+              color: "text.secondary",
+              "&:hover": { color: "error.main", bgcolor: (theme) => theme.palette.error.main + "33" },
+            }}
           >
-            <X className="h-3 w-3" />
-          </button>
+            <Close sx={{ fontSize: 12 }} />
+          </IconButton>
         )}
-      </div>
+      </Box>
 
-      {/* File list with types */}
       {item.filesWritten.length > 0 && item.status === "done" && (
-        <div className="mt-1.5 ml-5 flex flex-col gap-0.5">
+        <Box sx={{ mt: 0.75, ml: 2.5, display: "flex", flexDirection: "column", gap: 0.25 }}>
           {item.filesWritten.map((filePath) => {
             const { icon: Icon, typeKey } = getFileTypeInfo(filePath)
-            const fileName = getFileName(filePath)
+            const name = getFileName(filePath)
             return (
-              <button
+              <Box
                 key={filePath}
+                component="button"
                 type="button"
                 onClick={() => handleFileClick(filePath)}
-                className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left text-muted-foreground hover:bg-accent/50 hover:text-foreground transition-colors"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.75,
+                  borderRadius: 0.5,
+                  px: 0.5,
+                  py: 0.25,
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  font: "inherit",
+                  textAlign: "left",
+                  color: "text.secondary",
+                  transition: (theme) => theme.transitions.create("background-color"),
+                  "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+                }}
               >
-                <Icon className="h-3 w-3 shrink-0" />
-                <span className="text-[10px] font-medium text-muted-foreground/70 w-14 shrink-0">{t(typeKey)}</span>
-                <span className="truncate">{fileName}</span>
-              </button>
+                <Icon sx={{ fontSize: 12, flexShrink: 0 }} />
+                <Typography variant="caption" sx={{ width: 56, flexShrink: 0, fontWeight: 500, color: "text.secondary", opacity: 0.85 }}>
+                  {t(typeKey)}
+                </Typography>
+                <Typography variant="caption" noWrap sx={{ flex: 1 }}>
+                  {name}
+                </Typography>
+              </Box>
             )
           })}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }

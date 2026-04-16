@@ -4,16 +4,34 @@ import Graph from "graphology"
 import { SigmaContainer, useLoadGraph, useRegisterEvents, useSigma } from "@react-sigma/core"
 import "@react-sigma/core/lib/style.css"
 import forceAtlas2 from "graphology-layout-forceatlas2"
-import { Network, RefreshCw, ZoomIn, ZoomOut, Maximize, Layers, Tag, Lightbulb, AlertTriangle, Link2, X, Search, Loader2 } from "lucide-react"
+import HubIcon from "@mui/icons-material/Hub"
+import RefreshIcon from "@mui/icons-material/Refresh"
+import ZoomInIcon from "@mui/icons-material/ZoomIn"
+import ZoomOutIcon from "@mui/icons-material/ZoomOut"
+import FitScreenIcon from "@mui/icons-material/FitScreen"
+import LayersIcon from "@mui/icons-material/Layers"
+import LocalOfferIcon from "@mui/icons-material/LocalOffer"
+import LightbulbOutlinedIcon from "@mui/icons-material/LightbulbOutlined"
+import WarningAmberIcon from "@mui/icons-material/WarningAmber"
+import InsertLinkOutlinedIcon from "@mui/icons-material/InsertLinkOutlined"
+import CloseIcon from "@mui/icons-material/Close"
+import SearchIcon from "@mui/icons-material/Search"
+import Box from "@mui/material/Box"
+import CircularProgress from "@mui/material/CircularProgress"
+import IconButton from "@mui/material/IconButton"
+import Stack from "@mui/material/Stack"
+import Typography from "@mui/material/Typography"
+import { alpha, type Theme } from "@mui/material/styles"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { useResearchStore } from "@/stores/research-store"
-import { Button } from "@/components/ui/button"
+import Button from "@mui/material/Button"
+import TextField from "@mui/material/TextField"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { buildWikiGraph, type GraphNode, type GraphEdge, type CommunityInfo } from "@/lib/wiki-graph"
 import { findSurprisingConnections, detectKnowledgeGaps, type SurprisingConnection, type KnowledgeGap } from "@/lib/graph-insights"
 import { queueResearch } from "@/lib/deep-research"
-import { optimizeResearchTopic, type OptimizedTopic } from "@/lib/optimize-research-topic"
+import { optimizeResearchTopic } from "@/lib/optimize-research-topic"
 import { normalizePath } from "@/lib/path-utils"
 
 const NODE_TYPE_COLORS: Record<string, string> = {
@@ -256,42 +274,47 @@ function EventHandler({ onNodeClick }: { onNodeClick: (nodeId: string) => void }
 function ZoomControls() {
   const sigma = useSigma()
 
+  const zoomBtnSx = {
+    width: 28,
+    height: 28,
+    minWidth: 28,
+    bgcolor: (theme: Theme) => alpha(theme.palette.background.paper, 0.85),
+    backdropFilter: "blur(8px)",
+  }
+
   return (
-    <div className="absolute top-3 right-3 flex flex-col gap-1">
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 bg-background/80 backdrop-blur-sm"
+    <Box sx={{ position: "absolute", top: 12, right: 12, display: "flex", flexDirection: "column", gap: 0.5 }}>
+      <IconButton
+        size="small"
+        sx={{ ...zoomBtnSx, border: 1, borderColor: "divider" }}
         onClick={() => {
           const camera = sigma.getCamera()
           camera.animatedZoom({ duration: 200 })
         }}
       >
-        <ZoomIn className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 bg-background/80 backdrop-blur-sm"
+        <ZoomInIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+      <IconButton
+        size="small"
+        sx={{ ...zoomBtnSx, border: 1, borderColor: "divider" }}
         onClick={() => {
           const camera = sigma.getCamera()
           camera.animatedUnzoom({ duration: 200 })
         }}
       >
-        <ZoomOut className="h-3.5 w-3.5" />
-      </Button>
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-7 w-7 bg-background/80 backdrop-blur-sm"
+        <ZoomOutIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+      <IconButton
+        size="small"
+        sx={{ ...zoomBtnSx, border: 1, borderColor: "divider" }}
         onClick={() => {
           const camera = sigma.getCamera()
           camera.animatedReset({ duration: 300 })
         }}
       >
-        <Maximize className="h-3.5 w-3.5" />
-      </Button>
-    </div>
+        <FitScreenIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+    </Box>
   )
 }
 
@@ -461,108 +484,139 @@ export function GraphView() {
 
   if (!project) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <Network className="h-10 w-10 opacity-30" />
-        <p className="text-sm">{t("graph.openProject")}</p>
-      </div>
+      <Stack spacing={1.5} sx={{ height: 1, alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+        <HubIcon sx={{ fontSize: 40, opacity: 0.3 }} />
+        <Typography variant="body2">{t("graph.openProject")}</Typography>
+      </Stack>
     )
   }
 
   if (loading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <RefreshCw className="h-8 w-8 animate-spin opacity-50" />
-        <p className="text-sm">{t("graph.building")}</p>
-      </div>
+      <Stack spacing={1.5} sx={{ height: 1, alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+        <CircularProgress size={32} sx={{ opacity: 0.6 }} />
+        <Typography variant="body2">{t("graph.building")}</Typography>
+      </Stack>
     )
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <Network className="h-10 w-10 opacity-30" />
-        <p className="text-sm text-destructive">{error}</p>
-        <Button variant="outline" size="sm" onClick={loadGraph}>{t("graph.retry")}</Button>
-      </div>
+      <Stack spacing={1.5} sx={{ height: 1, alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+        <HubIcon sx={{ fontSize: 40, opacity: 0.3 }} />
+        <Typography variant="body2" color="error">
+          {error}
+        </Typography>
+        <Button variant="outlined" size="small" onClick={loadGraph} sx={{ textTransform: "none" }}>
+          {t("graph.retry")}
+        </Button>
+      </Stack>
     )
   }
 
   if (!loading && nodes.length === 0 && !error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <Network className="h-10 w-10 opacity-30" />
-        <p className="text-sm">{t("graph.noPages")}</p>
-        <p className="text-xs">{t("graph.importHint")}</p>
-      </div>
+      <Stack spacing={1.5} sx={{ height: 1, alignItems: "center", justifyContent: "center", color: "text.secondary" }}>
+        <HubIcon sx={{ fontSize: 40, opacity: 0.3 }} />
+        <Typography variant="body2">{t("graph.noPages")}</Typography>
+        <Typography variant="caption">{t("graph.importHint")}</Typography>
+      </Stack>
     )
   }
 
   return (
-    <div className="relative flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-2 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Network className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{t("graph.knowledgeGraph")}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className="rounded bg-muted px-1.5 py-0.5">{nodes.length} {t("graph.pages")}</span>
-            <span className="rounded bg-muted px-1.5 py-0.5">{edges.length} {t("graph.links")}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
+    <Box sx={{ position: "relative", display: "flex", height: 1, flexDirection: "column" }}>
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          flexShrink: 0,
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 2,
+          py: 1,
+        }}
+      >
+        <Stack direction="row" spacing={1.5} sx={{ alignItems: "center" }}>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <HubIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              {t("graph.knowledgeGraph")}
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.75} sx={{ alignItems: "center" }}>
+            <Typography component="span" variant="caption" sx={{ borderRadius: 1, bgcolor: "action.hover", px: 0.75, py: 0.25, color: "text.secondary" }}>
+              {nodes.length} {t("graph.pages")}
+            </Typography>
+            <Typography component="span" variant="caption" sx={{ borderRadius: 1, bgcolor: "action.hover", px: 0.75, py: 0.25, color: "text.secondary" }}>
+              {edges.length} {t("graph.links")}
+            </Typography>
+          </Stack>
+        </Stack>
+        <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
           <Button
-            variant={colorMode === "type" ? "secondary" : "ghost"}
-            size="sm"
+            color={colorMode === "type" ? "secondary" : "inherit"}
+            variant={colorMode === "type" ? "contained" : "text"}
+            size="small"
             onClick={() => setColorMode("type")}
-            className="text-xs gap-1 h-7"
+            sx={{ fontSize: "0.75rem", gap: 0.5, minHeight: 28, textTransform: "none" }}
+            startIcon={<LocalOfferIcon sx={{ fontSize: 14 }} />}
           >
-            <Tag className="h-3 w-3" />
             {t("graph.type")}
           </Button>
           <Button
-            variant={colorMode === "community" ? "secondary" : "ghost"}
-            size="sm"
+            color={colorMode === "community" ? "secondary" : "inherit"}
+            variant={colorMode === "community" ? "contained" : "text"}
+            size="small"
             onClick={() => setColorMode("community")}
-            className="text-xs gap-1 h-7"
+            sx={{ fontSize: "0.75rem", gap: 0.5, minHeight: 28, textTransform: "none" }}
+            startIcon={<LayersIcon sx={{ fontSize: 14 }} />}
           >
-            <Layers className="h-3 w-3" />
             {t("graph.community")}
           </Button>
           {(surprisingConns.filter((c) => !dismissedInsights.has(c.key)).length > 0 || knowledgeGaps.length > 0) && (
             <Button
-              variant={showInsights ? "secondary" : "ghost"}
-              size="sm"
+              color={showInsights ? "secondary" : "inherit"}
+              variant={showInsights ? "contained" : "text"}
+              size="small"
               onClick={() => {
                 setShowInsights((v) => {
                   if (v) setHighlightedNodes(new Set())
                   return !v
                 })
               }}
-              className="text-xs gap-1 h-7"
+              sx={{ fontSize: "0.75rem", gap: 0.5, minHeight: 28, textTransform: "none" }}
+              startIcon={<LightbulbOutlinedIcon sx={{ fontSize: 14 }} />}
             >
-              <Lightbulb className="h-3 w-3" />
               {t("graph.insights")}
-              <span className="rounded bg-muted px-1 text-[10px]">
+              <Box component="span" sx={{ borderRadius: 1, bgcolor: "action.hover", px: 0.5, fontSize: 10, ml: 0.5 }}>
                 {surprisingConns.filter((c) => !dismissedInsights.has(c.key)).length + knowledgeGaps.length}
-              </span>
+              </Box>
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={loadGraph} className="text-xs gap-1 h-7">
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      </div>
+          <IconButton size="small" onClick={loadGraph} sx={{ color: "text.secondary" }}>
+            <RefreshIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Stack>
+      </Stack>
 
-      {/* Graph canvas + Insights side panel */}
-      <div className="flex flex-1 min-h-0">
-        {/* Graph canvas */}
-        <div ref={graphContainerRef} className="relative flex-1 min-w-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <Stack direction="row" sx={{ flex: 1, minHeight: 0 }}>
+        <Box
+          ref={graphContainerRef}
+          sx={{
+            position: "relative",
+            flex: 1,
+            minWidth: 0,
+            overflow: "hidden",
+            bgcolor: (theme) => (theme.palette.mode === "dark" ? "#020617" : "#f8fafc"),
+          }}
+        >
           {isResizing ? (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            <Box sx={{ display: "flex", height: 1, alignItems: "center", justifyContent: "center", fontSize: "0.75rem", color: "text.secondary" }}>
               {t("graph.resizing")}
-            </div>
+            </Box>
           ) : (
           <ErrorBoundary>
           <SigmaContainer
@@ -622,97 +676,128 @@ export function GraphView() {
           </ErrorBoundary>
           )}
 
-          {/* Legend */}
-          <div className="absolute bottom-3 left-3 rounded-lg border bg-background/90 backdrop-blur-sm px-3 py-2 text-xs shadow-sm max-w-[260px]">
+          <Box
+            sx={{
+              position: "absolute",
+              bottom: 12,
+              left: 12,
+              maxWidth: 260,
+              borderRadius: 2,
+              border: 1,
+              borderColor: "divider",
+              px: 1.5,
+              py: 1,
+              fontSize: "0.75rem",
+              boxShadow: 1,
+              bgcolor: (theme) => alpha(theme.palette.background.paper, 0.92),
+              backdropFilter: "blur(8px)",
+            }}
+          >
             {colorMode === "type" ? (
               <>
-                <div className="mb-1.5 font-semibold text-foreground">{t("graph.nodeTypes")}</div>
-                <div className="flex flex-col gap-0.5">
+                <Typography variant="caption" sx={{ display: "block", mb: 0.75, color: "text.primary", fontWeight: 600 }}>
+                  {t("graph.nodeTypes")}
+                </Typography>
+                <Stack spacing={0.25}>
                   {NODE_TYPES
                     .filter((type) => (typeCounts[type] ?? 0) > 0)
                     .map((type) => (
-                      <div
+                      <Stack
                         key={type}
-                        className="flex items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-accent/50"
+                        direction="row"
+                        spacing={1}
                         onMouseEnter={() => setHoveredType(type)}
                         onMouseLeave={() => setHoveredType(null)}
+                        sx={{ alignItems: "center", borderRadius: 1, px: 0.5, py: 0.25, "&:hover": { bgcolor: "action.hover" }, cursor: "default" }}
                       >
-                        <span
-                          className="inline-block h-3 w-3 rounded-full shrink-0 shadow-sm"
-                          style={{
-                            backgroundColor: NODE_TYPE_COLORS[type],
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: "50%",
+                            flexShrink: 0,
+                            bgcolor: NODE_TYPE_COLORS[type],
                             boxShadow: `0 0 4px ${hexToRgba(NODE_TYPE_COLORS[type] ?? "#94a3b8", 0.4)}`,
                           }}
                         />
-                        <span className={hoveredType === type ? "text-foreground font-medium" : "text-muted-foreground"}>
+                        <Typography variant="caption" sx={{ color: hoveredType === type ? "text.primary" : "text.secondary", fontWeight: hoveredType === type ? 600 : 400 }}>
                           {t(`graph.${type}`)}
-                        </span>
-                        <span className="text-muted-foreground/60 ml-auto">{typeCounts[type]}</span>
-                      </div>
+                        </Typography>
+                        <Typography variant="caption" sx={{ ml: "auto", color: "text.secondary", opacity: 0.7 }}>
+                          {typeCounts[type]}
+                        </Typography>
+                      </Stack>
                     ))}
-                </div>
+                </Stack>
               </>
             ) : (
               <>
-                <div className="mb-1.5 font-semibold text-foreground">{t("graph.communities")}</div>
-                <div className="flex flex-col gap-0.5">
+                <Typography variant="caption" sx={{ display: "block", mb: 0.75, color: "text.primary", fontWeight: 600 }}>
+                  {t("graph.communities")}
+                </Typography>
+                <Stack spacing={0.25}>
                   {communities.map((c) => (
-                    <div
-                      key={c.id}
-                      className="flex items-center gap-2 rounded px-1 py-0.5 transition-colors hover:bg-accent/50"
-                    >
-                      <span
-                        className="inline-block h-3 w-3 rounded-full shrink-0 shadow-sm"
-                        style={{
-                          backgroundColor: COMMUNITY_COLORS[c.id % COMMUNITY_COLORS.length],
+                    <Stack key={c.id} direction="row" spacing={1} sx={{ alignItems: "center", borderRadius: 1, px: 0.5, py: 0.25, "&:hover": { bgcolor: "action.hover" } }}>
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: "50%",
+                          flexShrink: 0,
+                          bgcolor: COMMUNITY_COLORS[c.id % COMMUNITY_COLORS.length],
                           boxShadow: `0 0 4px ${hexToRgba(COMMUNITY_COLORS[c.id % COMMUNITY_COLORS.length], 0.4)}`,
                         }}
                       />
-                      <span className="text-muted-foreground truncate" title={c.topNodes.join(", ")}>
+                      <Typography variant="caption" color="text.secondary" noWrap title={c.topNodes.join(", ")} sx={{ flex: 1, minWidth: 0 }}>
                         {c.topNodes[0] ?? t("graph.cluster", { id: c.id })}
-                      </span>
-                      <span className="text-muted-foreground/60 ml-auto shrink-0">{c.nodeCount}</span>
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.7, flexShrink: 0 }}>
+                        {c.nodeCount}
+                      </Typography>
                       {c.cohesion < 0.15 && c.nodeCount >= 3 && (
-                        <span className="text-amber-500 shrink-0" title={t("graph.lowCohesion", { value: c.cohesion.toFixed(2) })}>!</span>
+                        <Typography component="span" variant="caption" color="warning.main" sx={{ flexShrink: 0 }} title={t("graph.lowCohesion", { value: c.cohesion.toFixed(2) })}>
+                          !
+                        </Typography>
                       )}
-                    </div>
+                    </Stack>
                   ))}
-                </div>
+                </Stack>
               </>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-        {/* Insights Side Panel */}
         {showInsights && (
-          <div className="w-80 shrink-0 border-l bg-background overflow-y-auto">
-            <div className="px-4 py-3 border-b">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Lightbulb className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-medium">{t("graph.insights")}</span>
-                </div>
-                <button
-                  className="p-1 rounded hover:bg-muted text-muted-foreground"
+          <Box sx={{ width: 320, flexShrink: 0, borderLeft: 1, borderColor: "divider", bgcolor: "background.paper", overflowY: "auto" }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: "divider" }}>
+              <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                  <LightbulbOutlinedIcon sx={{ fontSize: 18, color: "warning.main" }} />
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{t("graph.insights")}</Typography>
+                </Stack>
+                <IconButton
+                  size="small"
                   onClick={() => {
                     setShowInsights(false)
                     setHighlightedNodes(new Set())
                   }}
+                  sx={{ color: "text.secondary" }}
                 >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
+                  <CloseIcon sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Stack>
+            </Box>
 
-            <div className="p-3 flex flex-col gap-4">
-              {/* Surprising Connections */}
+            <Stack spacing={2} sx={{ p: 1.5 }}>
               {surprisingConns.filter((c) => !dismissedInsights.has(c.key)).length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-foreground">
-                    <Link2 className="h-3.5 w-3.5 text-blue-500" />
-                    {t("graph.surprisingConnections")}
-                  </div>
-                  <div className="flex flex-col gap-2">
+                <Box>
+                  <Stack direction="row" spacing={0.75} sx={{ mb: 1, alignItems: "center" }}>
+                    <InsertLinkOutlinedIcon sx={{ fontSize: 16, color: "primary.main" }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: "text.primary" }}>
+                      {t("graph.surprisingConnections")}
+                    </Typography>
+                  </Stack>
+                  <Stack spacing={1}>
                     {surprisingConns
                       .filter((conn) => !dismissedInsights.has(conn.key))
                       .map((conn, i) => {
@@ -720,117 +805,146 @@ export function GraphView() {
                         const isActive = highlightedNodes.size === ids.size &&
                           [...ids].every((id) => highlightedNodes.has(id))
                         return (
-                          <div
+                          <Box
                             key={i}
-                            className={`rounded-lg border p-3 text-sm cursor-pointer transition-colors ${isActive ? "bg-blue-500/10 border-blue-500/40" : "hover:bg-muted/50"}`}
                             onClick={() => setHighlightedNodes(isActive ? new Set() : ids)}
+                            sx={{
+                              borderRadius: 2,
+                              border: 1,
+                              borderColor: isActive ? "primary.main" : "divider",
+                              p: 1.5,
+                              fontSize: "0.875rem",
+                              cursor: "pointer",
+                              bgcolor: isActive ? (theme) => alpha(theme.palette.primary.main, 0.08) : "transparent",
+                              "&:hover": { bgcolor: "action.hover" },
+                            }}
                           >
-                            <div className="flex items-start justify-between gap-2 mb-1">
-                              <span className="font-medium text-foreground text-xs">
+                            <Stack direction="row" spacing={1} sx={{ mb: 0.5, alignItems: "flex-start", justifyContent: "space-between" }}>
+                              <Typography variant="caption" sx={{ fontWeight: 500, color: "text.primary" }}>
                                 {conn.source.label} ↔ {conn.target.label}
-                              </span>
-                              <button
-                                className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+                              </Typography>
+                              <IconButton
+                                size="small"
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   setDismissedInsights((prev) => new Set([...prev, conn.key]))
                                   if (isActive) setHighlightedNodes(new Set())
                                 }}
+                                sx={{ color: "text.secondary", "&:hover": { color: "error.main", bgcolor: (theme) => alpha(theme.palette.error.main, 0.12) } }}
                               >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
+                                <CloseIcon sx={{ fontSize: 16 }} />
+                              </IconButton>
+                            </Stack>
+                            <Typography variant="caption" color="text.secondary">
                               {conn.reasons.join(", ")}
-                            </p>
-                          </div>
+                            </Typography>
+                          </Box>
                         )
                       })}
-                  </div>
-                </div>
+                  </Stack>
+                </Box>
               )}
 
-              {/* Knowledge Gaps */}
               {knowledgeGaps.length > 0 && (
-                <div>
-                  <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-foreground">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                    {t("graph.knowledgeGaps")}
-                  </div>
-                  <div className="flex flex-col gap-2">
+                <Box>
+                  <Stack direction="row" spacing={0.75} sx={{ mb: 1, alignItems: "center" }}>
+                    <WarningAmberIcon sx={{ fontSize: 16, color: "warning.main" }} />
+                    <Typography variant="caption" sx={{ fontWeight: 600, color: "text.primary" }}>
+                      {t("graph.knowledgeGaps")}
+                    </Typography>
+                  </Stack>
+                  <Stack spacing={1}>
                     {knowledgeGaps.map((gap, i) => {
                       const ids = new Set(gap.nodeIds)
                       const isActive = highlightedNodes.size > 0 &&
                         [...ids].every((id) => highlightedNodes.has(id)) &&
                         [...highlightedNodes].every((id) => ids.has(id))
-                      const researchTopic = gap.type === "sparse-community"
-                        ? `Knowledge area: ${gap.title.replace("Sparse cluster: ", "")}`
-                        : gap.type === "bridge-node"
-                          ? `Key concept: ${gap.title.replace("Key bridge: ", "")}`
-                          : gap.title
                       return (
-                        <div
+                        <Box
                           key={i}
-                          className={`rounded-lg border p-3 text-sm cursor-pointer transition-colors ${isActive ? "bg-amber-500/10 border-amber-500/40" : "hover:bg-muted/50"}`}
                           onClick={() => setHighlightedNodes(isActive ? new Set() : ids)}
+                          sx={{
+                            borderRadius: 2,
+                            border: 1,
+                            borderColor: isActive ? "warning.main" : "divider",
+                            p: 1.5,
+                            fontSize: "0.875rem",
+                            cursor: "pointer",
+                            bgcolor: isActive ? (theme) => alpha(theme.palette.warning.main, 0.08) : "transparent",
+                            "&:hover": { bgcolor: "action.hover" },
+                          }}
                         >
-                          <div className="font-medium text-xs text-foreground mb-1">{gap.title}</div>
-                          <p className="text-xs text-muted-foreground mb-2">{gap.description}</p>
-                          <p className="text-xs text-muted-foreground/80 italic mb-2">{gap.suggestion}</p>
+                          <Typography variant="caption" sx={{ display: "block", mb: 0.5, fontWeight: 500, color: "text.primary" }}>
+                            {gap.title}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                            {gap.description}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1, fontStyle: "italic", opacity: 0.85 }}>
+                            {gap.suggestion}
+                          </Typography>
                           <Button
-                            variant="default"
-                            size="sm"
-                            className="h-7 text-xs gap-1"
+                            variant="contained"
+                            size="small"
+                            sx={{ minHeight: 28, fontSize: "0.75rem", textTransform: "none" }}
+                            startIcon={<SearchIcon sx={{ fontSize: 16 }} />}
                             onClick={(e) => {
                               e.stopPropagation()
                               handleResearchClick(gap.title, gap.description, gap.type)
                             }}
                           >
-                            <Search className="h-3.5 w-3.5" />
                             {t("graph.deepResearch")}
                           </Button>
-                        </div>
+                        </Box>
                       )
                     })}
-                  </div>
-                </div>
+                  </Stack>
+                </Box>
               )}
-            </div>
-          </div>
+            </Stack>
+          </Box>
         )}
-      </div>
+      </Stack>
 
-      {/* Research Topic Confirmation Dialog */}
       {researchDialog && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-[480px] rounded-lg border bg-background shadow-xl">
-            <div className="flex items-center justify-between border-b px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-primary" />
-                <span className="font-medium text-sm">{t("graph.deepResearch")}</span>
-              </div>
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 50,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "rgba(0,0,0,0.4)",
+          }}
+        >
+          <Box sx={{ width: 480, borderRadius: 2, border: 1, borderColor: "divider", bgcolor: "background.paper", boxShadow: 4 }}>
+            <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", borderBottom: 1, borderColor: "divider", px: 2, py: 1.5 }}>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                <SearchIcon sx={{ fontSize: 18, color: "primary.main" }} />
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{t("graph.deepResearch")}</Typography>
+              </Stack>
               {!researchDialog.loading && (
-                <button
-                  className="p-1 rounded hover:bg-muted text-muted-foreground"
-                  onClick={() => setResearchDialog(null)}
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <IconButton size="small" onClick={() => setResearchDialog(null)} sx={{ color: "text.secondary" }}>
+                  <CloseIcon sx={{ fontSize: 18 }} />
+                </IconButton>
               )}
-            </div>
+            </Stack>
 
             {researchDialog.loading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                {t("graph.generatingTopic")}
-              </div>
+              <Stack direction="row" spacing={1} sx={{ alignItems: "center", justifyContent: "center", py: 6, color: "text.secondary" }}>
+                <CircularProgress size={18} />
+                <Typography variant="body2">{t("graph.generatingTopic")}</Typography>
+              </Stack>
             ) : (
-              <div className="p-4">
-                <div className="mb-3">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("graph.researchTopic")}</label>
-                  <input
-                    type="text"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              <Box sx={{ p: 2 }}>
+                <Stack spacing={1} sx={{ mb: 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 500 }}>
+                    {t("graph.researchTopic")}
+                  </Typography>
+                  <TextField
+                    size="small"
+                    fullWidth
                     value={researchDialog.topic}
                     onChange={(e: ChangeEvent<HTMLInputElement>) =>
                       setResearchDialog((prev) =>
@@ -838,15 +952,17 @@ export function GraphView() {
                       )
                     }
                   />
-                </div>
-                <div className="mb-4">
-                  <label className="text-xs font-medium text-muted-foreground mb-1 block">{t("graph.searchQueries")}</label>
-                  <div className="flex flex-col gap-1.5">
+                </Stack>
+                <Stack spacing={1} sx={{ mb: 2 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 500 }}>
+                    {t("graph.searchQueries")}
+                  </Typography>
+                  <Stack spacing={0.75}>
                     {researchDialog.queries.map((q, idx) => (
-                      <input
+                      <TextField
                         key={idx}
-                        type="text"
-                        className="w-full rounded-md border bg-background px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                        size="small"
+                        fullWidth
                         value={q}
                         onChange={(e: ChangeEvent<HTMLInputElement>) =>
                           setResearchDialog((prev) => {
@@ -856,30 +972,25 @@ export function GraphView() {
                             return { ...prev, queries: newQueries }
                           })
                         }
+                        sx={{ "& input": { fontSize: "0.75rem" } }}
                       />
                     ))}
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setResearchDialog(null)}>
+                  </Stack>
+                </Stack>
+                <Stack direction="row" sx={{ justifyContent: "flex-end" }} spacing={1}>
+                  <Button variant="outlined" size="small" onClick={() => setResearchDialog(null)} sx={{ textTransform: "none" }}>
                     {t("graph.cancel")}
                   </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-1"
-                    onClick={handleResearchConfirm}
-                  >
-                    <Search className="h-3.5 w-3.5" />
+                  <Button variant="contained" size="small" onClick={handleResearchConfirm} startIcon={<SearchIcon sx={{ fontSize: 16 }} />} sx={{ textTransform: "none" }}>
                     {t("graph.startResearch")}
                   </Button>
-                </div>
-              </div>
+                </Stack>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
-    </div>
+    </Box>
   )
 }

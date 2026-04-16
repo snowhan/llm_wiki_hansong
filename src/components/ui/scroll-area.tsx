@@ -1,54 +1,59 @@
 "use client"
 
 import * as React from "react"
-import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area"
+import Box from "@mui/material/Box"
+import type { SxProps, Theme } from "@mui/material/styles"
+import { sxMerge } from "@/lib/mui-sx"
 
-import { cn } from "@/lib/utils"
+const scrollbarSx: SxProps<Theme> = {
+  overflow: "auto",
+  scrollbarGutter: "stable",
+  WebkitOverflowScrolling: "touch",
+  "&::-webkit-scrollbar": {
+    width: 6,
+    height: 6,
+  },
+  "&::-webkit-scrollbar-track": {
+    backgroundColor: "transparent",
+  },
+  "&::-webkit-scrollbar-thumb": {
+    backgroundColor: "divider",
+    borderRadius: 10,
+    "&:hover": {
+      backgroundColor: "action.disabled",
+    },
+  },
+}
 
-function ScrollArea({
-  className,
-  children,
-  ...props
-}: ScrollAreaPrimitive.Root.Props) {
+export type ScrollAreaProps = React.ComponentProps<typeof Box>
+
+function ScrollArea({ className, children, sx, ...props }: ScrollAreaProps) {
   return (
-    <ScrollAreaPrimitive.Root
+    <Box
       data-slot="scroll-area"
-      className={cn("relative", className)}
+      className={className}
+      sx={sxMerge({ position: "relative", minHeight: 0, minWidth: 0 }, scrollbarSx, sx)}
       {...props}
     >
-      <ScrollAreaPrimitive.Viewport
-        data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
-      >
-        {children}
-      </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
-      <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>
+      {children}
+    </Box>
   )
 }
 
-function ScrollBar({
-  className,
-  orientation = "vertical",
-  ...props
-}: ScrollAreaPrimitive.Scrollbar.Props) {
+export type ScrollBarProps = React.ComponentProps<typeof Box> & {
+  orientation?: "vertical" | "horizontal"
+}
+
+/** Kept for API compatibility; native scrollbars are styled on `ScrollArea` instead. */
+function ScrollBar({ orientation = "vertical", sx, ...props }: ScrollBarProps) {
   return (
-    <ScrollAreaPrimitive.Scrollbar
+    <Box
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
-      orientation={orientation}
-      className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
-        className
-      )}
+      sx={sxMerge({ display: "none" }, sx)}
+      aria-hidden
       {...props}
-    >
-      <ScrollAreaPrimitive.Thumb
-        data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border"
-      />
-    </ScrollAreaPrimitive.Scrollbar>
+    />
   )
 }
 

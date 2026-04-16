@@ -1,4 +1,8 @@
-import { MessageSquare, ChevronUp, ChevronDown } from "lucide-react"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import ChatBubbleOutlineOutlined from "@mui/icons-material/ChatBubbleOutlineOutlined"
+import KeyboardArrowUp from "@mui/icons-material/KeyboardArrowUp"
+import KeyboardArrowDown from "@mui/icons-material/KeyboardArrowDown"
 import { useWikiStore } from "@/stores/wiki-store"
 import { ChatPanel } from "@/components/chat/chat-panel"
 
@@ -8,34 +12,74 @@ export function ChatBar() {
 
   if (!chatExpanded) {
     return (
-      <button
+      <Box
+        component="button"
+        type="button"
         onClick={() => setChatExpanded(true)}
-        className="flex w-full items-center justify-between border-t px-4 py-2 text-sm text-muted-foreground hover:bg-accent/50"
+        sx={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderTop: 1,
+          borderColor: "divider",
+          px: 2,
+          py: 1,
+          borderLeft: "none",
+          borderRight: "none",
+          borderBottom: "none",
+          background: "none",
+          cursor: "pointer",
+          font: "inherit",
+          fontSize: 14,
+          color: "text.secondary",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
       >
-        <span className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" />
+        <Typography component="span" variant="body2" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <ChatBubbleOutlineOutlined sx={{ fontSize: 18 }} />
           CHAT
-        </span>
-        <ChevronUp className="h-4 w-4" />
-      </button>
+        </Typography>
+        <KeyboardArrowUp sx={{ fontSize: 18 }} />
+      </Box>
     )
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <button
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column" }}>
+      <Box
+        component="button"
+        type="button"
         onClick={() => setChatExpanded(false)}
-        className="flex w-full items-center justify-between border-b px-4 py-2 text-sm text-muted-foreground hover:bg-accent/50"
+        sx={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          justifyContent: "space-between",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 2,
+          py: 1,
+          borderLeft: "none",
+          borderRight: "none",
+          borderTop: "none",
+          background: "none",
+          cursor: "pointer",
+          font: "inherit",
+          fontSize: 14,
+          color: "text.secondary",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
       >
-        <span className="flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" />
+        <Typography component="span" variant="body2" sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <ChatBubbleOutlineOutlined sx={{ fontSize: 18 }} />
           CHAT
-        </span>
-        <ChevronDown className="h-4 w-4" />
-      </button>
-      <div className="flex-1 overflow-hidden">
+        </Typography>
+        <KeyboardArrowDown sx={{ fontSize: 18 }} />
+      </Box>
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
         <ChatPanel />
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }

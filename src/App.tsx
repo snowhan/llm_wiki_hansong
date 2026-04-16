@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { open } from "@tauri-apps/plugin-dialog"
+import Box from "@mui/material/Box"
+import CircularProgress from "@mui/material/CircularProgress"
+import Typography from "@mui/material/Typography"
 import i18n from "@/i18n"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
@@ -25,13 +28,11 @@ function App() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  // Set up auto-save and clip watcher once on mount
   useEffect(() => {
     setupAutoSave()
     startClipWatcher()
   }, [])
 
-  // Auto-open last project on startup
   useEffect(() => {
     async function init() {
       try {
@@ -75,20 +76,17 @@ function App() {
     setActiveView("wiki")
     await saveLastProject(proj)
 
-    // Restore ingest queue (resume interrupted tasks)
     import("@/lib/ingest-queue").then(({ restoreQueue }) => {
       restoreQueue(proj.path).catch((err) =>
         console.error("Failed to restore ingest queue:", err)
       )
     })
-    // Notify local clip server of the current project + all recent projects
     fetch("http://127.0.0.1:19827/project", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path: proj.path }),
     }).catch(() => {})
 
-    // Send all recent projects to clip server for extension project picker
     getRecentProjects().then((recents) => {
       const projects = recents.map((p) => ({ name: p.name, path: p.path }))
       fetch("http://127.0.0.1:19827/projects", {
@@ -103,7 +101,6 @@ function App() {
     } catch (err) {
       console.error("Failed to load file tree:", err)
     }
-    // Load persisted review items
     try {
       const savedReview = await loadReviewItems(proj.path)
       if (savedReview.length > 0) {
@@ -112,13 +109,11 @@ function App() {
     } catch {
       // ignore, start fresh
     }
-    // Load persisted chat history
     try {
       const savedChat = await loadChatHistory(proj.path)
       if (savedChat.conversations.length > 0) {
         useChatStore.getState().setConversations(savedChat.conversations)
         useChatStore.getState().setMessages(savedChat.messages)
-        // Set most recent conversation as active
         const sorted = [...savedChat.conversations].sort((a, b) => b.updatedAt - a.updatedAt)
         if (sorted[0]) {
           useChatStore.getState().setActiveConversation(sorted[0].id)
@@ -161,9 +156,10 @@ function App() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
-        {t("app.loading")}
-      </div>
+      <Box sx={{ display: "flex", height: "100vh", alignItems: "center", justifyContent: "center", bgcolor: "background.paper2", color: "text.secondary" }}>
+        <CircularProgress size={24} sx={{ mr: 1 }} />
+        <Typography>{t("app.loading")}</Typography>
+      </Box>
     )
   }
 

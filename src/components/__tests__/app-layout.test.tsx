@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import type { ReactNode } from "react"
 import { render, screen, waitFor } from "@testing-library/react"
 import { AppLayout } from "../layout/app-layout"
 import { useWikiStore } from "@/stores/wiki-store"
@@ -32,7 +33,7 @@ vi.mock("../layout/research-panel", () => ({
 }))
 
 vi.mock("@/components/error-boundary", () => ({
-  ErrorBoundary: ({ children }: { children?: unknown }) => <div>{children}</div>,
+  ErrorBoundary: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }))
 
 beforeEach(() => {

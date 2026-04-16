@@ -1,14 +1,14 @@
 import { convertFileSrc } from "@tauri-apps/api/core"
 import { useTranslation } from "react-i18next"
+import AudiotrackIcon from "@mui/icons-material/Audiotrack"
+import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined"
+import ImageIcon from "@mui/icons-material/Image"
+import MovieIcon from "@mui/icons-material/Movie"
+import TableChartIcon from "@mui/icons-material/TableChart"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import { alpha } from "@mui/material/styles"
 import { MarkdownView } from "@/components/ui/markdown-view"
-import {
-  FileText,
-  Image as ImageIcon,
-  Film,
-  Music,
-  FileSpreadsheet,
-  FileQuestion,
-} from "lucide-react"
 import { getFileCategory, getCodeLanguage } from "@/lib/file-types"
 import type { FileCategory } from "@/lib/file-types"
 import { getFileName } from "@/lib/path-utils"
@@ -48,76 +48,171 @@ export function FilePreview({ filePath, textContent }: FilePreviewProps) {
 function ImagePreview({ filePath, fileName }: { filePath: string; fileName: string }) {
   const src = convertFileSrc(filePath)
   return (
-    <div className="flex h-full flex-col p-6">
-      <div className="mb-4 text-xs text-muted-foreground">{filePath}</div>
-      <div className="flex flex-1 items-center justify-center overflow-auto rounded-lg bg-muted/30">
-        <img
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
+      <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
+        {filePath}
+      </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "auto",
+          borderRadius: 2,
+          bgcolor: (theme) => alpha(theme.palette.action.hover, 0.2),
+        }}
+      >
+        <Box
+          component="img"
           src={src}
           alt={fileName}
-          className="max-h-full max-w-full object-contain"
+          sx={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }}
         />
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
 function VideoPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
   const src = convertFileSrc(filePath)
   return (
-    <div className="flex h-full flex-col p-6">
-      <div className="mb-4 text-xs text-muted-foreground">{filePath}</div>
-      <div className="flex flex-1 items-center justify-center overflow-auto rounded-lg bg-black">
-        <video
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
+      <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
+        {filePath}
+      </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "auto",
+          borderRadius: 2,
+          bgcolor: "#000",
+        }}
+      >
+        <Box
+          component="video"
           src={src}
           controls
-          className="max-h-full max-w-full"
+          sx={{ maxHeight: "100%", maxWidth: "100%" }}
         >
           <track kind="captions" label={fileName} />
-        </video>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   )
 }
 
 function AudioPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
   const src = convertFileSrc(filePath)
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-      <div className="text-xs text-muted-foreground">{filePath}</div>
-      <Music className="h-16 w-16 text-muted-foreground/50" />
-      <p className="text-sm font-medium">{fileName}</p>
-      <audio src={src} controls className="w-full max-w-md">
+    <Box
+      sx={{
+        display: "flex",
+        height: "100%",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        p: 3,
+      }}
+    >
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+        {filePath}
+      </Typography>
+      <AudiotrackIcon sx={{ fontSize: 64, color: "action.disabled" }} />
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+        {fileName}
+      </Typography>
+      <Box
+        component="audio"
+        src={src}
+        controls
+        sx={{ width: "100%", maxWidth: 448 }}
+      >
         <track kind="captions" label={fileName} />
-      </audio>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
 function CodePreview({ filePath, content }: { filePath: string; content: string }) {
   const lang = getCodeLanguage(filePath)
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{filePath}</span>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">{lang}</span>
-      </div>
-      <pre className="whitespace-pre-wrap rounded-lg bg-muted/30 p-4 font-mono text-sm">
+    <Box sx={{ height: "100%", overflow: "auto", p: 3 }}>
+      <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          {filePath}
+        </Typography>
+        <Typography
+          component="span"
+          variant="caption"
+          sx={{
+            borderRadius: 1,
+            bgcolor: "action.hover",
+            px: 0.75,
+            py: 0.25,
+            fontSize: 10,
+            textTransform: "uppercase",
+            lineHeight: 1.2,
+          }}
+        >
+          {lang}
+        </Typography>
+      </Box>
+      <Box
+        component="pre"
+        sx={{
+          m: 0,
+          whiteSpace: "pre-wrap",
+          borderRadius: 2,
+          bgcolor: (theme) => alpha(theme.palette.action.hover, 0.2),
+          p: 2,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: "0.875rem",
+        }}
+      >
         {content}
-      </pre>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
 function TextPreview({ filePath, content, label }: { filePath: string; content: string; label: string }) {
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-        <span>{filePath}</span>
-        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase">{label}</span>
-      </div>
-      <MarkdownView content={content} className="text-sm" />
-    </div>
+    <Box sx={{ height: "100%", overflow: "auto", p: 3 }}>
+      <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          {filePath}
+        </Typography>
+        <Typography
+          component="span"
+          variant="caption"
+          sx={{
+            borderRadius: 1,
+            bgcolor: "action.hover",
+            px: 0.75,
+            py: 0.25,
+            fontSize: 10,
+            textTransform: "uppercase",
+            lineHeight: 1.2,
+          }}
+        >
+          {label}
+        </Typography>
+      </Box>
+      <MarkdownView markdown={content} sx={{ fontSize: "0.875rem" }} />
+    </Box>
   )
+}
+
+const iconMap: Record<string, typeof HelpOutlineOutlinedIcon> = {
+  document: TableChartIcon,
+  unknown: HelpOutlineOutlinedIcon,
+  image: ImageIcon,
+  video: MovieIcon,
 }
 
 function BinaryPlaceholder({
@@ -130,24 +225,33 @@ function BinaryPlaceholder({
   category: FileCategory
 }) {
   const { t } = useTranslation()
-  const iconMap: Record<string, typeof FileText> = {
-    document: FileSpreadsheet,
-    unknown: FileQuestion,
-    image: ImageIcon,
-    video: Film,
-  }
-  const Icon = iconMap[category] ?? FileQuestion
+  const Icon = iconMap[category] ?? HelpOutlineOutlinedIcon
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-      <Icon className="h-16 w-16 text-muted-foreground/30" />
-      <div>
-        <p className="text-sm font-medium">{fileName}</p>
-        <p className="mt-1 text-xs text-muted-foreground">{filePath}</p>
-      </div>
-      <p className="text-sm text-muted-foreground">
+    <Box
+      sx={{
+        display: "flex",
+        height: "100%",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        p: 3,
+        textAlign: "center",
+      }}
+    >
+      <Icon sx={{ fontSize: 64, color: "action.disabled" }} />
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {fileName}
+        </Typography>
+        <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "text.secondary" }}>
+          {filePath}
+        </Typography>
+      </Box>
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
         {t("preview.notAvailable")}
-      </p>
-    </div>
+      </Typography>
+    </Box>
   )
 }

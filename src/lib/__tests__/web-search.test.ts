@@ -32,7 +32,7 @@ describe("webSearch", () => {
     })
 
     const config: SearchApiConfig = { provider: "tavily", apiKey: "test-key" }
-    const results = await webSearch("LLM", config, 5)
+    await webSearch("LLM", config, 5)
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
     const [url, opts] = mockFetch.mock.calls[0]

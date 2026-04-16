@@ -19,7 +19,6 @@ export interface IngestTask {
 
 let queue: IngestTask[] = []
 let processing = false
-let currentProjectPath = ""
 let currentAbortController: AbortController | null = null
 let lastWrittenFiles: string[] = []  // track files written by current ingest for cleanup
 
@@ -63,7 +62,6 @@ export async function enqueueIngest(
   folderContext: string = "",
 ): Promise<string> {
   const pp = normalizePath(projectPath)
-  currentProjectPath = pp
 
   const task: IngestTask = {
     id: generateId(),
@@ -92,7 +90,6 @@ export async function enqueueBatch(
   files: Array<{ sourcePath: string; folderContext: string }>,
 ): Promise<string[]> {
   const pp = normalizePath(projectPath)
-  currentProjectPath = pp
   const ids: string[] = []
 
   for (const file of files) {
@@ -205,7 +202,6 @@ export function getQueueSummary(): { pending: number; processing: number; failed
  */
 export async function restoreQueue(projectPath: string): Promise<void> {
   const pp = normalizePath(projectPath)
-  currentProjectPath = pp
   const saved = await loadQueue(pp)
 
   if (saved.length === 0) return

@@ -1,13 +1,25 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  FileText, Users, Lightbulb, BookOpen, HelpCircle, GitMerge, BarChart3, ChevronRight, ChevronDown, Layout, Globe,
-} from "lucide-react"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import Box from "@mui/material/Box"
+import Typography from "@mui/material/Typography"
+import ChevronRight from "@mui/icons-material/ChevronRight"
+import ExpandMore from "@mui/icons-material/ExpandMore"
+import Description from "@mui/icons-material/Description"
+import PeopleOutlineOutlined from "@mui/icons-material/PeopleOutlineOutlined"
+import LightbulbOutlined from "@mui/icons-material/LightbulbOutlined"
+import MenuBook from "@mui/icons-material/MenuBook"
+import MergeType from "@mui/icons-material/MergeType"
+import BarChart from "@mui/icons-material/BarChart"
+import HelpOutlineOutlined from "@mui/icons-material/HelpOutlineOutlined"
+import ViewModule from "@mui/icons-material/ViewModule"
+import Public from "@mui/icons-material/Public"
+import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { normalizePath } from "@/lib/path-utils"
+
+type IconComp = React.ComponentType<SvgIconProps>
 
 interface WikiPageInfo {
   path: string
@@ -17,17 +29,22 @@ interface WikiPageInfo {
   origin?: string
 }
 
-const TYPE_CONFIG: Record<string, { icon: typeof FileText; labelKey: string; color: string; order: number }> = {
-  overview:    { icon: Layout,      labelKey: "knowledgeTree.overview",     color: "text-yellow-500", order: 0 },
-  entity:      { icon: Users,       labelKey: "knowledgeTree.entities",     color: "text-blue-500",   order: 1 },
-  concept:     { icon: Lightbulb,   labelKey: "knowledgeTree.concepts",     color: "text-purple-500", order: 2 },
-  source:      { icon: BookOpen,    labelKey: "knowledgeTree.sources",      color: "text-orange-500", order: 3 },
-  synthesis:   { icon: GitMerge,    labelKey: "knowledgeTree.synthesis",    color: "text-red-500",    order: 4 },
-  comparison:  { icon: BarChart3,   labelKey: "knowledgeTree.comparisons",  color: "text-emerald-500",order: 5 },
-  query:       { icon: HelpCircle,  labelKey: "knowledgeTree.queries",      color: "text-green-500",  order: 6 },
+const TYPE_CONFIG: Record<string, { icon: IconComp; labelKey: string; iconColor: string; order: number }> = {
+  overview: { icon: ViewModule, labelKey: "knowledgeTree.overview", iconColor: "warning.main", order: 0 },
+  entity: { icon: PeopleOutlineOutlined, labelKey: "knowledgeTree.entities", iconColor: "info.main", order: 1 },
+  concept: { icon: LightbulbOutlined, labelKey: "knowledgeTree.concepts", iconColor: "#9333ea", order: 2 },
+  source: { icon: MenuBook, labelKey: "knowledgeTree.sources", iconColor: "warning.dark", order: 3 },
+  synthesis: { icon: MergeType, labelKey: "knowledgeTree.synthesis", iconColor: "error.main", order: 4 },
+  comparison: { icon: BarChart, labelKey: "knowledgeTree.comparisons", iconColor: "success.main", order: 5 },
+  query: { icon: HelpOutlineOutlined, labelKey: "knowledgeTree.queries", iconColor: "success.dark", order: 6 },
 }
 
-const DEFAULT_CONFIG = { icon: FileText, labelKey: "knowledgeTree.other", color: "text-muted-foreground", order: 99 }
+const DEFAULT_CONFIG = {
+  icon: Description,
+  labelKey: "knowledgeTree.other",
+  iconColor: "text.secondary",
+  order: 99,
+}
 
 export function KnowledgeTree() {
   const { t } = useTranslation()
@@ -47,7 +64,6 @@ export function KnowledgeTree() {
 
       const pageInfos: WikiPageInfo[] = []
       for (const file of mdFiles) {
-        // Skip index.md and log.md
         if (file.name === "index.md" || file.name === "log.md") continue
         try {
           const content = await readFile(file.path)
@@ -69,20 +85,28 @@ export function KnowledgeTree() {
     }
   }, [project])
 
-  // Reload when file tree changes (after ingest writes new pages)
   useEffect(() => {
     loadPages()
   }, [loadPages, fileTree])
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center p-4 text-sm text-muted-foreground">
+      <Box
+        sx={{
+          display: "flex",
+          height: "100%",
+          alignItems: "center",
+          justifyContent: "center",
+          p: 2,
+          typography: "body2",
+          color: "text.secondary",
+        }}
+      >
         {t("knowledgeTree.noProject")}
-      </div>
+      </Box>
     )
   }
 
-  // Group pages by type
   const grouped = new Map<string, WikiPageInfo[]>()
   for (const page of pages) {
     const list = grouped.get(page.type) ?? []
@@ -90,7 +114,6 @@ export function KnowledgeTree() {
     grouped.set(page.type, list)
   }
 
-  // Sort groups by configured order
   const sortedGroups = [...grouped.entries()].sort((a, b) => {
     const orderA = TYPE_CONFIG[a[0]]?.order ?? DEFAULT_CONFIG.order
     const orderB = TYPE_CONFIG[b[0]]?.order ?? DEFAULT_CONFIG.order
@@ -107,16 +130,26 @@ export function KnowledgeTree() {
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-2">
-        <div className="mb-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
+    <Box sx={{ height: "100%", overflow: "auto" }}>
+      <Box sx={{ p: 1 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            mb: 1,
+            px: 1,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            color: "text.secondary",
+          }}
+        >
           {project.name}
-        </div>
+        </Typography>
 
         {sortedGroups.length === 0 && (
-          <div className="px-2 py-4 text-center text-xs text-muted-foreground">
+          <Typography variant="caption" sx={{ display: "block", px: 1, py: 2, textAlign: "center", color: "text.secondary" }}>
             {t("knowledgeTree.noPages")}
-          </div>
+          </Typography>
         )}
 
         {sortedGroups.map(([type, items]) => {
@@ -125,51 +158,87 @@ export function KnowledgeTree() {
           const isExpanded = expandedTypes.has(type)
 
           return (
-            <div key={type} className="mb-1">
-              <button
+            <Box key={type} sx={{ mb: 0.5 }}>
+              <Box
+                component="button"
+                type="button"
                 onClick={() => toggleType(type)}
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
+                sx={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  gap: 0.75,
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  font: "inherit",
+                  borderRadius: 1,
+                  px: 1,
+                  py: 0.75,
+                  textAlign: "left",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
               >
                 {isExpanded ? (
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ExpandMore sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
                 ) : (
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <ChevronRight sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
                 )}
-                <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
-                <span className="flex-1 text-left font-medium">{t(config.labelKey)}</span>
-                <span className="text-xs text-muted-foreground">{items.length}</span>
-              </button>
+                <Icon sx={{ fontSize: 14, flexShrink: 0, color: config.iconColor }} />
+                <Typography component="span" variant="body2" sx={{ flex: 1, fontWeight: 500, textAlign: "left" }}>
+                  {t(config.labelKey)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {items.length}
+                </Typography>
+              </Box>
 
               {isExpanded && (
-                <div className="ml-3">
+                <Box sx={{ ml: 1.5 }}>
                   {items.map((page) => {
                     const isSelected = selectedFile === page.path
                     return (
-                      <button
+                      <Box
                         key={page.path}
+                        component="button"
+                        type="button"
                         onClick={() => setSelectedFile(page.path)}
-                        className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
-                          isSelected
-                            ? "bg-accent text-accent-foreground"
-                            : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                        }`}
                         title={page.path}
+                        sx={{
+                          display: "flex",
+                          width: "100%",
+                          alignItems: "center",
+                          gap: 0.75,
+                          border: "none",
+                          borderRadius: 1,
+                          px: 1,
+                          py: 0.5,
+                          background: isSelected ? "action.selected" : "none",
+                          cursor: "pointer",
+                          font: "inherit",
+                          textAlign: "left",
+                          color: isSelected ? "text.primary" : "text.secondary",
+                          "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+                        }}
                       >
-                        {page.origin === "web-clip" && <Globe className="h-3 w-3 shrink-0 text-blue-400" />}
-                        <span className="truncate">{page.title}</span>
-                      </button>
+                        {page.origin === "web-clip" && (
+                          <Public sx={{ fontSize: 12, flexShrink: 0, color: "info.light" }} />
+                        )}
+                        <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                          {page.title}
+                        </Typography>
+                      </Box>
                     )
                   })}
-                </div>
+                </Box>
               )}
-            </div>
+            </Box>
           )
         })}
 
-        {/* Raw sources quick access */}
         <RawSourcesSection />
-      </div>
-    </ScrollArea>
+      </Box>
+    </Box>
   )
 }
 
@@ -192,41 +261,76 @@ function RawSourcesSection() {
   if (sources.length === 0) return null
 
   return (
-    <div className="mt-2 border-t pt-2">
-      <button
+    <Box sx={{ mt: 1, borderTop: 1, borderColor: "divider", pt: 1 }}>
+      <Box
+        component="button"
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent/50"
+        sx={{
+          display: "flex",
+          width: "100%",
+          alignItems: "center",
+          gap: 0.75,
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          font: "inherit",
+          borderRadius: 1,
+          px: 1,
+          py: 0.75,
+          textAlign: "left",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ExpandMore sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <ChevronRight sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
         )}
-        <BookOpen className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-        <span className="flex-1 text-left font-medium text-muted-foreground">{t("knowledgeTree.rawSources")}</span>
-        <span className="text-xs text-muted-foreground">{sources.length}</span>
-      </button>
+        <MenuBook sx={{ fontSize: 14, flexShrink: 0, color: "warning.dark" }} />
+        <Typography component="span" variant="body2" sx={{ flex: 1, fontWeight: 500, textAlign: "left", color: "text.secondary" }}>
+          {t("knowledgeTree.rawSources")}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {sources.length}
+        </Typography>
+      </Box>
       {expanded && (
-        <div className="ml-3">
+        <Box sx={{ ml: 1.5 }}>
           {sources.map((file) => {
             const isSelected = selectedFile === file.path
             return (
-              <button
+              <Box
                 key={file.path}
+                component="button"
+                type="button"
                 onClick={() => setSelectedFile(file.path)}
-                className={`flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm ${
-                  isSelected
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-accent-foreground"
-                }`}
+                sx={{
+                  display: "flex",
+                  width: "100%",
+                  alignItems: "center",
+                  gap: 0.75,
+                  border: "none",
+                  borderRadius: 1,
+                  px: 1,
+                  py: 0.5,
+                  background: isSelected ? "action.selected" : "none",
+                  cursor: "pointer",
+                  font: "inherit",
+                  textAlign: "left",
+                  color: isSelected ? "text.primary" : "text.secondary",
+                  "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+                }}
               >
-                <span className="truncate">{file.name}</span>
-              </button>
+                <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                  {file.name}
+                </Typography>
+              </Box>
             )
           })}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -236,7 +340,6 @@ function parsePageInfo(path: string, fileName: string, content: string): WikiPag
   const tags: string[] = []
   let origin: string | undefined
 
-  // Parse YAML frontmatter
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
   if (fmMatch) {
     const fm = fmMatch[1]
@@ -255,13 +358,11 @@ function parsePageInfo(path: string, fileName: string, content: string): WikiPag
     if (originMatch) origin = originMatch[1].trim()
   }
 
-  // Fallback: try first heading if no frontmatter title
   if (title === fileName.replace(".md", "").replace(/-/g, " ")) {
     const headingMatch = content.match(/^#\s+(.+)$/m)
     if (headingMatch) title = headingMatch[1].trim()
   }
 
-  // Fallback: infer type from path
   if (type === "other") {
     if (path.includes("/entities/")) type = "entity"
     else if (path.includes("/concepts/")) type = "concept"

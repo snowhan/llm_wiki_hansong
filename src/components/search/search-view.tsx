@@ -1,10 +1,19 @@
-import { useState, useEffect, useRef, useCallback } from "react"
-import { Search, FileText } from "lucide-react"
+import { useState, useCallback } from "react"
+import SearchIcon from "@mui/icons-material/Search"
+import DescriptionIcon from "@mui/icons-material/Description"
+import Box from "@mui/material/Box"
+import InputAdornment from "@mui/material/InputAdornment"
+import List from "@mui/material/List"
+import ListItem from "@mui/material/ListItem"
+import ListItemButton from "@mui/material/ListItemButton"
+import TextField from "@mui/material/TextField"
+import Typography from "@mui/material/Typography"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { searchWiki, type SearchResult } from "@/lib/search"
 import { useTranslation } from "react-i18next"
 import { normalizePath } from "@/lib/path-utils"
+import { useTheme } from "@mui/material/styles"
 
 export function SearchView() {
   const { t } = useTranslation()
@@ -50,51 +59,85 @@ export function SearchView() {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="shrink-0 border-b px-4 py-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") doSearch(query) }}
-            placeholder={t("search.placeholder") + " (Enter to search)"}
-            autoFocus
-            className="w-full rounded-md border bg-background py-2 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-      </div>
+    <Box sx={{ display: "flex", height: "100%", flexDirection: "column", overflow: "hidden" }}>
+      <Box sx={{ flexShrink: 0, borderBottom: 1, borderColor: "divider", px: 2, py: 1.5 }}>
+        <TextField
+          fullWidth
+          size="small"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") doSearch(query)
+          }}
+          placeholder={t("search.placeholder") + " (Enter to search)"}
+          autoFocus
+          variant="outlined"
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ fontSize: 18, color: "text.secondary" }} />
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              bgcolor: "background.paper",
+              fontSize: "0.875rem",
+            },
+          }}
+        />
+      </Box>
 
-      <div className="flex-1 overflow-y-auto">
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
         {searching ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">Searching...</div>
+          <Box sx={{ p: 2, textAlign: "center", fontSize: "0.875rem", color: "text.secondary" }}>
+            Searching...
+          </Box>
         ) : !hasSearched ? (
-          <div className="flex flex-col items-center justify-center gap-2 p-8 text-center text-sm text-muted-foreground">
-            <Search className="h-8 w-8 text-muted-foreground/30" />
-            <p>Press Enter to search</p>
-          </div>
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 1,
+              p: 4,
+              textAlign: "center",
+              fontSize: "0.875rem",
+              color: "text.secondary",
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 32, color: "action.disabledBackground" }} />
+            <Typography component="p">Press Enter to search</Typography>
+          </Box>
         ) : results.length === 0 ? (
-          <div className="p-4 text-center text-sm text-muted-foreground">
-            {t("search.noResults")} <span className="font-medium">"{query}"</span>
-          </div>
+          <Box sx={{ p: 2, textAlign: "center", fontSize: "0.875rem", color: "text.secondary" }}>
+            {t("search.noResults")}{" "}
+            <Typography component="span" sx={{ fontWeight: 500 }}>
+              &quot;{query}&quot;
+            </Typography>
+          </Box>
         ) : (
-          <div className="flex flex-col gap-1 p-2">
-            <div className="px-2 py-1 text-xs text-muted-foreground">
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, p: 1 }}>
+            <Typography variant="caption" sx={{ px: 1, py: 0.5, color: "text.secondary" }}>
               {results.length} result{results.length !== 1 ? "s" : ""}
-            </div>
-            {results.map((result) => (
-              <SearchResultCard
-                key={result.path}
-                result={result}
-                query={query}
-                onClick={() => handleOpen(result)}
-              />
-            ))}
-          </div>
+            </Typography>
+            <List disablePadding dense>
+              {results.map((result) => (
+                <SearchResultCard
+                  key={result.path}
+                  result={result}
+                  query={query}
+                  onClick={() => handleOpen(result)}
+                />
+              ))}
+            </List>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   )
 }
 
@@ -115,28 +158,42 @@ function SearchResultCard({
     .join("/")
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-lg border p-3 text-left text-sm hover:bg-accent transition-colors"
-    >
-      <div className="flex items-start gap-2 mb-1.5">
-        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-        <div className="flex-1 min-w-0">
-          <div className="font-medium truncate">
-            <HighlightedText text={result.title} query={query} />
-          </div>
-          <div className="text-[11px] text-muted-foreground truncate">{shortPath}</div>
-        </div>
-      </div>
-      <p className="text-xs text-muted-foreground line-clamp-2">
-        <HighlightedText text={result.snippet} query={query} />
-      </p>
-    </button>
+    <ListItem disablePadding sx={{ display: "block", mb: 0.5 }}>
+      <ListItemButton
+        onClick={onClick}
+        sx={{
+          alignItems: "flex-start",
+          border: 1,
+          borderColor: "divider",
+          borderRadius: 2,
+          p: 1.5,
+          textAlign: "left",
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        <DescriptionIcon
+          sx={{ fontSize: 18, color: "text.secondary", mt: 0.125, mr: 1, flexShrink: 0 }}
+        />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ mb: 0.75 }}>
+            <Typography variant="body2" noWrap sx={{ fontWeight: 500 }}>
+              <HighlightedText text={result.title} query={query} />
+            </Typography>
+            <Typography variant="caption" sx={{ fontSize: 11, color: "text.secondary" }} noWrap>
+              {shortPath}
+            </Typography>
+          </Box>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            <HighlightedText text={result.snippet} query={query} />
+          </Typography>
+        </Box>
+      </ListItemButton>
+    </ListItem>
   )
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
+  const theme = useTheme()
   if (!query.trim()) return <>{text}</>
 
   const regex = new RegExp(`(${escapeRegex(query)})`, "gi")
@@ -146,9 +203,18 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, i) =>
         regex.test(part) ? (
-          <mark key={i} className="bg-yellow-200 dark:bg-yellow-800 rounded px-0.5">
+          <Box
+            key={i}
+            component="mark"
+            sx={{
+              bgcolor: theme.palette.mode === "dark" ? "warning.dark" : "warning.light",
+              color: "text.primary",
+              borderRadius: 0.5,
+              px: 0.25,
+            }}
+          >
             {part}
-          </mark>
+          </Box>
         ) : (
           <span key={i}>{part}</span>
         )

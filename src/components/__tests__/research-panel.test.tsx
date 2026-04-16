@@ -10,8 +10,8 @@ vi.mock("@/lib/deep-research", () => ({
 }))
 
 vi.mock("../ui/markdown-view", () => ({
-  MarkdownView: ({ content }: { content: string }) => (
-    <div data-testid="markdown-view">{content}</div>
+  MarkdownView: ({ markdown }: { markdown: string }) => (
+    <div data-testid="markdown-view">{markdown}</div>
   ),
 }))
 

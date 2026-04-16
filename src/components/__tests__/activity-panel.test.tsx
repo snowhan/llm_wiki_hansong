@@ -74,7 +74,7 @@ describe("ActivityPanel", () => {
       ],
     } as any)
     const { container } = render(<ActivityPanel />)
-    const header = container.querySelector("button.flex.w-full")
+    const header = container.querySelector("button")
     expect(header).toBeTruthy()
     fireEvent.click(header!)
     fireEvent.click(screen.getByText("activity.clearCompleted"))

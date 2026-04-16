@@ -21,7 +21,14 @@ vi.mock("../ingest", () => ({
   autoIngest: vi.fn().mockResolvedValue([]),
 }))
 
-const llmConfig: LlmConfig = { provider: "openai", apiKey: "key", model: "gpt-4", contextSize: 4096 }
+const llmConfig: LlmConfig = {
+  provider: "openai",
+  apiKey: "key",
+  model: "gpt-4",
+  ollamaUrl: "http://localhost:11434",
+  customEndpoint: "",
+  maxContextSize: 4096,
+}
 const searchConfig: SearchApiConfig = { provider: "tavily", apiKey: "tavily-key" }
 
 describe("queueResearch", () => {

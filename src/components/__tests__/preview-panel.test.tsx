@@ -62,13 +62,12 @@ describe("PreviewPanel", () => {
       selectedFile: "/p/wiki/notes/hello.md",
     } as any)
     vi.mocked(readFile).mockResolvedValue("# Hello")
-    const { container } = render(<PreviewPanel />)
+    render(<PreviewPanel />)
     await waitFor(() => {
       expect(screen.getByTestId("wiki-editor")).toBeTruthy()
     })
-    const closeBtn = container.querySelector("button.rounded.p-1")
-    expect(closeBtn).toBeTruthy()
-    fireEvent.click(closeBtn!)
+    const closeBtn = screen.getByRole("button", { name: "Close" })
+    fireEvent.click(closeBtn)
     expect(useWikiStore.getState().selectedFile).toBeNull()
   })
 })
