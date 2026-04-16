@@ -5,6 +5,9 @@ node_modules/
 dist/
 dist-ssr/
 
+# Generated vditor assets (synced from node_modules via postinstall)
+public/vditor/
+
 # Rust build artifacts
 src-tauri/target/
 

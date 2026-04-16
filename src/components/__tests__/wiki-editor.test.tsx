@@ -1,71 +1,48 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen } from "@testing-library/react"
+import { render } from "@testing-library/react"
 import { WikiEditor } from "../editor/wiki-editor"
 
-const useEditorMock = vi.fn()
+const destroyMock = vi.fn()
+const setThemeMock = vi.fn()
 
-vi.mock("@milkdown/react", () => ({
-  MilkdownProvider: ({ children }: { children?: unknown }) => (
-    <div data-testid="milkdown-provider">{children}</div>
-  ),
-  Milkdown: () => <div data-testid="milkdown" />,
-  useEditor: (...args: unknown[]) => useEditorMock(...args),
-}))
-
-vi.mock("@milkdown/kit/core", () => {
-  const chain = {
-    config: vi.fn().mockReturnThis(),
-    use: vi.fn().mockReturnThis(),
-  }
-  return {
-    Editor: { make: () => chain },
-    rootCtx: {},
-    defaultValueCtx: {},
-  }
+vi.mock("vditor", () => {
+  const Vditor = vi.fn().mockImplementation(function (this: Record<string, unknown>) {
+    this.destroy = destroyMock
+    this.setTheme = setThemeMock
+    this.getValue = vi.fn().mockReturnValue("")
+  })
+  return { default: Vditor }
 })
 
-vi.mock("@milkdown/kit/preset/commonmark", () => ({
-  commonmark: {},
-}))
-
-vi.mock("@milkdown/kit/preset/gfm", () => ({
-  gfm: {},
-}))
-
-vi.mock("@milkdown/kit/plugin/history", () => ({
-  history: {},
-}))
-
-vi.mock("@milkdown/kit/plugin/listener", () => ({
-  listener: {},
-  listenerCtx: {},
-}))
-
-vi.mock("@milkdown/plugin-math", () => ({
-  math: {},
-}))
-
-vi.mock("@milkdown/theme-nord", () => ({
-  nord: {},
+vi.mock("@/hooks/use-is-dark", () => ({
+  useIsDark: () => false,
 }))
 
 beforeEach(() => {
-  useEditorMock.mockClear()
+  vi.clearAllMocks()
 })
 
 describe("WikiEditor", () => {
-  it("renders the milkdown container", () => {
+  it("renders the vditor container element", () => {
     const onSave = vi.fn()
-    render(<WikiEditor content="# Hello" onSave={onSave} />)
-    expect(screen.getByTestId("milkdown-provider")).toBeInTheDocument()
-    expect(screen.getByTestId("milkdown")).toBeInTheDocument()
+    const { container } = render(<WikiEditor content="# Hello" onSave={onSave} />)
+    expect(container.querySelector(".vditor-editor-wrap")).toBeTruthy()
   })
 
-  it("passes content into the editor hook", () => {
+  it("initializes Vditor with the provided content", async () => {
+    const { default: VditorMock } = await import("vditor")
     const onSave = vi.fn()
     render(<WikiEditor content="unique-body" onSave={onSave} />)
-    expect(useEditorMock).toHaveBeenCalled()
-    const deps = useEditorMock.mock.calls[0][1] as unknown[]
-    expect(deps).toContain("unique-body")
+    expect(VditorMock).toHaveBeenCalled()
+    const initOptions = (VditorMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1]
+    expect(initOptions.value).toBe("unique-body")
+    expect(initOptions.mode).toBe("ir")
+  })
+
+  it("destroys Vditor on unmount", () => {
+    const onSave = vi.fn()
+    const { unmount } = render(<WikiEditor content="test" onSave={onSave} />)
+    unmount()
+    expect(destroyMock).toHaveBeenCalled()
   })
 })

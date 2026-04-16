@@ -1,64 +1,82 @@
-import { useMemo } from "react"
-import { Editor, rootCtx, defaultValueCtx } from "@milkdown/kit/core"
-import { commonmark } from "@milkdown/kit/preset/commonmark"
-import { gfm } from "@milkdown/kit/preset/gfm"
-import { history } from "@milkdown/kit/plugin/history"
-import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
-import { math } from "@milkdown/plugin-math"
-import { nord } from "@milkdown/theme-nord"
-import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react"
-import "@milkdown/theme-nord/style.css"
-import "katex/dist/katex.min.css"
-import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
-
-interface WikiEditorInnerProps {
-  content: string
-  onSave: (markdown: string) => void
-}
-
-function WikiEditorInner({ content, onSave }: WikiEditorInnerProps) {
-  useEditor(
-    (root) =>
-      Editor.make()
-        .config(nord)
-        .config((ctx) => {
-          ctx.set(rootCtx, root)
-          ctx.set(defaultValueCtx, content)
-          ctx.get(listenerCtx).markdownUpdated((_ctx, markdown) => {
-            onSave(markdown)
-          })
-        })
-        .use(commonmark)
-        .use(gfm)
-        .use(math)
-        .use(history)
-        .use(listener),
-    [content],
-  )
-
-  return <Milkdown />
-}
+import { useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
+import Vditor from "vditor"
+import "vditor/dist/index.css"
+import { useIsDark } from "@/hooks/use-is-dark"
 
 interface WikiEditorProps {
   content: string
   onSave: (markdown: string) => void
 }
 
-function wrapBareMathBlocks(text: string): string {
-  return text.replace(
-    /(?<!\$\$\s*)(\\begin\{[^}]+\}[\s\S]*?\\end\{[^}]+\})(?!\s*\$\$)/g,
-    (_match, block: string) => `$$\n${block}\n$$`,
-  )
-}
+const TOOLBAR: (string | { name: string })[] = [
+  "headings", "bold", "italic", "strike", "|",
+  "line", "quote", "list", "ordered-list", "check", "|",
+  "code", "inline-code", "table", "link", "|",
+  "undo", "redo", "|",
+  "outline", "edit-mode", "fullscreen",
+]
 
 export function WikiEditor({ content, onSave }: WikiEditorProps) {
-  const processedContent = useMemo(() => wrapBareMathBlocks(content), [content])
+  const containerRef = useRef<HTMLDivElement>(null)
+  const vditorRef = useRef<Vditor | null>(null)
+  const destroyedRef = useRef(false)
+  const isDark = useIsDark()
+  const { i18n } = useTranslation()
 
-  return (
-    <MilkdownProvider>
-      <div className="prose prose-invert min-w-0 max-w-none overflow-hidden p-6">
-        <WikiEditorInner content={processedContent} onSave={onSave} />
-      </div>
-    </MilkdownProvider>
-  )
+  useEffect(() => {
+    if (!containerRef.current) return
+    destroyedRef.current = false
+
+    const vd = new Vditor(containerRef.current, {
+      mode: "ir",
+      value: content,
+      cdn: "/vditor",
+      theme: isDark ? "dark" : "classic",
+      lang: i18n.language?.startsWith("zh") ? "zh_CN" : "en_US",
+      minHeight: 300,
+      toolbar: TOOLBAR,
+      toolbarConfig: { pin: true },
+      cache: { enable: false },
+      input: (val) => onSave(val),
+      preview: {
+        theme: { current: isDark ? "dark" : "light", path: "/vditor/dist/css/content-theme" },
+        hljs: { style: isDark ? "native" : "github", lineNumber: false },
+        math: { engine: "KaTeX" },
+        markdown: {
+          mark: true,
+          footnotes: true,
+          toc: false,
+        },
+      },
+      outline: { enable: false, position: "right" },
+      after: () => {
+        if (destroyedRef.current) {
+          vd.destroy()
+          return
+        }
+        vditorRef.current = vd
+      },
+    })
+
+    return () => {
+      destroyedRef.current = true
+      if (vditorRef.current) {
+        vditorRef.current.destroy()
+        vditorRef.current = null
+      }
+    }
+    // content changes via key prop remount; isDark/lang handled separately
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    vditorRef.current?.setTheme(
+      isDark ? "dark" : "classic",
+      isDark ? "dark" : "light",
+      isDark ? "native" : "github",
+    )
+  }, [isDark])
+
+  return <div ref={containerRef} className="vditor-editor-wrap h-full" />
 }

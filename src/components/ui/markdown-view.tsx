@@ -1,12 +1,10 @@
-import { useMemo, useCallback, type MouseEvent } from "react"
-import { renderMarkdown } from "@/lib/markdown-renderer"
+import { useEffect, useRef, useCallback, type MouseEvent } from "react"
+import { renderPreview } from "@/lib/markdown-renderer"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { normalizePath } from "@/lib/path-utils"
+import { useIsDark } from "@/hooks/use-is-dark"
 import { cn } from "@/lib/utils"
-import "@/styles/markdown-theme.css"
-import "katex/dist/katex.min.css"
-import "highlight.js/styles/github-dark.min.css"
 
 interface MarkdownViewProps {
   content: string
@@ -18,8 +16,24 @@ export function MarkdownView({ content, className, enableWikilinks = false }: Ma
   const project = useWikiStore((s) => s.project)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setFileContent = useWikiStore((s) => s.setFileContent)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isDark = useIsDark()
 
-  const html = useMemo(() => renderMarkdown(content), [content])
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    if (!content) {
+      el.innerHTML = ""
+      return
+    }
+
+    let cancelled = false
+    renderPreview(el, content, { isDark }).then(() => {
+      if (cancelled) return
+    })
+
+    return () => { cancelled = true }
+  }, [content, isDark])
 
   const handleClick = useCallback(
     async (e: MouseEvent<HTMLDivElement>) => {
@@ -51,8 +65,12 @@ export function MarkdownView({ content, className, enableWikilinks = false }: Ma
 
   return (
     <div
-      className={cn("md-rendered", className)}
-      dangerouslySetInnerHTML={{ __html: html }}
+      ref={containerRef}
+      className={cn(
+        "vditor-reset",
+        isDark && "vditor-reset--dark",
+        className,
+      )}
       onClick={handleClick}
     />
   )
