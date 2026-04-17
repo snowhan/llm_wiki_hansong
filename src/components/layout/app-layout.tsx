@@ -11,8 +11,8 @@ import { ContentArea } from "./content-area"
 import { PreviewPanel } from "./preview-panel"
 import { ResearchPanel } from "./research-panel"
 import { ActivityPanel } from "./activity-panel"
-import { useResearchStore } from "@/stores/research-store"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { useResearchStore } from "@/stores/research-store"
 
 interface AppLayoutProps {
   onSwitchProject: () => void
@@ -24,7 +24,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const setFileTree = useWikiStore((s) => s.setFileTree)
-  const [leftWidth, setLeftWidth] = useState(220)
+  const [leftWidth, setLeftWidth] = useState(240)
   const [rightWidth, setRightWidth] = useState(400)
   const isDraggingLeft = useRef(false)
   const isDraggingRight = useRef(false)
@@ -59,11 +59,11 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
 
         if (isDraggingLeft.current) {
           const newWidth = e.clientX - rect.left
-          setLeftWidth(Math.max(150, Math.min(400, newWidth)))
+          setLeftWidth(Math.max(180, Math.min(400, newWidth)))
         }
         if (isDraggingRight.current) {
           const newWidth = rect.right - e.clientX
-          setRightWidth(Math.max(250, Math.min(rect.width * 0.5, newWidth)))
+          setRightWidth(Math.max(280, Math.min(rect.width * 0.5, newWidth)))
         }
       }
 
@@ -86,13 +86,32 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   const hasRightPanel = !!(selectedFile || researchPanelOpen)
 
   const resizeHandleSx = {
-    width: 6,
+    width: "5px",
     flexShrink: 0,
     cursor: "col-resize",
-    bgcolor: alpha(theme.palette.divider, 0.4),
-    transition: theme.transitions.create("background-color", { duration: theme.transitions.duration.shorter }),
-    "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.3) },
-    "&:active": { bgcolor: alpha(theme.palette.primary.main, 0.4) },
+    bgcolor: "transparent",
+    position: "relative" as const,
+    transition: "background-color 0.2s ease",
+    "&::after": {
+      content: '""',
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: "2px",
+      width: "1px",
+      bgcolor: theme.palette.divider,
+      transition: "all 0.2s ease",
+    },
+    "&:hover::after": {
+      width: "3px",
+      left: "1px",
+      bgcolor: alpha(theme.palette.primary.main, 0.35),
+    },
+    "&:active::after": {
+      width: "3px",
+      left: "1px",
+      bgcolor: theme.palette.primary.main,
+    },
   } as const
 
   return (
@@ -115,7 +134,8 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
             flexShrink: 0,
             width: leftWidth,
             overflow: "hidden",
-            borderRight: 1,
+            bgcolor: "background.paper",
+            borderRight: "1px solid",
             borderColor: "divider",
           }}
         >
@@ -126,7 +146,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
         </Stack>
         <Box onMouseDown={startDrag("left")} sx={resizeHandleSx} />
 
-        <Box sx={{ minWidth: 0, flex: 1, overflow: "hidden" }}>
+        <Box sx={{ minWidth: 0, flex: 1, overflow: "hidden", bgcolor: "background.paper" }}>
           <ErrorBoundary>
             <ContentArea />
           </ErrorBoundary>
@@ -141,7 +161,8 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
                 flexShrink: 0,
                 width: rightWidth,
                 overflow: "hidden",
-                borderLeft: 1,
+                bgcolor: "background.paper",
+                borderLeft: "1px solid",
                 borderColor: "divider",
               }}
             >
@@ -152,7 +173,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
                       flex: 1,
                       minHeight: 0,
                       overflow: "hidden",
-                      ...(researchPanelOpen ? { borderBottom: 1, borderColor: "divider" } : {}),
+                      ...(researchPanelOpen ? { borderBottom: "1px solid", borderColor: "divider" } : {}),
                     }}
                   >
                     <PreviewPanel />

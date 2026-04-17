@@ -1,5 +1,5 @@
 import { readFile, listDirectory } from "@/commands/fs"
-import { invoke } from "@tauri-apps/api/core"
+import { apiPost, apiGet } from "@/lib/api-client"
 import type { EmbeddingConfig } from "@/stores/wiki-store"
 import type { FileNode } from "@/types/wiki"
 import { normalizePath } from "@/lib/path-utils"
@@ -37,18 +37,18 @@ async function fetchEmbedding(
   }
 }
 
-// ── LanceDB operations via Tauri commands ─────────────────────────────────
+// ── Vector operations via backend API ─────────────────────────────────────
 
 async function vectorUpsert(projectPath: string, pageId: string, embedding: number[]): Promise<void> {
-  await invoke("vector_upsert", {
+  await apiPost("/api/vector/upsert", {
     projectPath: normalizePath(projectPath),
     pageId,
-    embedding: embedding.map((v) => Math.fround(v)), // ensure f32
+    embedding: embedding.map((v) => Math.fround(v)),
   })
 }
 
 async function vectorSearchLance(projectPath: string, queryEmbedding: number[], topK: number): Promise<Array<{ page_id: string; score: number }>> {
-  return await invoke("vector_search", {
+  return await apiPost<Array<{ page_id: string; score: number }>>("/api/vector/search", {
     projectPath: normalizePath(projectPath),
     queryEmbedding: queryEmbedding.map((v) => Math.fround(v)),
     topK,
@@ -56,24 +56,18 @@ async function vectorSearchLance(projectPath: string, queryEmbedding: number[], 
 }
 
 async function vectorDelete(projectPath: string, pageId: string): Promise<void> {
-  await invoke("vector_delete", {
+  await apiPost("/api/vector/delete", {
     projectPath: normalizePath(projectPath),
     pageId,
   })
 }
 
 async function vectorCount(projectPath: string): Promise<number> {
-  return await invoke("vector_count", {
-    projectPath: normalizePath(projectPath),
-  })
+  return await apiGet<number>(`/api/vector/count?projectPath=${encodeURIComponent(normalizePath(projectPath))}`)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/**
- * Embed a single page and store in LanceDB.
- * Called after ingest to keep embeddings up to date.
- */
 export async function embedPage(
   projectPath: string,
   pageId: string,
@@ -94,10 +88,6 @@ export async function embedPage(
   }
 }
 
-/**
- * Embed all wiki pages that are not yet indexed.
- * Called on first enable or when model changes.
- */
 export async function embedAllPages(
   projectPath: string,
   embeddingConfig: EmbeddingConfig,
@@ -152,10 +142,6 @@ export async function embedAllPages(
   return done
 }
 
-/**
- * Search wiki pages by semantic similarity via LanceDB.
- * Returns page IDs sorted by similarity score.
- */
 export async function searchByEmbedding(
   projectPath: string,
   query: string,
@@ -170,17 +156,14 @@ export async function searchByEmbedding(
   try {
     const t0 = performance.now()
     const results = await vectorSearchLance(projectPath, queryEmb, topK)
-    console.log(`[Embedding] LanceDB search: ${results.length} results in ${Math.round(performance.now() - t0)}ms`)
+    console.log(`[Embedding] Vector search: ${results.length} results in ${Math.round(performance.now() - t0)}ms`)
     return results.map((r) => ({ id: r.page_id, score: r.score }))
   } catch (err) {
-    console.log(`[Embedding] LanceDB search failed: ${err instanceof Error ? err.message : err}`)
+    console.log(`[Embedding] Vector search failed: ${err instanceof Error ? err.message : err}`)
     return []
   }
 }
 
-/**
- * Remove a page from the vector index.
- */
 export async function removePageEmbedding(
   projectPath: string,
   pageId: string,
@@ -192,9 +175,6 @@ export async function removePageEmbedding(
   }
 }
 
-/**
- * Get the number of indexed vectors.
- */
 export async function getEmbeddingCount(
   projectPath: string,
 ): Promise<number> {

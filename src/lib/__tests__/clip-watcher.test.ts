@@ -31,7 +31,7 @@ describe("clip-watcher", () => {
     startClipWatcher()
     expect(mockFetch).not.toHaveBeenCalled()
     vi.advanceTimersByTime(3000)
-    expect(mockFetch).toHaveBeenCalledWith("http://127.0.0.1:19827/clips/pending", { method: "GET" })
+    expect(mockFetch).toHaveBeenCalledWith("/api/clip/status", { method: "GET" })
   })
 
   it("does not start a second interval if already running", () => {

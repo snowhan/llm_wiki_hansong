@@ -83,15 +83,9 @@ function flattenMdFiles(nodes: FileNode[]): FileNode[] {
 }
 
 function extractTitle(content: string, fileName: string): string {
-  // Try YAML frontmatter title
   const frontmatterMatch = content.match(/^---\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m)
   if (frontmatterMatch) return frontmatterMatch[1].trim()
 
-  // Try first heading
-  const headingMatch = content.match(/^#\s+(.+)$/m)
-  if (headingMatch) return headingMatch[1].trim()
-
-  // Fall back to filename
   return fileName.replace(/\.md$/, "").replace(/-/g, " ")
 }
 

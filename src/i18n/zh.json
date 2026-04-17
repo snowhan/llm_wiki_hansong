@@ -32,7 +32,13 @@
     "cancel": "取消",
     "create": "创建",
     "creating": "创建中...",
-    "namePathRequired": "名称和路径不能为空"
+    "namePathRequired": "名称和路径不能为空",
+    "go": "前往",
+    "confirm": "确定",
+    "browseDirectory": "浏览目录",
+    "noSubdirs": "没有子目录",
+    "enterPath": "请输入路径后点击「前往」",
+    "selected": "已选"
   },
   "sources": {
     "title": "原始资料",

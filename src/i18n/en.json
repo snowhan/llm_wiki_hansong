@@ -32,7 +32,13 @@
     "cancel": "Cancel",
     "create": "Create",
     "creating": "Creating...",
-    "namePathRequired": "Name and path are required"
+    "namePathRequired": "Name and path are required",
+    "go": "Go",
+    "confirm": "Confirm",
+    "browseDirectory": "Browse Directory",
+    "noSubdirs": "No subdirectories",
+    "enterPath": "Enter a path and click Go",
+    "selected": "Selected"
   },
   "sources": {
     "title": "Raw Sources",

@@ -102,7 +102,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
           flexShrink: 0,
           alignItems: "center",
           justifyContent: "center",
-          borderRadius: "50%",
+          borderRadius: "10px",
           ...(isSystem
             ? {
                 bgcolor: "action.selected",
@@ -114,19 +114,19 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                   color: "primary.contrastText",
                 }
               : {
-                  bgcolor: "action.hover",
-                  color: "text.secondary",
+                  bgcolor: "rgba(194, 65, 12, 0.06)",
+                  color: "primary.main",
                 }),
         }}
       >
-        {isUser ? <PersonIcon sx={{ fontSize: 16 }} /> : <SmartToyIcon sx={{ fontSize: 16 }} />}
+        {isUser ? <PersonIcon sx={{ fontSize: 14 }} /> : <SmartToyIcon sx={{ fontSize: 14 }} />}
       </Box>
       <Stack spacing={0.75} sx={{ maxWidth: "80%" }}>
         <Box
           sx={{
-            borderRadius: 2,
-            px: 1.5,
-            py: 1,
+            borderRadius: "14px",
+            px: 1.75,
+            py: 1.25,
             fontSize: "0.875rem",
             ...(isUser
               ? {
@@ -134,8 +134,10 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                   color: "primary.contrastText",
                 }
               : {
-                  bgcolor: "action.hover",
+                  bgcolor: "background.paper2",
                   color: "text.primary",
+                  border: "1px solid",
+                  borderColor: "divider",
                 }),
           }}
         >
@@ -171,8 +173,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                   color: "text.secondary",
                   "&:hover": {
                     color: "primary.main",
-                    bgcolor: (theme) =>
-                      theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+                    bgcolor: "rgba(194, 65, 12, 0.06)",
                   },
                 }}
                 startIcon={<RefreshIcon sx={{ fontSize: 12 }} />}
@@ -219,8 +220,7 @@ function CopyButton({ content }: { content: string }) {
         color: "text.secondary",
         "&:hover": {
           color: "primary.main",
-          bgcolor: (theme) =>
-            theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+          bgcolor: "rgba(194, 65, 12, 0.06)",
         },
       }}
       startIcon={copied ? <CheckIcon sx={{ fontSize: 12 }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
@@ -345,8 +345,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
         color: "text.secondary",
         "&:hover": {
           color: "primary.main",
-          bgcolor: (theme) =>
-            theme.palette.mode === "light" ? "rgba(25, 118, 210, 0.08)" : "rgba(144, 202, 249, 0.12)",
+          bgcolor: "rgba(194, 65, 12, 0.06)",
         },
       }}
       startIcon={<BookmarkAddIcon sx={{ fontSize: 12 }} />}
@@ -632,22 +631,24 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
           flexShrink: 0,
           alignItems: "center",
           justifyContent: "center",
-          borderRadius: "50%",
-          bgcolor: "action.hover",
-          color: "text.secondary",
+          borderRadius: "10px",
+          bgcolor: "rgba(194, 65, 12, 0.06)",
+          color: "primary.main",
         }}
       >
-        <SmartToyIcon sx={{ fontSize: 16 }} />
+        <SmartToyIcon sx={{ fontSize: 14 }} />
       </Box>
       <Box
         sx={{
           maxWidth: "80%",
-          borderRadius: 2,
-          px: 1.5,
-          py: 1,
+          borderRadius: "14px",
+          px: 1.75,
+          py: 1.25,
           fontSize: "0.875rem",
-          bgcolor: "action.hover",
+          bgcolor: "background.paper2",
           color: "text.primary",
+          border: "1px solid",
+          borderColor: "divider",
         }}
       >
         {isThinking ? (
@@ -749,12 +750,10 @@ function StreamingThinkingBlock({ content }: { content: string }) {
   return (
     <Box
       sx={{
-        borderRadius: 1,
+        borderRadius: "10px",
         border: "1px dashed",
-        borderColor: (theme) =>
-          theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.35)" : "rgba(251, 191, 36, 0.35)",
-        bgcolor: (theme) =>
-          theme.palette.mode === "light" ? "rgba(255, 251, 235, 0.9)" : "rgba(120, 53, 15, 0.15)",
+        borderColor: "rgba(194, 65, 12, 0.2)",
+        bgcolor: "rgba(194, 65, 12, 0.03)",
         px: 1.25,
         py: 1,
       }}
@@ -762,14 +761,14 @@ function StreamingThinkingBlock({ content }: { content: string }) {
       <Stack direction="row" spacing={0.75} sx={{ mb: 1, alignItems: "center" }}>
         <Box
           component="span"
-          sx={{ fontSize: "0.875rem", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
+          sx={{ fontSize: "0.75rem", animation: `${pulseAnim} 1.5s ease-in-out infinite`, color: "primary.main" }}
         >
-          💭
+          &#x25CF;
         </Box>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: "warning.dark" }}>
+        <Typography variant="caption" sx={{ fontWeight: 600, color: "primary.main" }}>
           {t("chat.thinking")}
         </Typography>
-        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "warning.main", opacity: 0.6 }}>
+        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.tertiary" }}>
           {t("chat.lines", { count: lines.length })}
         </Typography>
       </Stack>
@@ -778,9 +777,9 @@ function StreamingThinkingBlock({ content }: { content: string }) {
           height: "5lh",
           overflow: "hidden",
           fontSize: "0.75rem",
-          fontFamily: "ui-monospace, monospace",
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
           lineHeight: 1.6,
-          color: "warning.dark",
+          color: "#78716C",
         }}
       >
         {visibleLines.map((line, i) => (
@@ -790,7 +789,7 @@ function StreamingThinkingBlock({ content }: { content: string }) {
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
-              opacity: 0.4 + (i / Math.max(visibleLines.length, 1)) * 0.6,
+              opacity: 0.3 + (i / Math.max(visibleLines.length, 1)) * 0.7,
             }}
           >
             {line}
@@ -798,7 +797,7 @@ function StreamingThinkingBlock({ content }: { content: string }) {
         ))}
         <Box
           component="span"
-          sx={{ color: "warning.main", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
+          sx={{ color: "primary.main", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
         >
           ▊
         </Box>
@@ -817,12 +816,10 @@ function ThinkingBlock({ content }: { content: string }) {
     <Box
       sx={{
         mb: 1,
-        borderRadius: 1,
+        borderRadius: "10px",
         border: "1px dashed",
-        borderColor: (theme) =>
-          theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.35)" : "rgba(251, 191, 36, 0.35)",
-        bgcolor: (theme) =>
-          theme.palette.mode === "light" ? "rgba(255, 251, 235, 0.9)" : "rgba(120, 53, 15, 0.15)",
+        borderColor: "rgba(194, 65, 12, 0.15)",
+        bgcolor: "rgba(194, 65, 12, 0.02)",
       }}
     >
       <Button
@@ -837,17 +834,17 @@ function ThinkingBlock({ content }: { content: string }) {
           minHeight: 0,
           textTransform: "none",
           fontSize: "0.75rem",
-          color: "warning.dark",
-          "&:hover": { bgcolor: (theme) => (theme.palette.mode === "light" ? "rgba(251, 191, 36, 0.2)" : "rgba(120, 53, 15, 0.25)") },
+          color: "text.secondary",
+          "&:hover": { bgcolor: "rgba(194, 65, 12, 0.04)" },
         }}
       >
-        <Box component="span" sx={{ fontSize: "0.875rem" }}>
-          💭
+        <Box component="span" sx={{ fontSize: "0.625rem", color: "primary.main" }}>
+          &#x25CF;
         </Box>
         <Typography variant="caption" sx={{ flex: 1, textAlign: "left", fontWeight: 600 }}>
           {t("chat.thoughtForLines", { count: lines.length })}
         </Typography>
-        <Typography variant="caption" sx={{ color: "warning.main", opacity: 0.7 }}>
+        <Typography variant="caption" sx={{ color: "text.tertiary" }}>
           {expanded ? "▼" : "▶"}
         </Typography>
       </Button>
@@ -855,16 +852,15 @@ function ThinkingBlock({ content }: { content: string }) {
         <Box
           sx={{
             borderTop: "1px solid",
-            borderColor: (theme) =>
-              theme.palette.mode === "light" ? "rgba(245, 158, 11, 0.2)" : "rgba(251, 191, 36, 0.2)",
+            borderColor: "rgba(194, 65, 12, 0.1)",
             px: 1.25,
             py: 1,
             fontSize: "0.75rem",
-            color: "warning.dark",
+            color: "#78716C",
             whiteSpace: "pre-wrap",
             maxHeight: 256,
             overflowY: "auto",
-            fontFamily: "ui-monospace, monospace",
+            fontFamily: "'JetBrains Mono', ui-monospace, monospace",
             lineHeight: 1.6,
           }}
         >

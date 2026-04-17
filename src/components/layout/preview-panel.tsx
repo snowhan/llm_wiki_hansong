@@ -9,7 +9,7 @@ import { readFile, writeFile } from "@/commands/fs"
 import { getFileCategory, isBinary } from "@/lib/file-types"
 import { WikiEditor } from "@/components/editor/wiki-editor"
 import { FilePreview } from "@/components/editor/file-preview"
-import { getFileName } from "@/lib/path-utils"
+import { getFileName, splitFrontmatter } from "@/lib/path-utils"
 
 export function PreviewPanel() {
   const { t } = useTranslation()
@@ -37,17 +37,19 @@ export function PreviewPanel() {
       .catch((err) => setFileContent(t("preview.errorLoading", { err })))
   }, [selectedFile, setFileContent, t])
 
+  const { frontmatter, body: markdownBody } = splitFrontmatter(fileContent)
+
   const handleSave = useCallback(
     (markdown: string) => {
       if (!selectedFile) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        writeFile(selectedFile, markdown).catch((err) =>
+        writeFile(selectedFile, frontmatter + markdown).catch((err) =>
           console.error("Failed to save:", err)
         )
       }, 1000)
     },
-    [selectedFile]
+    [selectedFile, frontmatter]
   )
 
   useEffect(() => {
@@ -105,7 +107,7 @@ export function PreviewPanel() {
         {category === "markdown" ? (
           <WikiEditor
             key={selectedFile}
-            content={fileContent}
+            content={markdownBody}
             onSave={handleSave}
           />
         ) : (

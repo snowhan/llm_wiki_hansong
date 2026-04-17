@@ -1,21 +1,20 @@
 import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
-import { open } from "@tauri-apps/plugin-dialog"
 import Box from "@mui/material/Box"
-import CircularProgress from "@mui/material/CircularProgress"
 import Typography from "@mui/material/Typography"
 import i18n from "@/i18n"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useChatStore } from "@/stores/chat-store"
 import { listDirectory, openProject } from "@/commands/fs"
-import { getLastProject, getRecentProjects, saveLastProject, loadLlmConfig, loadLanguage, loadSearchApiConfig, loadEmbeddingConfig } from "@/lib/project-store"
+import { getLastProject, saveLastProject, loadLlmConfig, loadLanguage, loadSearchApiConfig, loadEmbeddingConfig } from "@/lib/project-store"
 import { loadReviewItems, loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
+import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import type { WikiProject } from "@/types/wiki"
 
 function App() {
@@ -26,6 +25,7 @@ function App() {
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [showBrowseDialog, setShowBrowseDialog] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -81,20 +81,6 @@ function App() {
         console.error("Failed to restore ingest queue:", err)
       )
     })
-    fetch("http://127.0.0.1:19827/project", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: proj.path }),
-    }).catch(() => {})
-
-    getRecentProjects().then((recents) => {
-      const projects = recents.map((p) => ({ name: p.name, path: p.path }))
-      fetch("http://127.0.0.1:19827/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projects }),
-      }).catch(() => {})
-    }).catch(() => {})
     try {
       const tree = await listDirectory(proj.path)
       setFileTree(tree)
@@ -133,15 +119,13 @@ function App() {
     }
   }
 
-  async function handleOpenProject() {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: t("app.openWikiProject"),
-    })
-    if (!selected) return
+  function handleOpenProject() {
+    setShowBrowseDialog(true)
+  }
+
+  async function handleBrowseSelect(selectedPath: string) {
     try {
-      const proj = await openProject(selected)
+      const proj = await openProject(selectedPath)
       await handleProjectOpened(proj)
     } catch (err) {
       window.alert(t("app.failedToOpen", { err }))
@@ -156,9 +140,28 @@ function App() {
 
   if (loading) {
     return (
-      <Box sx={{ display: "flex", height: "100vh", alignItems: "center", justifyContent: "center", bgcolor: "background.paper2", color: "text.secondary" }}>
-        <CircularProgress size={24} sx={{ mr: 1 }} />
-        <Typography>{t("app.loading")}</Typography>
+      <Box sx={{
+        display: "flex",
+        height: "100vh",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "#141218",
+        color: "rgba(245,243,239,0.5)",
+        flexDirection: "column",
+        gap: 2,
+      }}>
+        <Box sx={{
+          width: 48,
+          height: 2,
+          bgcolor: "#C2410C",
+          borderRadius: 1,
+          animation: "loadPulse 2s ease-in-out infinite",
+          "@keyframes loadPulse": {
+            "0%, 100%": { opacity: 0.3, width: 48 },
+            "50%": { opacity: 1, width: 72 },
+          },
+        }} />
+        <Typography sx={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>{t("app.loading")}</Typography>
       </Box>
     )
   }
@@ -176,6 +179,12 @@ function App() {
           onOpenChange={setShowCreateDialog}
           onCreated={handleProjectOpened}
         />
+        <ServerDirBrowser
+          open={showBrowseDialog}
+          onClose={() => setShowBrowseDialog(false)}
+          onSelect={handleBrowseSelect}
+          title={t("app.openWikiProject")}
+        />
       </>
     )
   }
@@ -187,6 +196,12 @@ function App() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onCreated={handleProjectOpened}
+      />
+      <ServerDirBrowser
+        open={showBrowseDialog}
+        onClose={() => setShowBrowseDialog(false)}
+        onSelect={handleBrowseSelect}
+        title={t("app.openWikiProject")}
       />
     </>
   )

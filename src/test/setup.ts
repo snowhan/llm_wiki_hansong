@@ -1,42 +1,14 @@
 import "@testing-library/jest-dom"
 import { vi } from "vitest"
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-  convertFileSrc: vi.fn((src: string) => `asset://localhost/${src}`),
-}))
-
-vi.mock("@tauri-apps/plugin-dialog", () => ({
-  open: vi.fn(),
-  save: vi.fn(),
-  message: vi.fn(),
-  ask: vi.fn(),
-  confirm: vi.fn(),
-}))
-
-vi.mock("@tauri-apps/plugin-store", () => {
-  const storeData = new Map<string, unknown>()
-  return {
-    load: vi.fn().mockResolvedValue({
-      get: vi.fn((key: string) => Promise.resolve(storeData.get(key))),
-      set: vi.fn((key: string, value: unknown) => {
-        storeData.set(key, value)
-        return Promise.resolve()
-      }),
-      delete: vi.fn((key: string) => {
-        storeData.delete(key)
-        return Promise.resolve()
-      }),
-      clear: vi.fn(() => {
-        storeData.clear()
-        return Promise.resolve()
-      }),
-    }),
-  }
-})
-
-vi.mock("@tauri-apps/plugin-http", () => ({
-  fetch: vi.fn(),
+vi.mock("@/lib/api-client", () => ({
+  apiPost: vi.fn(),
+  apiGet: vi.fn(),
+  apiPut: vi.fn(),
+  apiDelete: vi.fn(),
+  apiUpload: vi.fn(),
+  apiStream: vi.fn(),
+  mediaUrl: vi.fn((path: string) => `/api/media?path=${encodeURIComponent(path)}`),
 }))
 
 vi.mock("@/commands/fs", () => ({
@@ -45,9 +17,15 @@ vi.mock("@/commands/fs", () => ({
   deleteFile: vi.fn(),
   listDirectory: vi.fn(),
   createDirectory: vi.fn(),
+  copyFile: vi.fn(),
+  copyDirectory: vi.fn(),
+  preprocessFile: vi.fn(),
+  findRelatedWikiPages: vi.fn(),
+  createProject: vi.fn(),
+  openProject: vi.fn(),
+  clipServerStatus: vi.fn().mockResolvedValue("running"),
   exists: vi.fn(),
   rename: vi.fn(),
-  clipServerStatus: vi.fn().mockResolvedValue("running"),
 }))
 
 vi.mock("@/i18n", () => ({

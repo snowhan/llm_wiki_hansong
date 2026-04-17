@@ -48,7 +48,7 @@ select:-webkit-autofill {
   transition: background-color 5000s ease-in-out 0s !important;
 }
 
-/* TipTap editor styles */
+/* TipTap editor styles — "Copper & Ink" editorial aesthetic */
 .tiptap.ProseMirror {
   outline: none;
   min-height: 300px;
@@ -59,45 +59,78 @@ select:-webkit-autofill {
   margin-top: 0.75em;
 }
 
-.tiptap h1 { font-size: 2em; font-weight: 700; }
-.tiptap h2 { font-size: 1.5em; font-weight: 600; }
-.tiptap h3 { font-size: 1.25em; font-weight: 600; }
-.tiptap h4 { font-size: 1.1em; font-weight: 600; }
+.tiptap h1 {
+  font-family: 'Playfair Display', 'PingFang SC', Georgia, serif;
+  font-size: 2em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #1C1917;
+  line-height: 1.2;
+}
+
+.tiptap h2 {
+  font-family: 'Playfair Display', 'PingFang SC', Georgia, serif;
+  font-size: 1.5em;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: #1C1917;
+  line-height: 1.3;
+}
+
+.tiptap h3 {
+  font-family: 'Playfair Display', 'PingFang SC', Georgia, serif;
+  font-size: 1.25em;
+  font-weight: 600;
+  color: #1C1917;
+  line-height: 1.35;
+}
+
+.tiptap h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: #292524;
+}
 
 .tiptap pre {
-  background: #1e1e2e;
-  color: #cdd6f4;
-  font-family: 'JetBrains Mono', monospace;
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
+  background: #1C1917;
+  color: #E7E5E4;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
   overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.65;
+  border: 1px solid rgba(28, 25, 23, 0.15);
 }
 
 .tiptap pre code {
   background: none;
   color: inherit;
-  font-size: 0.875rem;
+  font-size: inherit;
   padding: 0;
 }
 
 .tiptap code {
-  background-color: #F1F2F8;
-  border-radius: 4px;
-  color: #3248F2;
-  font-size: 0.875em;
-  padding: 0.2em 0.4em;
+  background-color: #F5F3EF;
+  border-radius: 6px;
+  color: #C2410C;
+  font-size: 0.85em;
+  padding: 0.15em 0.45em;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  border: 1px solid rgba(28, 25, 23, 0.06);
 }
 
 .tiptap blockquote {
-  border-left: 3px solid #3248F2;
+  border-left: 3px solid #C2410C;
   margin: 1rem 0;
-  padding-left: 1rem;
-  color: #3f4441;
+  padding-left: 1.25rem;
+  color: #78716C;
+  font-style: italic;
 }
 
 .tiptap hr {
   border: none;
-  border-top: 1px solid #ECEEF1;
+  border-top: 1px solid rgba(28, 25, 23, 0.08);
   margin: 1.5rem 0;
 }
 
@@ -109,24 +142,26 @@ select:-webkit-autofill {
 
 .tiptap table td,
 .tiptap table th {
-  border: 1px solid #ECEEF1;
+  border: 1px solid rgba(28, 25, 23, 0.07);
   padding: 8px 12px;
   min-width: 100px;
 }
 
 .tiptap table th {
-  background: #F8F9FA;
+  background: #F5F3EF;
   font-weight: 600;
+  color: #78716C;
+  font-size: 0.875em;
 }
 
 .tiptap img {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: 12px;
 }
 
 .tiptap mark {
-  background-color: #fff3bf;
+  background-color: rgba(194, 65, 12, 0.12);
   border-radius: 2px;
   padding: 0 2px;
 }
@@ -148,9 +183,16 @@ select:-webkit-autofill {
 }
 
 .tiptap a {
-  color: #3248F2;
+  color: #C2410C;
   text-decoration: underline;
+  text-decoration-color: rgba(194, 65, 12, 0.3);
+  text-underline-offset: 3px;
   cursor: pointer;
+  transition: text-decoration-color 0.2s ease;
+}
+
+.tiptap a:hover {
+  text-decoration-color: #C2410C;
 }
 
 .tiptap .katex-display {

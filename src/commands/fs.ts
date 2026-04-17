@@ -1,55 +1,100 @@
-import { invoke } from "@tauri-apps/api/core"
+import { apiPost } from "@/lib/api-client"
 import type { FileNode, WikiProject } from "@/types/wiki"
 
 export async function readFile(path: string): Promise<string> {
-  return invoke<string>("read_file", { path })
+  const res = await apiPost<{ content: string }>("/api/fs/read", { path })
+  return res.content
 }
 
 export async function writeFile(path: string, contents: string): Promise<void> {
-  return invoke<void>("write_file", { path, contents })
+  await apiPost("/api/fs/write", { path, contents })
 }
 
 export async function listDirectory(path: string): Promise<FileNode[]> {
-  return invoke<FileNode[]>("list_directory", { path })
+  return apiPost<FileNode[]>("/api/fs/list", { path })
 }
 
 export async function copyFile(
   source: string,
   destination: string
 ): Promise<void> {
-  return invoke("copy_file", { source, destination })
+  await apiPost("/api/fs/copy", { source, dest: destination })
+}
+
+export async function copyDirectory(
+  source: string,
+  destination: string
+): Promise<string[]> {
+  return apiPost<string[]>("/api/fs/copy-directory", { source, dest: destination })
 }
 
 export async function preprocessFile(path: string): Promise<string> {
-  return invoke<string>("preprocess_file", { path })
+  const res = await fetch("/api/preprocess", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error("No response body")
+
+  const decoder = new TextDecoder()
+  let result = ""
+  let buffer = ""
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split("\n")
+    buffer = lines.pop() ?? ""
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith("data: ")) {
+        try {
+          const event = JSON.parse(trimmed.slice(6))
+          if (event.done && event.content) result = event.content
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  return result
 }
 
 export async function deleteFile(path: string): Promise<void> {
-  return invoke("delete_file", { path })
+  await apiPost("/api/fs/delete", { path })
 }
 
 export async function findRelatedWikiPages(
   projectPath: string,
   sourceName: string
 ): Promise<string[]> {
-  return invoke<string[]>("find_related_wiki_pages", { projectPath, sourceName })
+  return apiPost<string[]>("/api/fs/find-related", { projectPath, name: sourceName })
 }
 
 export async function createDirectory(path: string): Promise<void> {
-  return invoke<void>("create_directory", { path })
+  await apiPost("/api/fs/mkdir", { path })
 }
 
 export async function createProject(
   name: string,
   path: string,
 ): Promise<WikiProject> {
-  return invoke<WikiProject>("create_project", { name, path })
+  return apiPost<WikiProject>("/api/project/create", { name, parentPath: path })
 }
 
 export async function openProject(path: string): Promise<WikiProject> {
-  return invoke<WikiProject>("open_project", { path })
+  return apiPost<WikiProject>("/api/project/open", { path })
 }
 
 export async function clipServerStatus(): Promise<string> {
-  return invoke<string>("clip_server_status")
+  try {
+    const res = await fetch("/api/clip/status")
+    if (!res.ok) return "error"
+    const data = await res.json() as { status: string }
+    return data.status
+  } catch {
+    return "error"
+  }
 }

@@ -65,7 +65,6 @@ function buildExtensions(options: GetEditorExtensionsOptions = {}): Extensions {
     Link.configure({
       autolink: true,
       openOnClick: false,
-      protocols: [{ scheme: "wiki", optionalSlashes: true }],
     }),
     Subscript,
     Superscript,

@@ -22,7 +22,8 @@ vi.mock("../llm-providers", () => ({
   })),
 }))
 
-const { fetch: mockFetch } = await import("@tauri-apps/plugin-http")
+const mockFetch = vi.fn()
+vi.stubGlobal("fetch", mockFetch)
 
 const config: LlmConfig = {
   provider: "openai",
@@ -64,7 +65,7 @@ describe("streamChat", () => {
       'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
       "data: [DONE]\n\n",
     ])
-    vi.mocked(mockFetch).mockResolvedValue(new Response(stream, { status: 200 }))
+    mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb, isDone } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -73,7 +74,7 @@ describe("streamChat", () => {
   })
 
   it("calls onError on non-ok response", async () => {
-    vi.mocked(mockFetch).mockResolvedValue(new Response("Bad request", { status: 400, statusText: "Bad Request" }))
+    mockFetch.mockResolvedValue(new Response("Bad request", { status: 400, statusText: "Bad Request" }))
 
     const { errors, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -84,7 +85,7 @@ describe("streamChat", () => {
   it("calls onError when response body is null", async () => {
     const resp = new Response(null, { status: 200 })
     Object.defineProperty(resp, "body", { value: null })
-    vi.mocked(mockFetch).mockResolvedValue(resp)
+    mockFetch.mockResolvedValue(resp)
 
     const { errors, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -96,7 +97,7 @@ describe("streamChat", () => {
     const ac = new AbortController()
     ac.abort()
     const err = Object.assign(new Error("Aborted"), { name: "AbortError" })
-    vi.mocked(mockFetch).mockRejectedValue(err)
+    mockFetch.mockRejectedValue(err)
 
     const { cb, isDone, errors } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb, ac.signal)
@@ -105,7 +106,7 @@ describe("streamChat", () => {
   })
 
   it("calls onError on network error (non-abort)", async () => {
-    vi.mocked(mockFetch).mockRejectedValue(new Error("Network failure"))
+    mockFetch.mockRejectedValue(new Error("Network failure"))
 
     const { errors, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -118,7 +119,7 @@ describe("streamChat", () => {
       'data: {"choices":[{"delta":{"con',
       'tent":"split"}}]}\n\ndata: [DONE]\n\n',
     ])
-    vi.mocked(mockFetch).mockResolvedValue(new Response(stream, { status: 200 }))
+    mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -129,7 +130,7 @@ describe("streamChat", () => {
     const stream = makeSSEStream([
       'data: {"choices":[{"delta":{"content":"last"}}]}',
     ])
-    vi.mocked(mockFetch).mockResolvedValue(new Response(stream, { status: 200 }))
+    mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)
@@ -137,7 +138,7 @@ describe("streamChat", () => {
   })
 
   it("handles Load failed as timeout/network error", async () => {
-    vi.mocked(mockFetch).mockRejectedValue(new Error("Load failed"))
+    mockFetch.mockRejectedValue(new Error("Load failed"))
 
     const { errors, cb } = makeCallbacks()
     await streamChat(config, [{ role: "user", content: "hi" }], cb)

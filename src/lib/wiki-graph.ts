@@ -130,9 +130,6 @@ function extractTitle(content: string, fileName: string): string {
   const frontmatterTitleMatch = content.match(/^---\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m)
   if (frontmatterTitleMatch) return frontmatterTitleMatch[1].trim()
 
-  const headingMatch = content.match(/^#\s+(.+)$/m)
-  if (headingMatch) return headingMatch[1].trim()
-
   return fileName.replace(/\.md$/, "").replace(/-/g, " ")
 }
 

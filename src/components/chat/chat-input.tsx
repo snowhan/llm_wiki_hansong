@@ -54,6 +54,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
         borderTop: 1,
         borderColor: "divider",
         p: 1.5,
+        bgcolor: "background.paper",
       }}
     >
       <TextField
@@ -71,7 +72,8 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
         sx={{
           flex: 1,
           "& .MuiInputBase-root": {
-            bgcolor: "background.paper",
+            bgcolor: "background.paper2",
+            borderRadius: "12px",
           },
           "& textarea": {
             maxHeight: 120,
@@ -86,7 +88,11 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
           color="error"
           onClick={onStop}
           title={t("chat.stopGeneration")}
-          sx={{ flexShrink: 0 }}
+          sx={{
+            flexShrink: 0,
+            bgcolor: "rgba(185,28,28,0.08)",
+            "&:hover": { bgcolor: "rgba(185,28,28,0.15)" },
+          }}
           size="small"
         >
           <StopIcon sx={{ fontSize: 18 }} />
@@ -97,7 +103,12 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: ChatInpu
           onClick={handleSend}
           disabled={!value.trim()}
           title={t("chat.sendMessage")}
-          sx={{ flexShrink: 0 }}
+          sx={{
+            flexShrink: 0,
+            bgcolor: value.trim() ? "rgba(194,65,12,0.08)" : "transparent",
+            "&:hover": { bgcolor: "rgba(194,65,12,0.15)" },
+            transition: "all 0.2s ease",
+          }}
           size="small"
         >
           <SendIcon sx={{ fontSize: 18 }} />

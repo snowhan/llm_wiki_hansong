@@ -623,6 +623,7 @@ export function GraphView() {
             key={sigmaKey}
             style={{ width: "100%", height: "100%", background: "transparent" }}
             settings={{
+              allowInvalidContainer: true,
               renderEdgeLabels: true,
               defaultEdgeColor: "#cbd5e1",
               defaultNodeColor: "#94a3b8",

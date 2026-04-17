@@ -63,16 +63,49 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   }, [])
 
   const navButtonSx = (active: boolean) => ({
-    position: "relative",
-    width: 40,
-    height: 40,
-    borderRadius: 1,
-    color: active ? "text.primary" : "text.secondary",
-    bgcolor: active ? "action.selected" : "transparent",
+    position: "relative" as const,
+    width: 36,
+    height: 36,
+    borderRadius: "10px",
+    color: active ? "#F5F3EF" : "rgba(245,243,239,0.4)",
+    bgcolor: active ? "rgba(194, 65, 12, 0.2)" : "transparent",
+    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    "&::before": active ? {
+      content: '""',
+      position: "absolute",
+      left: -8,
+      top: "50%",
+      transform: "translateY(-50%)",
+      width: 3,
+      height: 20,
+      borderRadius: "0 3px 3px 0",
+      bgcolor: "#C2410C",
+      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    } : {},
     "&:hover": {
-      bgcolor: active ? "action.selected" : "action.hover",
-      color: "text.primary",
+      bgcolor: active ? "rgba(194, 65, 12, 0.25)" : "rgba(245,243,239,0.06)",
+      color: "#F5F3EF",
     },
+  })
+
+  const badgeSx = (color: string) => ({
+    position: "absolute" as const,
+    top: 0,
+    right: 0,
+    minWidth: 15,
+    height: 15,
+    px: 0.25,
+    borderRadius: "999px",
+    bgcolor: color,
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    lineHeight: 1,
+    pointerEvents: "none" as const,
+    boxShadow: "0 0 0 2px #141218",
   })
 
   return (
@@ -81,20 +114,25 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
       sx={{
         alignItems: "center",
         height: "100%",
-        width: 48,
+        width: 56,
         flexShrink: 0,
-        borderRight: 1,
-        borderColor: "divider",
-        bgcolor: (theme) => theme.palette.action.hover,
-        py: 1,
+        bgcolor: "#141218",
+        py: 1.5,
+        gap: 0,
       }}
     >
-      <Box sx={{ mb: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ mb: 2.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Box
           component="img"
           src={logoImg}
           alt="LLM Wiki"
-          sx={{ height: 32, width: 32, borderRadius: "22%" }}
+          sx={{
+            height: 32,
+            width: 32,
+            borderRadius: "10px",
+            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            border: "1px solid rgba(194, 65, 12, 0.15)",
+          }}
         />
       </Box>
 
@@ -107,36 +145,18 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
                 onClick={() => setActiveView(view)}
                 sx={navButtonSx(activeView === view)}
               >
-                <Icon sx={{ fontSize: 20 }} />
+                <Icon sx={{ fontSize: 18 }} />
               </IconButton>
               {view === "review" && pendingCount > 0 && (
-                <Box
-                  component="span"
-                  sx={{
-                    position: "absolute",
-                    top: 2,
-                    right: 2,
-                    minWidth: 16,
-                    height: 16,
-                    px: 0.25,
-                    borderRadius: "999px",
-                    bgcolor: "primary.main",
-                    color: "primary.contrastText",
-                    fontSize: 10,
-                    fontWeight: 700,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    lineHeight: 1,
-                    pointerEvents: "none",
-                  }}
-                >
+                <Box component="span" sx={badgeSx("#B91C1C")}>
                   {pendingCount > 99 ? "99+" : pendingCount}
                 </Box>
               )}
             </Box>
           </Tooltip>
         ))}
+
+        <Box sx={{ width: 20, height: 1, bgcolor: "rgba(245,243,239,0.06)", my: 1, borderRadius: 1 }} />
 
         <Tooltip title={t("iconSidebar.deepResearch")} placement="right" enterDelay={300}>
           <Box sx={{ position: "relative" }}>
@@ -145,30 +165,10 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               onClick={() => toggleResearchPanel(!researchPanelOpen)}
               sx={navButtonSx(researchPanelOpen)}
             >
-              <Explore sx={{ fontSize: 20 }} />
+              <Explore sx={{ fontSize: 18 }} />
             </IconButton>
             {researchActiveCount > 0 && (
-              <Box
-                component="span"
-                sx={{
-                  position: "absolute",
-                  top: 2,
-                  right: 2,
-                  minWidth: 16,
-                  height: 16,
-                  px: 0.25,
-                  borderRadius: "999px",
-                  bgcolor: "info.main",
-                  color: "info.contrastText",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  lineHeight: 1,
-                  pointerEvents: "none",
-                }}
-              >
+              <Box component="span" sx={badgeSx("#0369A1")}>
                 {researchActiveCount}
               </Box>
             )}
@@ -192,24 +192,28 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
           <IconButton size="small" sx={{ width: 24, height: 24, p: 0 }}>
             <Box
               sx={{
-                width: 10,
-                height: 10,
+                width: 8,
+                height: 8,
                 borderRadius: "50%",
                 bgcolor:
                   daemonStatus === "running"
-                    ? "success.dark"
+                    ? "#15803D"
                     : daemonStatus === "starting"
-                      ? "warning.main"
-                      : daemonStatus === "port_conflict"
-                        ? "error.main"
-                        : "error.main",
+                      ? "#D97706"
+                      : "#B91C1C",
+                boxShadow:
+                  daemonStatus === "running"
+                    ? "0 0 8px rgba(21,128,61,0.5)"
+                    : daemonStatus === "starting"
+                      ? "0 0 8px rgba(217,119,6,0.5)"
+                      : "0 0 8px rgba(185,28,28,0.5)",
                 animation:
                   daemonStatus === "starting" || (daemonStatus !== "running" && daemonStatus !== "port_conflict")
-                    ? "pulse 1.5s ease-in-out infinite"
+                    ? "pulse 2s ease-in-out infinite"
                     : "none",
                 "@keyframes pulse": {
                   "0%, 100%": { opacity: 1 },
-                  "50%": { opacity: 0.45 },
+                  "50%": { opacity: 0.35 },
                 },
               }}
             />
@@ -222,7 +226,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
             onClick={() => setActiveView("settings")}
             sx={navButtonSx(activeView === "settings")}
           >
-            <Settings sx={{ fontSize: 20 }} />
+            <Settings sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
 
@@ -231,14 +235,15 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
             size="small"
             onClick={onSwitchProject}
             sx={{
-              width: 40,
-              height: 40,
-              borderRadius: 1,
-              color: "text.secondary",
-              "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+              width: 36,
+              height: 36,
+              borderRadius: "10px",
+              color: "rgba(245,243,239,0.4)",
+              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+              "&:hover": { bgcolor: "rgba(245,243,239,0.06)", color: "#F5F3EF" },
             }}
           >
-            <SwapHoriz sx={{ fontSize: 20 }} />
+            <SwapHoriz sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
       </Stack>

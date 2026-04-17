@@ -34,6 +34,16 @@ export function getFileStem(p: string): string {
 }
 
 /**
+ * Split YAML frontmatter from markdown body.
+ * Returns { frontmatter, body } where frontmatter includes the `---` delimiters and trailing newline.
+ */
+export function splitFrontmatter(content: string): { frontmatter: string; body: string } {
+  const match = content.match(/^---\n[\s\S]*?\n---\n?/)
+  if (!match) return { frontmatter: "", body: content }
+  return { frontmatter: match[0], body: content.slice(match[0].length) }
+}
+
+/**
  * Get relative path from base.
  */
 export function getRelativePath(fullPath: string, basePath: string): string {

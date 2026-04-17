@@ -3,6 +3,7 @@ import { Box, type SxProps, type Theme } from "@mui/material"
 import { EditorContent } from "@tiptap/react"
 import { useCallback, type MouseEvent } from "react"
 import { useTiptap } from "@/components/editor/use-tiptap"
+import { splitFrontmatter } from "@/lib/path-utils"
 
 export interface MarkdownViewProps {
   /** Markdown source to render. */
@@ -25,7 +26,8 @@ export function wikiLinksToMarkdownLinks(markdown: string): string {
 }
 
 export function MarkdownView({ markdown, onWikilinkClick, sx }: MarkdownViewProps) {
-  const prepared = wikiLinksToMarkdownLinks(markdown)
+  const { body } = splitFrontmatter(markdown)
+  const prepared = wikiLinksToMarkdownLinks(body)
 
   const { editor } = useTiptap({
     content: prepared,

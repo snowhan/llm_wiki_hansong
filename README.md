@@ -43,7 +43,7 @@
 
 ## What is this?
 
-LLM Wiki is a cross-platform desktop application that turns your documents into an organized, interlinked knowledge base — automatically. Instead of traditional RAG (retrieve-and-answer from scratch every time), the LLM **incrementally builds and maintains a persistent wiki** from your sources. Knowledge is compiled once and kept current, not re-derived on every query.
+LLM Wiki is a web application that turns your documents into an organized, interlinked knowledge base — automatically. Instead of traditional RAG (retrieve-and-answer from scratch every time), the LLM **incrementally builds and maintains a persistent wiki** from your sources. Knowledge is compiled once and kept current, not re-derived on every query.
 
 This project is based on [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — a methodology for building personal knowledge bases using LLMs. We implemented the core ideas as a full desktop application with significant enhancements.
 
@@ -323,21 +323,22 @@ Not in the original. Users can configure how much context the LLM receives:
 - **Proportional budget allocation** — larger windows get proportionally more wiki content
 - **60/20/5/15 split** — wiki pages / chat history / index / system prompt
 
-### 17. Cross-Platform Compatibility
+### 17. Web Application Architecture
 
-The original is platform-agnostic (abstract pattern). We handle concrete cross-platform concerns:
+The project has been refactored from Tauri desktop to a web application:
 
+- **Node.js backend** — Express 5 + TypeScript serving REST API + SSE streams
+- **LLM proxy** — backend proxies all LLM API calls, solving browser CORS restrictions
+- **Server-side file access** — all file operations go through backend API, no native filesystem dependency
+- **Server-side URL clipping** — backend fetches and extracts web pages using Readability + Turndown
+- **SSE progress** — file preprocessing progress streamed to frontend via Server-Sent Events
 - **Path normalization** — unified `normalizePath()` used across 22+ files, backslash → forward slash
 - **Unicode-safe string handling** — char-based slicing instead of byte-based (prevents crashes on CJK filenames)
-- **macOS close-to-hide** — close button hides window (app stays running in background), click dock icon to restore, Cmd+Q to quit
-- **Windows/Linux close confirmation** — confirmation dialog before quitting to prevent accidental data loss
-- **Tauri v2** — native desktop on macOS, Windows, Linux
-- **GitHub Actions CI/CD** — automated builds for macOS (ARM + Intel), Windows (.msi), Linux (.deb / .AppImage)
 
 ### 18. Other Additions
 
 - **i18n** — English + Chinese interface (react-i18next)
-- **Settings persistence** — LLM provider, API key, model, context size, language saved via Tauri Store
+- **Settings persistence** — LLM provider, API key, model, context size, language saved via backend state API
 - **Obsidian config** — auto-generated `.obsidian/` directory with recommended settings
 - **Markdown rendering** — GFM tables with borders, proper code blocks, wikilink processing in chat and preview
 - **Multi-provider LLM support** — OpenAI, Anthropic, Google, Ollama, Custom — each with provider-specific streaming and headers
@@ -348,46 +349,45 @@ The original is platform-agnostic (abstract pattern). We handle concrete cross-p
 
 | Layer | Technology |
 |-------|-----------|
-| Desktop | Tauri v2 (Rust backend) |
+| Backend | Node.js + Express 5 + TypeScript |
 | Frontend | React 19 + TypeScript + Vite |
-| UI | shadcn/ui + Tailwind CSS v4 |
-| Editor | Milkdown (ProseMirror-based WYSIWYG) |
+| UI | MUI v9 + TipTap v3 |
 | Graph | sigma.js + graphology + ForceAtlas2 |
-| Search | Tokenized search + graph relevance + optional vector (LanceDB) |
-| Vector DB | LanceDB (Rust, embedded, optional) |
-| PDF | pdf-extract |
-| Office | docx-rs + calamine |
+| Search | Tokenized search + graph relevance + optional vector |
+| Vector Store | JSON-file based (LanceDB optional) |
+| URL Clipping | @mozilla/readability + turndown |
 | i18n | react-i18next |
 | State | Zustand |
-| LLM | Streaming fetch (OpenAI, Anthropic, Google, Ollama, Custom) |
+| LLM | Streaming SSE proxy (OpenAI, Anthropic, Google, Ollama, Custom) |
 | Web Search | Tavily API |
 
 ## Installation
 
-### Pre-built Binaries
-
-Download from [Releases](https://github.com/nashsu/llm_wiki/releases):
-- **macOS**: `.dmg` (Apple Silicon + Intel)
-- **Windows**: `.msi`
-- **Linux**: `.deb` / `.AppImage`
-
 ### Build from Source
 
 ```bash
-# Prerequisites: Node.js 20+, Rust 1.70+
+# Prerequisites: Node.js 20+
 git clone https://github.com/nashsu/llm_wiki.git
 cd llm_wiki
 npm install
-npm run tauri dev      # Development
-npm run tauri build    # Production build
+cd server && npm install && cd ..
+
+# Development (runs frontend + backend concurrently)
+npm run dev:all
+
+# Production build
+npm run build
+npm run build:server
+npm start            # Starts backend serving built frontend
 ```
 
-### Chrome Extension
+### Environment Variables
 
-1. Open `chrome://extensions`
-2. Enable "Developer mode"
-3. Click "Load unpacked"
-4. Select the `extension/` directory
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3001` | Backend server port |
+| `PROJECTS_ROOT` | `~/llm-wiki-projects` | Default project storage directory |
+| `APP_STATE_PATH` | `~/.llm-wiki/app-state.json` | Application state file |
 
 ## Quick Start
 

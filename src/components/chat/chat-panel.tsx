@@ -72,6 +72,12 @@ function ConversationSidebar() {
           fullWidth
           startIcon={<AddIcon sx={{ fontSize: 14 }} />}
           onClick={() => createConversation()}
+          sx={{
+            borderColor: "rgba(28,25,23,0.1)",
+            color: "text.secondary",
+            fontWeight: 500,
+            "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "rgba(194, 65, 12, 0.04)" },
+          }}
         >
           {t("chat.newChat")}
         </Button>
@@ -118,14 +124,14 @@ function ConversationSidebar() {
                     }),
                   ...(isActive
                     ? {
-                        bgcolor: (theme) =>
-                          theme.palette.mode === "light"
-                            ? "rgba(25, 118, 210, 0.08)"
-                            : "rgba(144, 202, 249, 0.12)",
+                        bgcolor: "rgba(194, 65, 12, 0.06)",
                         color: "primary.main",
+                        borderLeft: "2px solid",
+                        borderColor: "primary.main",
                       }
                     : {
                         color: "text.primary",
+                        borderLeft: "2px solid transparent",
                         "&:hover": { bgcolor: "action.hover" },
                       }),
                 }}
@@ -484,7 +490,7 @@ export function ChatPanel() {
               color: "text.secondary",
             }}
           >
-            <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 32, mb: 1.5, opacity: 0.3 }} />
+            <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 32, mb: 1.5, opacity: 0.2, color: "primary.main" }} />
             <Typography variant="body2">{t("chat.startConversation")}</Typography>
             <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.6 }}>
               {t("chat.clickNewChat")}

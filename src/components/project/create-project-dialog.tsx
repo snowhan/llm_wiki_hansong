@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { open } from "@tauri-apps/plugin-dialog"
 import FolderOpenIcon from "@mui/icons-material/FolderOpen"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
@@ -14,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { createProject, writeFile, createDirectory } from "@/commands/fs"
 import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
+import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import type { WikiProject } from "@/types/wiki"
 import { normalizePath } from "@/lib/path-utils"
 
@@ -30,16 +30,14 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
   const [selectedTemplate, setSelectedTemplate] = useState("general")
   const [error, setError] = useState("")
   const [creating, setCreating] = useState(false)
+  const [showBrowse, setShowBrowse] = useState(false)
 
-  async function handleBrowse() {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: t("project.selectParentDir"),
-    })
-    if (selected) {
-      setPath(selected)
-    }
+  function handleBrowse() {
+    setShowBrowse(true)
+  }
+
+  function handleBrowseSelect(selected: string) {
+    setPath(selected)
   }
 
   async function handleCreate() {
@@ -114,6 +112,12 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
           <Button onClick={handleCreate} disabled={creating}>{creating ? t("project.creating") : t("project.create")}</Button>
         </DialogFooter>
       </DialogContent>
+      <ServerDirBrowser
+        open={showBrowse}
+        onClose={() => setShowBrowse(false)}
+        onSelect={handleBrowseSelect}
+        title={t("project.selectParentDir")}
+      />
     </Dialog>
   )
 }

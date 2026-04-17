@@ -358,11 +358,6 @@ function parsePageInfo(path: string, fileName: string, content: string): WikiPag
     if (originMatch) origin = originMatch[1].trim()
   }
 
-  if (title === fileName.replace(".md", "").replace(/-/g, " ")) {
-    const headingMatch = content.match(/^#\s+(.+)$/m)
-    if (headingMatch) title = headingMatch[1].trim()
-  }
-
   if (type === "other") {
     if (path.includes("/entities/")) type = "entity"
     else if (path.includes("/concepts/")) type = "concept"

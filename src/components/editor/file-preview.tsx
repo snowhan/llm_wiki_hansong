@@ -1,4 +1,4 @@
-import { convertFileSrc } from "@tauri-apps/api/core"
+import { mediaUrl } from "@/lib/api-client"
 import { useTranslation } from "react-i18next"
 import AudiotrackIcon from "@mui/icons-material/Audiotrack"
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined"
@@ -46,7 +46,7 @@ export function FilePreview({ filePath, textContent }: FilePreviewProps) {
 }
 
 function ImagePreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = convertFileSrc(filePath)
+  const src = mediaUrl(filePath)
   return (
     <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
       <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
@@ -75,7 +75,7 @@ function ImagePreview({ filePath, fileName }: { filePath: string; fileName: stri
 }
 
 function VideoPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = convertFileSrc(filePath)
+  const src = mediaUrl(filePath)
   return (
     <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
       <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
@@ -106,7 +106,7 @@ function VideoPreview({ filePath, fileName }: { filePath: string; fileName: stri
 }
 
 function AudioPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = convertFileSrc(filePath)
+  const src = mediaUrl(filePath)
   return (
     <Box
       sx={{

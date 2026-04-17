@@ -1,6 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
-import { open } from "@tauri-apps/plugin-dialog"
-import { invoke } from "@tauri-apps/api/core"
+import { useState, useEffect, useCallback, useRef } from "react"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
@@ -15,7 +13,8 @@ import FolderIcon from "@mui/icons-material/Folder"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import { useWikiStore } from "@/stores/wiki-store"
-import { copyFile, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import { copyFile, copyDirectory, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import { apiUpload } from "@/lib/api-client"
 import type { FileNode } from "@/types/wiki"
 import { startIngest } from "@/lib/ingest"
 import { enqueueIngest, enqueueBatch } from "@/lib/ingest-queue"
@@ -35,6 +34,8 @@ export function SourcesView() {
   const [sources, setSources] = useState<FileNode[]>([])
   const [importing, setImporting] = useState(false)
   const [ingestingPath, setIngestingPath] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const loadSources = useCallback(async () => {
     if (!project) return
@@ -53,124 +54,91 @@ export function SourcesView() {
     loadSources()
   }, [loadSources])
 
-  async function handleImport() {
-    if (!project) return
+  function handleImport() {
+    fileInputRef.current?.click()
+  }
 
-    const selected = await open({
-      multiple: true,
-      title: t("sources.importSourceFiles"),
-      filters: [
-        {
-          name: t("sources.documents"),
-          extensions: [
-            "md", "mdx", "txt", "rtf", "pdf",
-            "html", "htm", "xml",
-            "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-            "odt", "ods", "odp", "epub", "pages", "numbers", "key",
-          ],
-        },
-        {
-          name: t("sources.data"),
-          extensions: ["json", "jsonl", "csv", "tsv", "yaml", "yml", "ndjson"],
-        },
-        {
-          name: t("sources.code"),
-          extensions: [
-            "py", "js", "ts", "jsx", "tsx", "rs", "go", "java",
-            "c", "cpp", "h", "rb", "php", "swift", "sql", "sh",
-          ],
-        },
-        {
-          name: t("sources.images"),
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tiff", "avif", "heic"],
-        },
-        {
-          name: t("sources.media"),
-          extensions: ["mp4", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg", "flac", "m4a"],
-        },
-        { name: t("sources.allFiles"), extensions: ["*"] },
-      ],
-    })
-
-    if (!selected || selected.length === 0) return
+  async function handleFilesSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!project || !e.target.files?.length) return
 
     setImporting(true)
     const pp = normalizePath(project.path)
-    const paths = Array.isArray(selected) ? selected : [selected]
+    const destDir = `${pp}/raw/sources`
 
-    const importedPaths: string[] = []
-    for (const sourcePath of paths) {
-      const originalName = getFileName(sourcePath) || "unknown"
-      const destPath = await getUniqueDestPath(`${pp}/raw/sources`, originalName)
-      try {
-        await copyFile(sourcePath, destPath)
-        importedPaths.push(destPath)
-        // Pre-process file (extract text from PDF, etc.) for instant preview later
-        preprocessFile(destPath).catch(() => {})
-      } catch (err) {
-        console.error(`Failed to import ${originalName}:`, err)
+    try {
+      const formData = new FormData()
+      formData.append("destDir", destDir)
+      for (const file of Array.from(e.target.files)) {
+        formData.append("files", file)
       }
-    }
 
-    setImporting(false)
-    await loadSources()
+      const { paths: importedPaths } = await apiUpload("/api/fs/upload", formData)
 
-    // Enqueue for serial ingest (runs in background via ingest queue)
-    if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
       for (const destPath of importedPaths) {
-        enqueueIngest(pp, destPath).catch((err) =>
-          console.error(`Failed to enqueue ingest:`, err)
-        )
+        preprocessFile(destPath).catch(() => {})
       }
+
+      await loadSources()
+
+      if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
+        for (const destPath of importedPaths) {
+          enqueueIngest(pp, destPath).catch((err) =>
+            console.error(`Failed to enqueue ingest:`, err)
+          )
+        }
+      }
+    } catch (err) {
+      console.error("Failed to import files:", err)
+    } finally {
+      setImporting(false)
+      e.target.value = ""
     }
   }
 
-  async function handleImportFolder() {
-    if (!project) return
+  function handleImportFolder() {
+    folderInputRef.current?.click()
+  }
 
-    const selected = await open({
-      directory: true,
-      title: t("sources.importSourceFolder"),
-    })
-
-    if (!selected || typeof selected !== "string") return
+  async function handleFolderSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!project || !e.target.files?.length) return
 
     setImporting(true)
     const pp = normalizePath(project.path)
-    const folderName = getFileName(selected) || "imported"
+    const files = Array.from(e.target.files)
+    const firstRelPath = files[0]?.webkitRelativePath ?? ""
+    const folderName = firstRelPath.split("/")[0] || "imported"
     const destDir = `${pp}/raw/sources/${folderName}`
 
     try {
-      // Recursively copy the folder
-      const copiedFiles: string[] = await invoke("copy_directory", {
-        source: selected,
-        destination: destDir,
-      })
+      const formData = new FormData()
+      formData.append("destDir", destDir)
+      for (const file of files) {
+        const relativePath = file.webkitRelativePath || file.name
+        const pathWithinFolder = relativePath.split("/").slice(1).join("/") || file.name
+        formData.append("files", file, pathWithinFolder)
+      }
 
-      console.log(`[Folder Import] Copied ${copiedFiles.length} files from ${folderName}`)
+      const { paths: copiedFiles } = await apiUpload("/api/fs/upload", formData)
 
-      // Preprocess all files
+      console.log(`[Folder Import] Uploaded ${copiedFiles.length} files from ${folderName}`)
+
       for (const filePath of copiedFiles) {
         preprocessFile(filePath).catch(() => {})
       }
 
-      setImporting(false)
       await loadSources()
 
-      // Build ingest tasks with folder context
       if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
         const tasks = copiedFiles
           .filter((fp) => {
             const ext = fp.split(".").pop()?.toLowerCase() ?? ""
-            // Only ingest text-based files, skip images/media
             return ["md", "mdx", "txt", "pdf", "docx", "pptx", "xlsx", "xls",
                     "csv", "json", "html", "htm", "rtf", "xml", "yaml", "yml"].includes(ext)
           })
           .map((filePath) => {
-            // Build folder context from relative path
             const relPath = filePath.replace(destDir + "/", "")
             const parts = relPath.split("/")
-            parts.pop() // remove filename
+            parts.pop()
             const context = parts.length > 0
               ? `${folderName} > ${parts.join(" > ")}`
               : folderName
@@ -184,7 +152,9 @@ export function SourcesView() {
       }
     } catch (err) {
       console.error(`Failed to import folder:`, err)
+    } finally {
       setImporting(false)
+      e.target.value = ""
     }
   }
 
@@ -346,6 +316,23 @@ export function SourcesView() {
 
   return (
     <Stack sx={{ height: 1 }}>
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        style={{ display: "none" }}
+        onChange={handleFilesSelected}
+      />
+      <input
+        type="file"
+        ref={folderInputRef}
+        // @ts-expect-error webkitdirectory is non-standard but widely supported
+        webkitdirectory=""
+        directory=""
+        multiple
+        style={{ display: "none" }}
+        onChange={handleFolderSelected}
+      />
       <Stack
         direction="row"
         spacing={1}

@@ -117,14 +117,14 @@ describe("buildWikiGraph", () => {
     })
   })
 
-  it("extracts title from heading when no frontmatter", async () => {
+  it("falls back to filename when no frontmatter title", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
       { name: "page.md", path: "/proj/wiki/page.md" },
     ]))
     vi.mocked(readFile).mockResolvedValue("# My Page Title\n\nContent here")
 
     const result = await buildWikiGraph("/proj")
-    expect(result.nodes[0].label).toBe("My Page Title")
+    expect(result.nodes[0].label).toBe("page")
   })
 
   it("falls back to filename for title", async () => {

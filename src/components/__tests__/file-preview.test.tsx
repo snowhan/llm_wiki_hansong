@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen } from "@testing-library/react"
-import { convertFileSrc } from "@tauri-apps/api/core"
+import { mediaUrl } from "@/lib/api-client"
 import { FilePreview } from "../editor/file-preview"
 
 vi.mock("../ui/markdown-view", () => ({
@@ -13,7 +13,7 @@ describe("FilePreview", () => {
   it("renders an img for image files", () => {
     render(<FilePreview filePath="/tmp/photo.png" textContent="" />)
     const img = screen.getByRole("img", { name: "photo.png" })
-    expect(img.getAttribute("src")).toBe(convertFileSrc("/tmp/photo.png"))
+    expect(img.getAttribute("src")).toBe(mediaUrl("/tmp/photo.png"))
   })
 
   it("renders MarkdownView for plain text files", () => {

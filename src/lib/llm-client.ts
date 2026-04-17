@@ -1,5 +1,4 @@
 import type { LlmConfig } from "@/stores/wiki-store"
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { getProviderConfig } from "./llm-providers"
 
 export type { ChatMessage } from "./llm-providers"
@@ -28,13 +27,11 @@ export async function streamChat(
   const { onToken, onDone, onError } = callbacks
   const providerConfig = getProviderConfig(config)
 
-  // Create a combined signal: user abort OR 15-minute timeout
-  const timeoutMs = 15 * 60 * 1000 // 15 minutes — some models with large context need a long time
+  const timeoutMs = 15 * 60 * 1000
   let combinedSignal = signal
   let timeoutController: AbortController | undefined
 
   if (typeof AbortSignal.timeout === "function") {
-    // Combine user signal with timeout
     timeoutController = new AbortController()
     const timeoutId = setTimeout(() => timeoutController?.abort(), timeoutMs)
 
@@ -49,20 +46,22 @@ export async function streamChat(
 
   let response: Response
   try {
-    response = await tauriFetch(providerConfig.url, {
+    response = await fetch("/api/llm/stream", {
       method: "POST",
-      headers: providerConfig.headers,
-      body: JSON.stringify(providerConfig.buildBody(messages)),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: providerConfig.url,
+        headers: providerConfig.headers,
+        body: providerConfig.buildBody(messages),
+      }),
       signal: combinedSignal,
     })
   } catch (err) {
     if (err instanceof Error && (err.name === "AbortError" || err.message === "Load failed")) {
-      // Check if it was user-initiated abort
       if (signal?.aborted) {
         onDone()
         return
       }
-      // Otherwise it's a timeout or network error
       onError(new Error("Request timed out or network error. The model may need more time — try again or use a faster model."))
       return
     }
@@ -120,7 +119,6 @@ export async function streamChat(
       return
     }
     if (err instanceof Error && err.message === "Load failed") {
-      // WebKit network error during streaming — connection dropped
       onError(new Error("Connection lost during streaming. Try again."))
       return
     }

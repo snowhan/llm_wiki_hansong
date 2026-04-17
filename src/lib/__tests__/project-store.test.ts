@@ -15,13 +15,15 @@ import {
 
 const storeData = new Map<string, unknown>()
 
-vi.mock("@tauri-apps/plugin-store", () => ({
-  load: vi.fn().mockResolvedValue({
-    get: vi.fn((key: string) => Promise.resolve(storeData.get(key))),
-    set: vi.fn((key: string, value: unknown) => {
-      storeData.set(key, value)
-      return Promise.resolve()
-    }),
+vi.mock("@/lib/api-client", () => ({
+  apiGet: vi.fn((url: string) => {
+    const key = url.split("/api/state/")[1]
+    return Promise.resolve(storeData.get(key) ?? null)
+  }),
+  apiPut: vi.fn((_url: string, body: { value: unknown }) => {
+    const key = _url.split("/api/state/")[1]
+    storeData.set(key, body.value)
+    return Promise.resolve()
   }),
 }))
 

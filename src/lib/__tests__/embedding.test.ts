@@ -5,14 +5,17 @@ import type { EmbeddingConfig } from "@/stores/wiki-store"
 const mockFetch = vi.fn()
 vi.stubGlobal("fetch", mockFetch)
 
-const mockInvoke = vi.fn()
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+const mockApiPost = vi.fn()
+const mockApiGet = vi.fn()
+vi.mock("@/lib/api-client", () => ({
+  apiPost: (...args: unknown[]) => mockApiPost(...args),
+  apiGet: (...args: unknown[]) => mockApiGet(...args),
 }))
 
 beforeEach(() => {
   mockFetch.mockReset()
-  mockInvoke.mockReset()
+  mockApiPost.mockReset()
+  mockApiGet.mockReset()
 })
 
 const enabledConfig: EmbeddingConfig = {
@@ -33,7 +36,7 @@ describe("embedPage", () => {
   it("skips when disabled", async () => {
     await embedPage("/proj", "page1", "Title", "Content", disabledConfig)
     expect(mockFetch).not.toHaveBeenCalled()
-    expect(mockInvoke).not.toHaveBeenCalled()
+    expect(mockApiPost).not.toHaveBeenCalled()
   })
 
   it("fetches embedding and upserts", async () => {
@@ -42,12 +45,12 @@ describe("embedPage", () => {
       ok: true,
       json: () => Promise.resolve({ data: [{ embedding }] }),
     })
-    mockInvoke.mockResolvedValueOnce(undefined)
+    mockApiPost.mockResolvedValueOnce(undefined)
 
     await embedPage("/proj", "page1", "Title", "Content", enabledConfig)
 
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(mockInvoke).toHaveBeenCalledWith("vector_upsert", expect.objectContaining({
+    expect(mockApiPost).toHaveBeenCalledWith("/api/vector/upsert", expect.objectContaining({
       pageId: "page1",
     }))
   })
@@ -71,7 +74,7 @@ describe("searchByEmbedding", () => {
       ok: true,
       json: () => Promise.resolve({ data: [{ embedding: [0.1, 0.2] }] }),
     })
-    mockInvoke.mockResolvedValueOnce([
+    mockApiPost.mockResolvedValueOnce([
       { page_id: "page1", score: 0.95 },
       { page_id: "page2", score: 0.8 },
     ])
@@ -83,29 +86,29 @@ describe("searchByEmbedding", () => {
 })
 
 describe("removePageEmbedding", () => {
-  it("calls vector_delete", async () => {
-    mockInvoke.mockResolvedValueOnce(undefined)
+  it("calls vector delete API", async () => {
+    mockApiPost.mockResolvedValueOnce(undefined)
     await removePageEmbedding("/proj", "page1")
-    expect(mockInvoke).toHaveBeenCalledWith("vector_delete", expect.objectContaining({
+    expect(mockApiPost).toHaveBeenCalledWith("/api/vector/delete", expect.objectContaining({
       pageId: "page1",
     }))
   })
 
   it("handles error gracefully", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("fail"))
+    mockApiPost.mockRejectedValueOnce(new Error("fail"))
     await expect(removePageEmbedding("/proj", "page1")).resolves.toBeUndefined()
   })
 })
 
 describe("getEmbeddingCount", () => {
-  it("returns count from vector_count", async () => {
-    mockInvoke.mockResolvedValueOnce(42)
+  it("returns count from vector API", async () => {
+    mockApiGet.mockResolvedValueOnce(42)
     const count = await getEmbeddingCount("/proj")
     expect(count).toBe(42)
   })
 
   it("returns 0 on error", async () => {
-    mockInvoke.mockRejectedValueOnce(new Error("fail"))
+    mockApiGet.mockRejectedValueOnce(new Error("fail"))
     const count = await getEmbeddingCount("/proj")
     expect(count).toBe(0)
   })

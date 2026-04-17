@@ -100,15 +100,16 @@ export function SettingsView() {
   }
 
   return (
-    <Box sx={{ height: 1, overflow: "auto", p: 4 }}>
+    <Box sx={{ height: 1, overflow: "auto", p: 4, bgcolor: "background.default" }}>
       <Box sx={{ mx: "auto", maxWidth: 600 }}>
-        <Typography variant="h5" sx={{ mb: 3, fontWeight: 700 }}>
+        <Typography variant="h5" sx={{ mb: 0.5, fontWeight: 700, fontFamily: "'Playfair Display', 'PingFang SC', Georgia, serif" }}>
           {t("settings.title")}
         </Typography>
+        <Box sx={{ width: 32, height: 2, bgcolor: "primary.main", borderRadius: 1, mb: 3, opacity: 0.5 }} />
 
         <Stack spacing={3}>
           {/* Language section */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Typography sx={{ fontWeight: 600, mb: 2 }}>{t("settings.language")}</Typography>
             <ToggleButtonGroup
               exclusive
@@ -128,7 +129,7 @@ export function SettingsView() {
           </Box>
 
           {/* LLM Provider section */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Typography sx={{ fontWeight: 600, mb: 2 }}>{t("settings.llmProvider")}</Typography>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -258,7 +259,7 @@ export function SettingsView() {
           </Box>
 
           {/* Context Window Size */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.contextWindow")}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
               {t("settings.contextWindowDesc")}
@@ -267,7 +268,7 @@ export function SettingsView() {
           </Box>
 
           {/* Web Search API section */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.webSearch")}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
               {t("settings.webSearchDesc")}
@@ -305,7 +306,7 @@ export function SettingsView() {
           </Box>
 
           {/* Embedding Search section */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
               <Typography sx={{ fontWeight: 600 }}>{t("settings.vectorSearch")}</Typography>
               <Switch
@@ -357,7 +358,7 @@ export function SettingsView() {
           </Box>
 
           {/* Chat History section */}
-          <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
+          <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
             <Typography sx={{ fontWeight: 600, mb: 1 }}>{t("settings.chatHistory")}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
               {t("settings.chatHistoryDesc")}
@@ -385,7 +386,22 @@ export function SettingsView() {
             </Typography>
           </Box>
 
-          <Button variant="contained" fullWidth onClick={handleSave}>
+          <Button
+            variant="contained"
+            fullWidth
+            onClick={handleSave}
+            sx={{
+              borderRadius: "12px",
+              py: 1.25,
+              fontWeight: 600,
+              fontSize: "0.9rem",
+              letterSpacing: "0.02em",
+              boxShadow: "0 4px 12px rgba(194, 65, 12, 0.2)",
+              "&:hover": {
+                boxShadow: "0 6px 20px rgba(194, 65, 12, 0.3)",
+              },
+            }}
+          >
             {saved ? t("settings.saved") : t("settings.save")}
           </Button>
         </Stack>
