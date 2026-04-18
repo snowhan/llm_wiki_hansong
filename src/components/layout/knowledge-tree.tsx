@@ -50,7 +50,8 @@ export function KnowledgeTree() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const selectedFile = useWikiStore((s) => s.selectedFile)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
   const fileTree = useWikiStore((s) => s.fileTree)
   const [pages, setPages] = useState<WikiPageInfo[]>([])
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(["overview", "entity", "concept", "source"]))
@@ -202,7 +203,7 @@ export function KnowledgeTree() {
                         key={page.path}
                         component="button"
                         type="button"
-                        onClick={() => setSelectedFile(page.path)}
+                        onClick={() => { navigateInCurrentTab(page.path); setActiveView("wiki") }}
                         title={page.path}
                         sx={{
                           display: "flex",
@@ -245,7 +246,8 @@ export function KnowledgeTree() {
 function RawSourcesSection() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const [expanded, setExpanded] = useState(false)
   const [sources, setSources] = useState<FileNode[]>([])
@@ -304,7 +306,7 @@ function RawSourcesSection() {
                 key={file.path}
                 component="button"
                 type="button"
-                onClick={() => setSelectedFile(file.path)}
+                onClick={() => { navigateInCurrentTab(file.path); setActiveView("wiki") }}
                 sx={{
                   display: "flex",
                   width: "100%",
@@ -388,7 +390,7 @@ function flattenAllFiles(nodes: FileNode[]): FileNode[] {
   for (const node of nodes) {
     if (node.is_dir && node.children) {
       files.push(...flattenAllFiles(node.children))
-    } else if (!node.is_dir) {
+    } else if (!node.is_dir && !node.path.endsWith(".cache.txt")) {
       files.push(node)
     }
   }

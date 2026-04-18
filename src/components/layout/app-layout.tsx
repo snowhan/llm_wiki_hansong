@@ -8,11 +8,12 @@ import { normalizePath } from "@/lib/path-utils"
 import { IconSidebar } from "./icon-sidebar"
 import { SidebarPanel } from "./sidebar-panel"
 import { ContentArea } from "./content-area"
-import { PreviewPanel } from "./preview-panel"
-import { ResearchPanel } from "./research-panel"
 import { ActivityPanel } from "./activity-panel"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { useResearchStore } from "@/stores/research-store"
+import { MainToolbar } from "./main-toolbar"
+import { TabBar } from "./tab-bar"
+import { EditorArea } from "./editor-area"
+import { ChatPanel } from "@/components/chat/chat-panel"
 
 interface AppLayoutProps {
   onSwitchProject: () => void
@@ -21,13 +22,13 @@ interface AppLayoutProps {
 export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   const theme = useTheme()
   const project = useWikiStore((s) => s.project)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
-  const researchPanelOpen = useResearchStore((s) => s.panelOpen)
+  const activeView = useWikiStore((s) => s.activeView)
+  const chatExpanded = useWikiStore((s) => s.chatExpanded)
   const setFileTree = useWikiStore((s) => s.setFileTree)
   const [leftWidth, setLeftWidth] = useState(240)
-  const [rightWidth, setRightWidth] = useState(400)
+  const [chatWidth, setChatWidth] = useState(380)
   const isDraggingLeft = useRef(false)
-  const isDraggingRight = useRef(false)
+  const isDraggingChat = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const loadFileTree = useCallback(async () => {
@@ -45,10 +46,10 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   }, [loadFileTree])
 
   const startDrag = useCallback(
-    (side: "left" | "right") => (e: React.MouseEvent) => {
+    (side: "left" | "chat") => (e: React.MouseEvent) => {
       e.preventDefault()
       if (side === "left") isDraggingLeft.current = true
-      else isDraggingRight.current = true
+      else isDraggingChat.current = true
       document.body.style.cursor = "col-resize"
       document.body.style.userSelect = "none"
       document.body.dataset.panelResizing = "true"
@@ -61,15 +62,15 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
           const newWidth = e.clientX - rect.left
           setLeftWidth(Math.max(180, Math.min(400, newWidth)))
         }
-        if (isDraggingRight.current) {
+        if (isDraggingChat.current) {
           const newWidth = rect.right - e.clientX
-          setRightWidth(Math.max(280, Math.min(rect.width * 0.5, newWidth)))
+          setChatWidth(Math.max(300, Math.min(rect.width * 0.5, newWidth)))
         }
       }
 
       const handleMouseUp = () => {
         isDraggingLeft.current = false
-        isDraggingRight.current = false
+        isDraggingChat.current = false
         document.body.style.cursor = ""
         document.body.style.userSelect = ""
         delete document.body.dataset.panelResizing
@@ -82,8 +83,6 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
     },
     []
   )
-
-  const hasRightPanel = !!(selectedFile || researchPanelOpen)
 
   const resizeHandleSx = {
     width: "5px",
@@ -114,6 +113,8 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
     },
   } as const
 
+  const isWikiView = activeView === "wiki"
+
   return (
     <Box
       sx={{
@@ -128,6 +129,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
         ref={containerRef}
         sx={{ display: "flex", minWidth: 0, flex: 1, overflow: "hidden" }}
       >
+        {/* Left sidebar column */}
         <Stack
           direction="column"
           sx={{
@@ -144,54 +146,55 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
           </Box>
           <ActivityPanel />
         </Stack>
+
         <Box onMouseDown={startDrag("left")} sx={resizeHandleSx} />
 
-        <Box sx={{ minWidth: 0, flex: 1, overflow: "hidden", bgcolor: "background.paper" }}>
-          <ErrorBoundary>
-            <ContentArea />
-          </ErrorBoundary>
+        {/* Main column: toolbar + tabbar + content */}
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            minWidth: 0,
+            flex: 1,
+            overflow: "hidden",
+            bgcolor: "background.default",
+          }}
+        >
+          <MainToolbar />
+
+          {isWikiView && <TabBar />}
+
+          <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <ErrorBoundary>
+              {isWikiView ? (
+                <EditorArea />
+              ) : (
+                <ContentArea />
+              )}
+            </ErrorBoundary>
+          </Box>
         </Box>
 
-        {hasRightPanel && (
+        {/* AI Chat panel – right side, shown when chatExpanded */}
+        {chatExpanded && (
           <>
-            <Box onMouseDown={startDrag("right")} sx={resizeHandleSx} />
-            <Stack
-              direction="column"
+            <Box onMouseDown={startDrag("chat")} sx={resizeHandleSx} />
+            <Box
               sx={{
                 flexShrink: 0,
-                width: rightWidth,
+                width: chatWidth,
                 overflow: "hidden",
                 bgcolor: "background.paper",
                 borderLeft: "1px solid",
                 borderColor: "divider",
+                display: "flex",
+                flexDirection: "column",
               }}
             >
               <ErrorBoundary>
-                {selectedFile && (
-                  <Box
-                    sx={{
-                      flex: 1,
-                      minHeight: 0,
-                      overflow: "hidden",
-                      ...(researchPanelOpen ? { borderBottom: "1px solid", borderColor: "divider" } : {}),
-                    }}
-                  >
-                    <PreviewPanel />
-                  </Box>
-                )}
-                {researchPanelOpen && (
-                  <Box
-                    sx={
-                      selectedFile
-                        ? { height: "50%", flexShrink: 0, overflow: "hidden" }
-                        : { flex: 1, minHeight: 0, overflow: "hidden" }
-                    }
-                  >
-                    <ResearchPanel />
-                  </Box>
-                )}
+                <ChatPanel />
               </ErrorBoundary>
-            </Stack>
+            </Box>
           </>
         )}
       </Box>

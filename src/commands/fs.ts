@@ -28,7 +28,12 @@ export async function copyDirectory(
   return apiPost<string[]>("/api/fs/copy-directory", { source, dest: destination })
 }
 
-export async function preprocessFile(path: string): Promise<string> {
+export type PreprocessStage = "reading" | "extracting" | "cached" | "done" | "error"
+
+export async function preprocessFile(
+  path: string,
+  onStage?: (stage: PreprocessStage) => void,
+): Promise<string> {
   const res = await fetch("/api/preprocess", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -52,7 +57,8 @@ export async function preprocessFile(path: string): Promise<string> {
       const trimmed = line.trim()
       if (trimmed.startsWith("data: ")) {
         try {
-          const event = JSON.parse(trimmed.slice(6))
+          const event = JSON.parse(trimmed.slice(6)) as { stage?: string; done?: boolean; content?: string; error?: string }
+          if (event.stage) onStage?.(event.stage as PreprocessStage)
           if (event.done && event.content) result = event.content
         } catch { /* skip */ }
       }

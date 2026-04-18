@@ -13,10 +13,14 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(depth < 1)
   const selectedFile = useWikiStore((s) => s.selectedFile)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
+  const setActiveView = useWikiStore((s) => s.setActiveView)
 
   const isSelected = selectedFile === node.path
   const paddingLeft = 12 + depth * 16
+
+  // Hide internal cache sidecar files
+  if (!node.is_dir && node.path.endsWith(".cache.txt")) return null
 
   if (node.is_dir) {
     return (
@@ -51,7 +55,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
             {t(`folderNames.${node.name}`, { defaultValue: node.name })}
           </Typography>
         </Box>
-        {expanded && node.children?.map((child) => (
+        {expanded && node.children?.filter(c => !c.path.endsWith(".cache.txt")).map((child) => (
           <TreeNode key={child.path} node={child} depth={depth + 1} />
         ))}
       </Box>
@@ -62,7 +66,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     <Box
       component="button"
       type="button"
-      onClick={() => setSelectedFile(node.path)}
+      onClick={() => { navigateInCurrentTab(node.path); setActiveView("wiki") }}
       sx={{
         display: "flex",
         width: "100%",

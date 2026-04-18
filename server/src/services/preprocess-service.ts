@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 import fs from "node:fs/promises"
 import path from "node:path"
+import os from "node:os"
 
 export interface PreprocessProgress {
   stage: string
@@ -10,15 +11,42 @@ export interface PreprocessProgress {
   error?: string
 }
 
+/** Candidate locations where markitdown CLI might live. */
+const MARKITDOWN_CANDIDATES = [
+  "markitdown", // in PATH
+  path.join(os.homedir(), "Library/Python/3.12/bin/markitdown"),
+  path.join(os.homedir(), "Library/Python/3.11/bin/markitdown"),
+  path.join(os.homedir(), "Library/Python/3.10/bin/markitdown"),
+  path.join(os.homedir(), ".local/bin/markitdown"),
+  "/opt/homebrew/bin/markitdown",
+  "/usr/local/bin/markitdown",
+]
+
 /**
- * Check if markitdown Python CLI is available.
+ * Find the markitdown executable. Returns the path string if found, null otherwise.
+ */
+async function findMarkitdown(): Promise<string | null> {
+  for (const candidate of MARKITDOWN_CANDIDATES) {
+    const found = await new Promise<boolean>((resolve) => {
+      const proc = spawn(candidate, ["--help"], { stdio: "pipe" })
+      proc.on("error", () => resolve(false))
+      proc.on("close", (code) => resolve(code === 0 || code === 1))
+    })
+    if (found) return candidate
+  }
+  return null
+}
+
+let _markitdownPath: string | null | undefined = undefined
+
+/**
+ * Check if markitdown Python CLI is available (cached after first check).
  */
 export async function checkMarkitdown(): Promise<boolean> {
-  return new Promise((resolve) => {
-    const proc = spawn("markitdown", ["--help"], { stdio: "pipe" })
-    proc.on("error", () => resolve(false))
-    proc.on("close", (code) => resolve(code === 0))
-  })
+  if (_markitdownPath === undefined) {
+    _markitdownPath = await findMarkitdown()
+  }
+  return _markitdownPath !== null
 }
 
 /**
@@ -50,15 +78,19 @@ export async function preprocessFile(
 
   onProgress({ stage: "extracting", progress: 0.1 })
 
-  const hasMarkitdown = await checkMarkitdown()
-  if (!hasMarkitdown) {
-    const fallback = `[Binary file: ${path.basename(filePath)}]`
+  if (_markitdownPath === undefined) {
+    _markitdownPath = await findMarkitdown()
+  }
+  const markitdownBin = _markitdownPath
+  if (!markitdownBin) {
+    const fallback = `[Binary file: ${path.basename(filePath)}]\n\n(markitdown is not installed; install it with: pip install markitdown)`
+    try { await fs.writeFile(cachePath, fallback, "utf-8") } catch { /* non-critical */ }
     onProgress({ stage: "done", progress: 1, done: true, content: fallback })
     return fallback
   }
 
   return new Promise<string>((resolve, reject) => {
-    const proc = spawn("markitdown", [filePath], { stdio: ["pipe", "pipe", "pipe"] })
+    const proc = spawn(markitdownBin, [filePath], { stdio: ["pipe", "pipe", "pipe"] })
     let stdout = ""
     let stderr = ""
 

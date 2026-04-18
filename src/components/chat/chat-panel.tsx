@@ -5,7 +5,10 @@ import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
 import Button from "@mui/material/Button"
 import IconButton from "@mui/material/IconButton"
+import Popover from "@mui/material/Popover"
+import Tooltip from "@mui/material/Tooltip"
 import AddIcon from "@mui/icons-material/Add"
+import HistoryOutlined from "@mui/icons-material/HistoryOutlined"
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
 import ChatBubbleOutlineOutlinedIcon from "@mui/icons-material/ChatBubbleOutlineOutlined"
 import MenuBookIcon from "@mui/icons-material/MenuBook"
@@ -34,7 +37,8 @@ function formatDate(timestamp: number): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" })
 }
 
-function ConversationSidebar() {
+/** Header bar: title + new chat button + history popover button */
+function ChatHeader() {
   const { t } = useTranslation()
   const conversations = useChatStore((s) => s.conversations)
   const activeConversationId = useChatStore((s) => s.activeConversationId)
@@ -43,8 +47,11 @@ function ConversationSidebar() {
   const deleteConversation = useChatStore((s) => s.deleteConversation)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
 
+  const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null)
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const historyOpen = Boolean(anchorEl)
 
+  const activeConv = conversations.find((c) => c.id === activeConversationId)
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
 
   function getMessageCount(convId: string): number {
@@ -52,148 +59,180 @@ function ConversationSidebar() {
   }
 
   return (
-    <Box
-      sx={{
-        display: "flex",
-        height: 1,
-        width: 200,
-        flexShrink: 0,
-        flexDirection: "column",
-        borderRight: 1,
-        borderColor: "divider",
-        bgcolor: (theme) =>
-          theme.palette.mode === "light" ? "action.hover" : "action.selected",
-      }}
-    >
-      <Box sx={{ borderBottom: 1, borderColor: "divider", p: 1 }}>
-        <Button
-          variant="outlined"
-          size="small"
-          fullWidth
-          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-          onClick={() => createConversation()}
+    <>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          height: 38,
+          px: 1.5,
+          gap: 0.5,
+          flexShrink: 0,
+          borderBottom: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        {/* Title */}
+        <Typography
+          variant="caption"
+          noWrap
           sx={{
-            borderColor: "rgba(28,25,23,0.1)",
-            color: "text.secondary",
-            fontWeight: 500,
-            "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "rgba(194, 65, 12, 0.04)" },
+            flex: 1,
+            minWidth: 0,
+            fontWeight: 600,
+            fontSize: "0.8rem",
+            color: "text.primary",
+            letterSpacing: "0.01em",
           }}
         >
-          {t("chat.newChat")}
-        </Button>
-      </Box>
+          {activeConv?.title ?? t("chat.aiChat")}
+        </Typography>
 
-      <Box sx={{ flex: 1, overflowY: "auto", py: 0.5 }}>
-        {sorted.length === 0 ? (
-          <Typography
-            variant="caption"
+        {/* New conversation */}
+        <Tooltip title={t("chat.newChat")} placement="bottom" enterDelay={400}>
+          <IconButton
+            size="small"
+            onClick={() => createConversation()}
             sx={{
-              display: "block",
-              px: 1.5,
-              py: 2,
-              textAlign: "center",
+              flexShrink: 0,
+              width: 26,
+              height: 26,
+              borderRadius: "8px",
               color: "text.secondary",
+              "&:hover": { color: "primary.main", bgcolor: "rgba(194,65,12,0.08)" },
             }}
           >
-            {t("chat.noConversations")}
-          </Typography>
-        ) : (
-          sorted.map((conv) => {
-            const isActive = conv.id === activeConversationId
-            const msgCount = getMessageCount(conv.id)
-            return (
-              <Box
-                key={conv.id}
-                onClick={() => setActiveConversation(conv.id)}
-                onMouseEnter={() => setHoveredId(conv.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                sx={{
-                  position: "relative",
-                  mx: 0.5,
-                  my: 0.25,
-                  display: "flex",
-                  cursor: "pointer",
-                  flexDirection: "column",
-                  borderRadius: 1,
-                  px: 1,
-                  py: 0.75,
-                  fontSize: "0.875rem",
-                  transition: (theme) =>
-                    theme.transitions.create(["background-color", "color"], {
-                      duration: theme.transitions.duration.shorter,
-                    }),
-                  ...(isActive
-                    ? {
-                        bgcolor: "rgba(194, 65, 12, 0.06)",
-                        color: "primary.main",
-                        borderLeft: "2px solid",
-                        borderColor: "primary.main",
-                      }
-                    : {
-                        color: "text.primary",
-                        borderLeft: "2px solid transparent",
-                        "&:hover": { bgcolor: "action.hover" },
-                      }),
-                }}
-              >
-                <Stack direction="row" spacing={0.5} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      flex: 1,
-                      fontWeight: 600,
-                      lineHeight: 1.4,
-                      display: "-webkit-box",
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: "vertical",
-                      overflow: "hidden",
-                    }}
-                  >
-                    {conv.title}
-                  </Typography>
-                  {hoveredId === conv.id && (
-                    <IconButton
-                      size="small"
-                      sx={{
-                        flexShrink: 0,
-                        p: 0.25,
-                        color: "text.secondary",
-                        "&:hover": { color: "error.main" },
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteConversation(conv.id)
-                        const proj = useWikiStore.getState().project
-                        if (proj) {
-                          deleteFile(`${proj.path}/.llm-wiki/chats/${conv.id}.json`).catch(() => {})
-                        }
-                      }}
-                    >
-                      <DeleteOutlineOutlinedIcon sx={{ fontSize: 12 }} />
-                    </IconButton>
-                  )}
-                </Stack>
-                <Stack direction="row" spacing={0.75} sx={{ mt: 0.25, alignItems: "center" }}>
-                  <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
-                    {formatDate(conv.updatedAt)}
-                  </Typography>
-                  {msgCount > 0 && (
-                    <>
-                      <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
-                        ·
-                      </Typography>
-                      <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
-                        {t("chat.msgs", { count: msgCount })}
-                      </Typography>
-                    </>
-                  )}
-                </Stack>
-              </Box>
-            )
-          })
-        )}
+            <AddIcon sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* History popover */}
+        <Tooltip title={t("chat.history")} placement="bottom" enterDelay={400}>
+          <IconButton
+            size="small"
+            onClick={(e) => setAnchorEl(e.currentTarget)}
+            sx={{
+              flexShrink: 0,
+              width: 26,
+              height: 26,
+              borderRadius: "8px",
+              color: historyOpen ? "primary.main" : "text.secondary",
+              bgcolor: historyOpen ? "rgba(194,65,12,0.08)" : "transparent",
+              "&:hover": { color: "primary.main", bgcolor: "rgba(194,65,12,0.08)" },
+            }}
+          >
+            <HistoryOutlined sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
       </Box>
-    </Box>
+
+      {/* History Popover */}
+      <Popover
+        open={historyOpen}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: 260,
+              maxHeight: 400,
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              borderRadius: "10px",
+              border: "1px solid",
+              borderColor: "divider",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+              bgcolor: "background.paper",
+              mt: 0.5,
+            },
+          },
+        }}
+      >
+        <Box sx={{ borderBottom: "1px solid", borderColor: "divider", px: 1.5, py: 1 }}>
+          <Typography variant="caption" sx={{ fontWeight: 600, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: "0.7rem" }}>
+            {t("chat.historyTitle")}
+          </Typography>
+        </Box>
+
+        <Box sx={{ flex: 1, overflowY: "auto", py: 0.5 }}>
+          {sorted.length === 0 ? (
+            <Typography variant="caption" sx={{ display: "block", px: 1.5, py: 2, textAlign: "center", color: "text.secondary" }}>
+              {t("chat.noConversations")}
+            </Typography>
+          ) : (
+            sorted.map((conv) => {
+              const isActive = conv.id === activeConversationId
+              const msgCount = getMessageCount(conv.id)
+              return (
+                <Box
+                  key={conv.id}
+                  onClick={() => { setActiveConversation(conv.id); setAnchorEl(null) }}
+                  onMouseEnter={() => setHoveredId(conv.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  sx={{
+                    position: "relative",
+                    mx: 0.5,
+                    my: 0.25,
+                    display: "flex",
+                    cursor: "pointer",
+                    flexDirection: "column",
+                    borderRadius: 1,
+                    px: 1,
+                    py: 0.75,
+                    transition: "background-color 0.12s ease",
+                    ...(isActive
+                      ? { bgcolor: "rgba(194,65,12,0.06)", color: "primary.main", borderLeft: "2px solid", borderColor: "primary.main" }
+                      : { color: "text.primary", borderLeft: "2px solid transparent", "&:hover": { bgcolor: "action.hover" } }),
+                  }}
+                >
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: "flex-start", justifyContent: "space-between" }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ flex: 1, fontWeight: 600, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                    >
+                      {conv.title}
+                    </Typography>
+                    {hoveredId === conv.id && (
+                      <IconButton
+                        size="small"
+                        sx={{ flexShrink: 0, p: 0.25, color: "text.secondary", "&:hover": { color: "error.main" } }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          deleteConversation(conv.id)
+                          const proj = useWikiStore.getState().project
+                          if (proj) {
+                            deleteFile(`${proj.path}/.llm-wiki/chats/${conv.id}.json`).catch(() => {})
+                          }
+                        }}
+                      >
+                        <DeleteOutlineOutlinedIcon sx={{ fontSize: 12 }} />
+                      </IconButton>
+                    )}
+                  </Stack>
+                  <Stack direction="row" spacing={0.75} sx={{ mt: 0.25, alignItems: "center" }}>
+                    <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
+                      {formatDate(conv.updatedAt)}
+                    </Typography>
+                    {msgCount > 0 && (
+                      <>
+                        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>·</Typography>
+                        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary" }}>
+                          {t("chat.msgs", { count: msgCount })}
+                        </Typography>
+                      </>
+                    )}
+                  </Stack>
+                </Box>
+              )
+            })
+          )}
+        </Box>
+      </Popover>
+    </>
   )
 }
 
@@ -212,7 +251,6 @@ export function ChatPanel() {
   const removeLastAssistantMessage = useChatStore((s) => s.removeLastAssistantMessage)
   const maxHistoryMessages = useChatStore((s) => s.maxHistoryMessages)
 
-  // Derive active messages via selector to re-render on message changes
   const allMessages = useChatStore((s) => s.messages)
   const activeMessages = activeConversationId
     ? allMessages.filter((m) => m.conversationId === activeConversationId)
@@ -226,7 +264,6 @@ export function ChatPanel() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when messages change or streaming content updates
   useEffect(() => {
     const container = scrollContainerRef.current
     if (container) {
@@ -236,7 +273,6 @@ export function ChatPanel() {
 
   const handleSend = useCallback(
     async (text: string) => {
-      // Auto-create a conversation if none is active
       let convId = useChatStore.getState().activeConversationId
       if (!convId) {
         convId = createConversation()
@@ -245,7 +281,6 @@ export function ChatPanel() {
       addMessage("user", text)
       setStreaming(true)
 
-      // Build system prompt with wiki context using graph-enhanced retrieval
       const systemMessages: LLMMessage[] = []
       let queryRefs: { title: string; path: string }[] = []
       if (project) {
@@ -253,7 +288,6 @@ export function ChatPanel() {
         const dataVersion = useWikiStore.getState().dataVersion
         const maxCtx = llmConfig.maxContextSize || 204800
 
-        // ── Budget allocation ──────────────────────────────────
         const INDEX_BUDGET = Math.floor(maxCtx * 0.05)
         const PAGE_BUDGET = Math.floor(maxCtx * 0.6)
         const MAX_PAGE_SIZE = Math.min(Math.floor(PAGE_BUDGET * 0.3), 30_000)
@@ -263,11 +297,9 @@ export function ChatPanel() {
           readFile(`${pp}/purpose.md`).catch(() => ""),
         ])
 
-        // ── Phase 1: Tokenized search → top 10 ────────────────
         const searchResults = await searchWiki(pp, text)
         const topSearchResults = searchResults.slice(0, 10)
 
-        // ── Trim index by relevance if over budget ─────────────
         let index = rawIndex
         if (rawIndex.length > INDEX_BUDGET) {
           const { tokenizeQuery } = await import("@/lib/search")
@@ -294,9 +326,6 @@ export function ChatPanel() {
           }
         }
 
-        // ── Phase 2: Graph 1-level expansion ───────────────────
-        // Note: Vector search (if enabled) is already merged into searchResults
-        // by searchWiki() in search.ts — no duplicate code needed here.
         const graph = await buildRetrievalGraph(pp, dataVersion)
         const expandedIds = new Set<string>()
         const searchHitPaths = new Set(topSearchResults.map((r) => r.path))
@@ -316,7 +345,6 @@ export function ChatPanel() {
         }
         graphExpansions.sort((a, b) => b.relevance - a.relevance)
 
-        // ── Phase 3 & 4: Page budget control ───────────────────
         let usedChars = 0
         type PageEntry = { title: string; path: string; content: string; priority: number }
         const relevantPages: PageEntry[] = []
@@ -336,19 +364,15 @@ export function ChatPanel() {
           } catch { return false }
         }
 
-        // P0: Title matches
         for (const r of topSearchResults.filter((r) => r.titleMatch)) {
           await tryAddPage(r.title, r.path, 0)
         }
-        // P1: Content matches
         for (const r of topSearchResults.filter((r) => !r.titleMatch)) {
           await tryAddPage(r.title, r.path, 1)
         }
-        // P2: Graph expansions
         for (const exp of graphExpansions) {
           await tryAddPage(exp.title, exp.path, 2)
         }
-        // P3: Overview fallback
         if (relevantPages.length === 0) {
           await tryAddPage("Overview", `${pp}/wiki/overview.md`, 3)
         }
@@ -392,8 +416,6 @@ export function ChatPanel() {
         queryRefs = [...lastQueryPages]
       }
 
-      // ── Conversation history with count limit ────────────────
-      // Only include messages from the active conversation, last N messages
       const activeConvMessages = useChatStore.getState().getActiveMessages()
         .filter((m) => m.role === "user" || m.role === "assistant")
         .slice(-maxHistoryMessages)
@@ -416,7 +438,6 @@ export function ChatPanel() {
           onDone: () => {
             finalizeStream(accumulated, queryRefs)
             abortRef.current = null
-            // save-worthy detection removed — user has direct "Save to Wiki" button on each message
           },
           onError: (err) => {
             finalizeStream(`${t("chat.error")}${err.message}`, undefined)
@@ -436,16 +457,11 @@ export function ChatPanel() {
 
   const handleRegenerate = useCallback(async () => {
     if (isStreaming) return
-    // Find the last user message in active conversation
     const active = useChatStore.getState().getActiveMessages()
     const lastUserMsg = [...active].reverse().find((m) => m.role === "user")
     if (!lastUserMsg) return
-    // Remove the last assistant reply, then re-send
     removeLastAssistantMessage()
-    // Small delay to let state update
     await new Promise((r) => setTimeout(r, 50))
-    // Trigger send with the same text (handleSend will add a new user message,
-    // so also remove the original to avoid duplication)
     const store = useChatStore.getState()
     const updatedActive = store.getActiveMessages()
     const lastUser = [...updatedActive].reverse().find((m) => m.role === "user")
@@ -477,77 +493,71 @@ export function ChatPanel() {
   const showWriteButton = mode === "ingest" && !isStreaming && hasAssistantMessages
 
   return (
-    <Stack direction="row" sx={{ height: 1, overflow: "hidden" }}>
-      <ConversationSidebar />
+    <Stack sx={{ height: 1, overflow: "hidden" }}>
+      <ChatHeader />
 
-      <Stack sx={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-        {!activeConversationId ? (
-          <Stack
-            sx={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              color: "text.secondary",
-            }}
-          >
-            <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 32, mb: 1.5, opacity: 0.2, color: "primary.main" }} />
-            <Typography variant="body2">{t("chat.startConversation")}</Typography>
-            <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.6 }}>
-              {t("chat.clickNewChat")}
-            </Typography>
-          </Stack>
-        ) : (
-          <>
-            <Box
-              ref={scrollContainerRef}
-              sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 1 }}
-            >
-              <Stack spacing={1.5}>
-                {activeMessages.map((msg, idx) => {
-                  // Check if this is the last assistant message
-                  const isLastAssistant = msg.role === "assistant" &&
-                    !activeMessages.slice(idx + 1).some((m) => m.role === "assistant")
-                  return (
-                    <ChatMessage
-                      key={msg.id}
-                      message={msg}
-                      isLastAssistant={isLastAssistant && !isStreaming}
-                      onRegenerate={isLastAssistant ? handleRegenerate : undefined}
-                    />
-                  )
-                })}
-                {isStreaming && <StreamingMessage content={streamingContent} />}
-                <div ref={bottomRef} />
-              </Stack>
+      {!activeConversationId ? (
+        <Stack
+          sx={{
+            flex: 1,
+            alignItems: "center",
+            justifyContent: "center",
+            color: "text.secondary",
+          }}
+        >
+          <ChatBubbleOutlineOutlinedIcon sx={{ fontSize: 32, mb: 1.5, opacity: 0.2, color: "primary.main" }} />
+          <Typography variant="body2">{t("chat.startConversation")}</Typography>
+          <Typography variant="caption" sx={{ mt: 0.5, opacity: 0.6 }}>
+            {t("chat.clickNewChat")}
+          </Typography>
+        </Stack>
+      ) : (
+        <>
+          <Box ref={scrollContainerRef} sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 1 }}>
+            <Stack spacing={1.5}>
+              {activeMessages.map((msg, idx) => {
+                const isLastAssistant = msg.role === "assistant" &&
+                  !activeMessages.slice(idx + 1).some((m) => m.role === "assistant")
+                return (
+                  <ChatMessage
+                    key={msg.id}
+                    message={msg}
+                    isLastAssistant={isLastAssistant && !isStreaming}
+                    onRegenerate={isLastAssistant ? handleRegenerate : undefined}
+                  />
+                )
+              })}
+              {isStreaming && <StreamingMessage content={streamingContent} />}
+              <div ref={bottomRef} />
+            </Stack>
+          </Box>
+
+          {showWriteButton && (
+            <Box sx={{ borderTop: 1, borderColor: "divider", px: 1.5, py: 1 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                fullWidth
+                startIcon={<MenuBookIcon sx={{ fontSize: 18 }} />}
+                onClick={handleWriteToWiki}
+              >
+                {t("chat.writeToWiki")}
+              </Button>
             </Box>
+          )}
+        </>
+      )}
 
-            {showWriteButton && (
-              <Box sx={{ borderTop: 1, borderColor: "divider", px: 1.5, py: 1 }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  fullWidth
-                  startIcon={<MenuBookIcon sx={{ fontSize: 18 }} />}
-                  onClick={handleWriteToWiki}
-                >
-                  {t("chat.writeToWiki")}
-                </Button>
-              </Box>
-            )}
-          </>
-        )}
-
-        <ChatInput
-          onSend={handleSend}
-          onStop={handleStop}
-          isStreaming={isStreaming}
-          placeholder={
-            mode === "ingest"
-              ? t("chat.ingestPlaceholder")
-              : t("chat.placeholder")
-          }
-        />
-      </Stack>
+      <ChatInput
+        onSend={handleSend}
+        onStop={handleStop}
+        isStreaming={isStreaming}
+        placeholder={
+          mode === "ingest"
+            ? t("chat.ingestPlaceholder")
+            : t("chat.placeholder")
+        }
+      />
     </Stack>
   )
 }

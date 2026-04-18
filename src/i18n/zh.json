@@ -82,6 +82,11 @@
     "clickNewChat": "点击「新对话」开始",
     "stopGeneration": "停止生成",
     "sendMessage": "发送消息",
+    "hidePanel": "关闭 AI 对话",
+    "showPanel": "打开 AI 对话",
+    "aiChat": "AI 对话",
+    "history": "历史对话",
+    "historyTitle": "历史对话",
     "regenerate": "重新生成",
     "regenerateTitle": "重新生成此回复",
     "copy": "复制",
@@ -209,12 +214,23 @@
     "kChars": "{{count}}K 字符",
     "chars": "{{count}} 字符"
   },
+  "editor": {
+    "noFileOpen": "未打开文件",
+    "openFromSidebar": "从左侧目录选择文件",
+    "newTab": "新标签页",
+    "emptyFile": "文件内容为空",
+    "emptyFileHint": "该文档尚未生成内容，可直接在此输入或重新导入资料",
+    "emptyFileReason": "LLM 生成时内容为空，可前往原始资料重新导入触发重新生成",
+    "goToSources": "前往原始资料"
+  },
   "preview": {
     "selectFile": "选择文件以预览",
     "notAvailable": "该文件类型暂不支持预览",
     "errorLoading": "加载文件出错：{{err}}",
     "pdfExtracted": "PDF（提取文本）",
-    "text": "文本"
+    "documentExtracted": "文档（提取文本）",
+    "text": "文本",
+    "processingRequired": "文件尚未完成预处理。请在「原始资料」中对该文件点击导入，等待提取完成后再查看。"
   },
   "activity": {
     "processing": "处理中：{{title}}",

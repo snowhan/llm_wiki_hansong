@@ -4,55 +4,139 @@ import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
 import Button from "@mui/material/Button"
 import IconButton from "@mui/material/IconButton"
+import Tooltip from "@mui/material/Tooltip"
+import CircularProgress from "@mui/material/CircularProgress"
 import AddIcon from "@mui/icons-material/Add"
 import DescriptionIcon from "@mui/icons-material/Description"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import MenuBookIcon from "@mui/icons-material/MenuBook"
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
 import FolderIcon from "@mui/icons-material/Folder"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import { useWikiStore } from "@/stores/wiki-store"
 import { copyFile, copyDirectory, listDirectory, readFile, writeFile, deleteFile, findRelatedWikiPages, preprocessFile } from "@/commands/fs"
+import type { PreprocessStage } from "@/commands/fs"
 import { apiUpload } from "@/lib/api-client"
 import type { FileNode } from "@/types/wiki"
-import { startIngest } from "@/lib/ingest"
-import { enqueueIngest, enqueueBatch } from "@/lib/ingest-queue"
+import { autoIngest } from "@/lib/ingest"
 import { useTranslation } from "react-i18next"
-import { normalizePath, getFileName } from "@/lib/path-utils"
+import { normalizePath, getFileName, getFileStem } from "@/lib/path-utils"
+
+export type PreprocessStatus = "idle" | "processing" | "done" | "error"
+export type IngestStatus = "idle" | "ingesting" | "interrupted" | "done" | "error"
 
 export function SourcesView() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
   const selectedFile = useWikiStore((s) => s.selectedFile)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
-  const setActiveView = useWikiStore((s) => s.setActiveView)
   const setFileContent = useWikiStore((s) => s.setFileContent)
   const setFileTree = useWikiStore((s) => s.setFileTree)
-  const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
   const llmConfig = useWikiStore((s) => s.llmConfig)
+  const ingestingPath = useWikiStore((s) => s.ingestingPath)
+  const ingestStatuses = useWikiStore((s) => s.ingestStatuses)
+  const setIngestingPath = useWikiStore((s) => s.setIngestingPath)
+  const setIngestStatus = useWikiStore((s) => s.setIngestStatus)
   const [sources, setSources] = useState<FileNode[]>([])
   const [importing, setImporting] = useState(false)
-  const [ingestingPath, setIngestingPath] = useState<string | null>(null)
+  const [preprocessStatuses, setPreprocessStatuses] = useState<Record<string, PreprocessStatus>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+
+  const setFileStatus = useCallback((path: string, status: PreprocessStatus) => {
+    setPreprocessStatuses((prev) => ({ ...prev, [path]: status }))
+  }, [])
 
   const loadSources = useCallback(async () => {
     if (!project) return
     const pp = normalizePath(project.path)
     try {
       const tree = await listDirectory(`${pp}/raw/sources`)
-      // Filter out hidden files/dirs and cache
       const filtered = filterTree(tree)
       setSources(filtered)
+      // Also refresh main file tree so deleted empty wiki pages disappear
+      const fullTree = await listDirectory(pp)
+      setFileTree(fullTree)
+      useWikiStore.getState().bumpDataVersion()
     } catch {
       setSources([])
     }
-  }, [project])
+  }, [project, setFileTree])
 
   useEffect(() => {
     loadSources()
   }, [loadSources])
+
+  // Check cache existence for all files when sources load
+  useEffect(() => {
+    if (!sources.length) return
+    const allFiles = flattenAllFiles(sources)
+    for (const file of allFiles) {
+      // Check if .cache.txt exists → "done", else trigger preprocessing
+      readFile(file.path + ".cache.txt")
+        .then(() => setFileStatus(file.path, "done"))
+        .catch(() => {
+          // No cache — auto-trigger preprocessing
+          setFileStatus(file.path, "processing")
+          preprocessFile(file.path, (stage) => {
+            if (stage === "done" || stage === "cached") setFileStatus(file.path, "done")
+            else if (stage === "error") setFileStatus(file.path, "error")
+          }).catch(() => setFileStatus(file.path, "error"))
+        })
+    }
+  }, [sources, setFileStatus])
+
+  // Check wiki ingest status for all source files on load
+  useEffect(() => {
+    if (!sources.length || !project) return
+    const pp = normalizePath(project.path)
+    const allFiles = flattenAllFiles(sources)
+    for (const file of allFiles) {
+      const stem = getFileStem(file.name)
+      const wikiSourcePage = `${pp}/wiki/sources/${stem}.md`
+      readFile(wikiSourcePage)
+        .then(() => setIngestStatus(file.path, "done"))
+        .catch(() => {
+          // Don't overwrite "interrupted" — it means page was refreshed mid-ingest
+          const current = useWikiStore.getState().ingestStatuses[file.path]
+          if (current !== "interrupted") setIngestStatus(file.path, "idle")
+        })
+    }
+  }, [sources, project, setIngestStatus])
+
+  // Auto-retry files whose ingest was interrupted by a page refresh
+  useEffect(() => {
+    if (!sources.length || !project) return
+    const allFiles = flattenAllFiles(sources)
+    const interrupted = allFiles.filter(
+      (f) => useWikiStore.getState().ingestStatuses[f.path] === "interrupted"
+    )
+    if (interrupted.length === 0) return
+    const pp = normalizePath(project.path)
+    ;(async () => {
+      for (const file of interrupted) {
+        if (useWikiStore.getState().ingestingPath) break
+        useWikiStore.getState().setIngestingPath(file.path)
+        useWikiStore.getState().setIngestStatus(file.path, "ingesting")
+        try {
+          const written = await autoIngest(pp, file.path, llmConfig)
+          useWikiStore.getState().setIngestStatus(file.path, written.length > 0 ? "done" : "error")
+          if (written.length > 0) {
+            const tree = await listDirectory(pp)
+            setFileTree(tree)
+            useWikiStore.getState().bumpDataVersion()
+          }
+        } catch {
+          useWikiStore.getState().setIngestStatus(file.path, "error")
+        } finally {
+          useWikiStore.getState().setIngestingPath(null)
+        }
+      }
+    })()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sources, project])
 
   function handleImport() {
     fileInputRef.current?.click()
@@ -75,7 +159,11 @@ export function SourcesView() {
       const { paths: importedPaths } = await apiUpload("/api/fs/upload", formData)
 
       for (const destPath of importedPaths) {
-        preprocessFile(destPath).catch(() => {})
+        setFileStatus(destPath, "processing")
+        preprocessFile(destPath, (stage: PreprocessStage) => {
+          if (stage === "done" || stage === "cached") setFileStatus(destPath, "done")
+          else if (stage === "error") setFileStatus(destPath, "error")
+        }).catch(() => setFileStatus(destPath, "error"))
       }
 
       await loadSources()
@@ -123,7 +211,11 @@ export function SourcesView() {
       console.log(`[Folder Import] Uploaded ${copiedFiles.length} files from ${folderName}`)
 
       for (const filePath of copiedFiles) {
-        preprocessFile(filePath).catch(() => {})
+        setFileStatus(filePath, "processing")
+        preprocessFile(filePath, (stage: PreprocessStage) => {
+          if (stage === "done" || stage === "cached") setFileStatus(filePath, "done")
+          else if (stage === "error") setFileStatus(filePath, "error")
+        }).catch(() => setFileStatus(filePath, "error"))
       }
 
       await loadSources()
@@ -302,16 +394,47 @@ export function SourcesView() {
 
   async function handleIngest(node: FileNode) {
     if (!project || ingestingPath) return
+    const pp = normalizePath(project.path)
     setIngestingPath(node.path)
+    setIngestStatus(node.path, "ingesting")
     try {
-      setChatExpanded(true)
-      setActiveView("wiki")
-      await startIngest(normalizePath(project.path), node.path, llmConfig)
+      const written = await autoIngest(pp, node.path, llmConfig)
+      setIngestStatus(node.path, written.length > 0 ? "done" : "error")
+      if (written.length > 0) {
+        const tree = await listDirectory(pp)
+        setFileTree(tree)
+        useWikiStore.getState().bumpDataVersion()
+      }
     } catch (err) {
-      console.error("Failed to start ingest:", err)
+      console.error("Failed to ingest:", err)
+      setIngestStatus(node.path, "error")
     } finally {
       setIngestingPath(null)
     }
+  }
+
+  async function handleBatchIngest() {
+    if (!project || ingestingPath) return
+    const pp = normalizePath(project.path)
+    const allFiles = flattenAllFiles(sources)
+    for (const file of allFiles) {
+      setIngestingPath(file.path)
+      setIngestStatus(file.path, "ingesting")
+      try {
+        const written = await autoIngest(pp, file.path, llmConfig)
+        setIngestStatus(file.path, written.length > 0 ? "done" : "error")
+      } catch (err) {
+        console.error(`Failed to ingest ${file.name}:`, err)
+        setIngestStatus(file.path, "error")
+      } finally {
+        setIngestingPath(null)
+      }
+    }
+    try {
+      const tree = await listDirectory(pp)
+      setFileTree(tree)
+      useWikiStore.getState().bumpDataVersion()
+    } catch { /* non-critical */ }
   }
 
   return (
@@ -349,9 +472,23 @@ export function SourcesView() {
           {t("sources.title")}
         </Typography>
         <Stack direction="row" spacing={0.5}>
-          <IconButton size="small" onClick={loadSources} title={t("sources.refresh")}>
-            <RefreshIcon sx={{ fontSize: 18 }} />
-          </IconButton>
+          <Tooltip title={t("sources.refresh")} enterDelay={600}>
+            <IconButton size="small" onClick={loadSources}>
+              <RefreshIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={ingestingPath ? "正在生成中，请稍候" : "重新用 AI 生成所有 Wiki 页面"} enterDelay={ingestingPath ? 0 : 600}>
+            <span>
+              <IconButton
+                size="small"
+                disabled={!!ingestingPath}
+                onClick={handleBatchIngest}
+                sx={{ color: "text.secondary", "&:hover": { color: "#7c3aed", bgcolor: "rgba(124,58,237,0.06)" } }}
+              >
+                <AutoAwesomeIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Button size="small" variant="contained" onClick={handleImport} disabled={importing} startIcon={<AddIcon sx={{ fontSize: 18 }} />}>
             {importing ? t("sources.importing") : t("sources.import")}
           </Button>
@@ -389,12 +526,36 @@ export function SourcesView() {
           </Stack>
         ) : (
           <Box sx={{ p: 1 }}>
+            {/* Banner: show when some files haven't been ingested yet */}
+            {(() => {
+              const allFiles = flattenAllFiles(sources)
+              const notIngested = allFiles.filter((f) => !ingestStatuses[f.path] || ingestStatuses[f.path] === "idle").length
+              if (notIngested === 0) return null
+              return (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, px: 1.5, py: 1, borderRadius: 1.5, bgcolor: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)" }}>
+                  <AutoAwesomeIcon sx={{ fontSize: 14, color: "#7c3aed", flexShrink: 0 }} />
+                  <Typography variant="caption" sx={{ flex: 1, color: "#5b21b6", lineHeight: 1.4 }}>
+                    {notIngested} 个文件尚未生成 Wiki
+                  </Typography>
+                  <Button
+                    size="small"
+                    disabled={!!ingestingPath}
+                    onClick={handleBatchIngest}
+                    sx={{ fontSize: "0.7rem", py: 0.25, px: 1, minHeight: 0, color: "#7c3aed", border: "1px solid rgba(124,58,237,0.3)", "&:hover": { bgcolor: "rgba(124,58,237,0.1)" } }}
+                  >
+                    全部生成
+                  </Button>
+                </Box>
+              )
+            })()}
             <SourceTree
               nodes={sources}
               onOpen={handleOpenSource}
               onIngest={handleIngest}
               onDelete={handleDelete}
               ingestingPath={ingestingPath}
+              preprocessStatuses={preprocessStatuses}
+              ingestStatuses={ingestStatuses}
               depth={0}
             />
           </Box>
@@ -455,7 +616,7 @@ async function getUniqueDestPath(dir: string, fileName: string): Promise<string>
 
 function filterTree(nodes: FileNode[]): FileNode[] {
   return nodes
-    .filter((n) => !n.name.startsWith("."))
+    .filter((n) => !n.name.startsWith(".") && !n.name.endsWith(".cache.txt"))
     .map((n) => {
       if (n.is_dir && n.children) {
         return { ...n, children: filterTree(n.children) }
@@ -483,6 +644,8 @@ function SourceTree({
   onIngest,
   onDelete,
   ingestingPath,
+  preprocessStatuses,
+  ingestStatuses,
   depth,
 }: {
   nodes: FileNode[]
@@ -490,6 +653,8 @@ function SourceTree({
   onIngest: (node: FileNode) => void
   onDelete: (node: FileNode) => void
   ingestingPath: string | null
+  preprocessStatuses: Record<string, PreprocessStatus>
+  ingestStatuses: Record<string, IngestStatus>
   depth: number
 }) {
   const { t } = useTranslation()
@@ -500,17 +665,27 @@ function SourceTree({
   }
 
   // Sort: folders first, then files, alphabetical within each group
-  const sorted = [...nodes].sort((a, b) => {
-    if (a.is_dir && !b.is_dir) return -1
-    if (!a.is_dir && b.is_dir) return 1
-    return a.name.localeCompare(b.name)
-  })
+  // Filter out .cache.txt sidecar files — these are internal artifacts, not user files
+  const sorted = [...nodes]
+    .filter((n) => !n.path.endsWith(".cache.txt"))
+    .sort((a, b) => {
+      if (a.is_dir && !b.is_dir) return -1
+      if (!a.is_dir && b.is_dir) return 1
+      return a.name.localeCompare(b.name)
+    })
 
   return (
     <>
       {sorted.map((node) => {
         if (node.is_dir && node.children) {
           const isCollapsed = collapsed[node.path] ?? false
+          // Folder progress: count done/total for preprocess
+          const folderFiles = flattenAllFiles(node.children)
+          const ppDone = folderFiles.filter((f) => preprocessStatuses[f.path] === "done").length
+          const ppProcessing = folderFiles.filter((f) => preprocessStatuses[f.path] === "processing").length
+          const ingestDone = folderFiles.filter((f) => ingestStatuses[f.path] === "done").length
+          const ingestIngesting = folderFiles.filter((f) => ingestStatuses[f.path] === "ingesting").length
+          const total = folderFiles.length
           return (
             <Box key={node.path}>
               <Button
@@ -538,9 +713,20 @@ function SourceTree({
                 <Typography variant="body2" sx={{ flex: 1, minWidth: 0, textAlign: "left" }} noWrap>
                   {t(`folderNames.${node.name}`, { defaultValue: node.name })}
                 </Typography>
-                <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.secondary", opacity: 0.6, flexShrink: 0 }}>
-                  {countFiles(node.children)}
-                </Typography>
+                {/* Folder progress summary */}
+                <Stack direction="row" spacing={0.75} sx={{ flexShrink: 0, alignItems: "center" }}>
+                  <Tooltip title={`提取文本：${ppDone}/${total} 完成${ppProcessing > 0 ? `，${ppProcessing} 处理中` : ""}`} enterDelay={600} placement="top">
+                    <Typography variant="caption" sx={{ fontSize: "10px", fontWeight: 500, color: ppProcessing > 0 ? "#C2410C" : ppDone === total && total > 0 ? "#65a30d" : "text.secondary", opacity: 0.75, letterSpacing: "0.02em" }}>
+                      {ppDone}/{total}
+                    </Typography>
+                  </Tooltip>
+                  <Box sx={{ width: 1, height: 10, borderLeft: 1, borderColor: "divider", opacity: 0.4 }} />
+                  <Tooltip title={`Wiki 生成：${ingestDone}/${total} 完成${ingestIngesting > 0 ? `，${ingestIngesting} 生成中` : ""}`} enterDelay={600} placement="top">
+                    <Typography variant="caption" sx={{ fontSize: "10px", fontWeight: 500, color: ingestIngesting > 0 ? "#7c3aed" : ingestDone === total && total > 0 ? "#65a30d" : "text.secondary", opacity: 0.75, letterSpacing: "0.02em" }}>
+                      {ingestDone}/{total}
+                    </Typography>
+                  </Tooltip>
+                </Stack>
               </Button>
               {!isCollapsed && (
                 <SourceTree
@@ -549,12 +735,19 @@ function SourceTree({
                   onIngest={onIngest}
                   onDelete={onDelete}
                   ingestingPath={ingestingPath}
+                  preprocessStatuses={preprocessStatuses}
+                  ingestStatuses={ingestStatuses}
                   depth={depth + 1}
                 />
               )}
             </Box>
           )
         }
+
+        const ppStatus = preprocessStatuses[node.path]
+        const ingestStatus = ingestStatuses[node.path]
+        const isProcessing = ppStatus === "processing"
+        const isIngesting = ingestStatus === "ingesting" || ingestStatus === "interrupted"
 
         return (
           <Stack
@@ -563,6 +756,7 @@ function SourceTree({
             spacing={0.5}
             sx={{
               width: 1,
+              position: "relative",
               alignItems: "center",
               borderRadius: 1,
               px: 0.5,
@@ -572,6 +766,18 @@ function SourceTree({
               color: "text.secondary",
               transition: (theme) => theme.transitions.create(["background-color", "color"]),
               "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+              ...(isProcessing && {
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  inset: 0,
+                  borderRadius: "inherit",
+                  background: "linear-gradient(90deg, transparent 0%, rgba(194,65,12,0.05) 50%, transparent 100%)",
+                  backgroundSize: "200% 100%",
+                  animation: "preprocess-shimmer 1.6s ease-in-out infinite",
+                  pointerEvents: "none",
+                },
+              }),
             }}
           >
             <Button
@@ -588,32 +794,138 @@ function SourceTree({
                 color: "inherit",
               }}
             >
-              <DescriptionIcon sx={{ fontSize: 18, flexShrink: 0 }} />
-              <Typography variant="body2" noWrap sx={{ textAlign: "left" }}>
+              <DescriptionIcon
+                sx={{
+                  fontSize: 18,
+                  flexShrink: 0,
+                  color: isProcessing ? "#C2410C" : "inherit",
+                  opacity: isProcessing ? 0.8 : 1,
+                  animation: isProcessing ? "preprocess-pulse 1.4s ease-in-out infinite" : "none",
+                }}
+              />
+              <Typography variant="body2" noWrap sx={{ textAlign: "left", flex: 1 }}>
                 {node.name}
               </Typography>
             </Button>
-            <IconButton
-              size="small"
-              title={t("sources.ingest")}
-              disabled={ingestingPath === node.path}
-              onClick={() => onIngest(node)}
+
+            {/* Status indicators: preprocess + ingest */}
+            <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0, alignItems: "center", pr: 0.5 }}>
+              <Tooltip
+                title={ppStatus === "processing" ? "正在提取文本…" : ppStatus === "done" ? "文本已提取" : ppStatus === "error" ? "提取失败" : "待提取"}
+                enterDelay={800}
+                placement="top"
+              >
+                <Box component="span" sx={{ display: "flex", alignItems: "center", cursor: "default" }}>
+                  <StatusDot status={ppStatus} variant="preprocess" />
+                </Box>
+              </Tooltip>
+              <Tooltip
+                title={ingestStatus === "ingesting" ? "正在生成 Wiki…" : ingestStatus === "done" ? "Wiki 已生成" : ingestStatus === "error" ? "Wiki 生成失败" : ingestStatus === "interrupted" ? "刷新中断，正在自动恢复…" : "待生成 Wiki"}
+                enterDelay={800}
+                placement="top"
+              >
+                <Box component="span" sx={{ display: "flex", alignItems: "center", cursor: "default" }}>
+                  <StatusDot status={ingestStatus} variant="ingest" />
+                </Box>
+              </Tooltip>
+            </Stack>
+
+            {/* Re-generate Wiki button */}
+            <Tooltip
+              title={
+                isIngesting
+                  ? "正在生成中，请稍候…"
+                  : ingestingPath
+                  ? "另一个文件正在生成，请稍候"
+                  : "重新生成 Wiki"
+              }
+              enterDelay={isIngesting || ingestingPath ? 0 : 600}
+              placement="top"
             >
-              <MenuBookIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-            <IconButton
-              size="small"
-              title={t("sources.delete")}
-              onClick={() => onDelete(node)}
-              sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}
-            >
-              <DeleteOutlineOutlinedIcon sx={{ fontSize: 16 }} />
-            </IconButton>
+              <span>
+                <IconButton
+                  size="small"
+                  disabled={!!ingestingPath && !isIngesting}
+                  onClick={() => {
+                    if (isIngesting || ingestingPath) return
+                    onIngest(node)
+                  }}
+                  sx={{
+                    color: isIngesting ? "#7c3aed" : ingestStatus === "done" ? "#65a30d" : "text.secondary",
+                    "&:hover": { color: isIngesting || ingestingPath ? undefined : "#7c3aed", bgcolor: isIngesting || ingestingPath ? undefined : "rgba(124,58,237,0.06)" },
+                    cursor: isIngesting ? "not-allowed" : undefined,
+                  }}
+                >
+                  {isIngesting
+                    ? <CircularProgress size={14} thickness={5} sx={{ color: "#7c3aed" }} />
+                    : <AutoAwesomeIcon sx={{ fontSize: 16 }} />
+                  }
+                </IconButton>
+              </span>
+            </Tooltip>
+            <Tooltip title="删除源文件" enterDelay={800} placement="top">
+              <IconButton
+                size="small"
+                onClick={() => onDelete(node)}
+                sx={{ color: "text.secondary", "&:hover": { color: "error.main" } }}
+              >
+                <DeleteOutlineOutlinedIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
           </Stack>
         )
       })}
     </>
   )
+}
+
+/** Status dot for preprocess or ingest status */
+function StatusDot({ status, variant }: { status: PreprocessStatus | IngestStatus | undefined; variant: "preprocess" | "ingest" }) {
+  if (!status || status === "idle") {
+    // show a dim placeholder dot so the layout is stable
+    return (
+      <Box component="span" sx={{ display: "inline-block", width: 5, height: 5, borderRadius: "50%", bgcolor: "divider", flexShrink: 0, mx: 0.25 }} />
+    )
+  }
+
+  const colorMap: Record<string, string> = {
+    processing: "#C2410C",
+    ingesting: "#7c3aed",
+    interrupted: "#d97706",
+    done: "#65a30d",
+    error: "#dc2626",
+  }
+  const color = colorMap[status] ?? "#aaa"
+  const isActive = status === "processing" || status === "ingesting"
+
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-block",
+        width: 5,
+        height: 5,
+        borderRadius: "50%",
+        bgcolor: color,
+        flexShrink: 0,
+        mx: 0.25,
+        opacity: isActive ? 0.9 : 0.6,
+        animation: isActive ? "preprocess-dot-pulse 1.4s ease-in-out infinite" : "none",
+      }}
+    />
+  )
+}
+
+function flattenAllFiles(nodes: FileNode[]): FileNode[] {
+  const files: FileNode[] = []
+  for (const node of nodes) {
+    if (node.is_dir && node.children) {
+      files.push(...flattenAllFiles(node.children))
+    } else if (!node.is_dir && !node.path.endsWith(".cache.txt")) {
+      files.push(node)
+    }
+  }
+  return files
 }
 
 function flattenMdFiles(nodes: FileNode[]): FileNode[] {

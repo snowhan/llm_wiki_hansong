@@ -82,6 +82,11 @@
     "clickNewChat": "Click \"New Chat\" to begin",
     "stopGeneration": "Stop generation",
     "sendMessage": "Send message",
+    "hidePanel": "Hide AI Chat",
+    "showPanel": "Show AI Chat",
+    "aiChat": "AI Chat",
+    "history": "Conversation History",
+    "historyTitle": "History",
     "regenerate": "Regenerate",
     "regenerateTitle": "Regenerate this response",
     "copy": "Copy",
@@ -209,12 +214,23 @@
     "kChars": "{{count}}K characters",
     "chars": "{{count}} characters"
   },
+  "editor": {
+    "noFileOpen": "No file open",
+    "openFromSidebar": "Select a file from the sidebar",
+    "newTab": "New Tab",
+    "emptyFile": "This document is empty",
+    "emptyFileHint": "No content was generated. You can type here or re-import the source.",
+    "emptyFileReason": "The LLM generated an empty block during ingest. Re-import the source files to regenerate.",
+    "goToSources": "Go to Sources"
+  },
   "preview": {
     "selectFile": "Select a file to preview",
     "notAvailable": "Preview not available for this file type",
     "errorLoading": "Error loading file: {{err}}",
     "pdfExtracted": "PDF (extracted text)",
-    "text": "Text"
+    "documentExtracted": "Document (extracted text)",
+    "text": "Text",
+    "processingRequired": "This file has not been preprocessed yet. Please import it from Sources and wait for text extraction to complete."
   },
   "activity": {
     "processing": "Processing: {{title}}",

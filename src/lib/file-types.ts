@@ -134,6 +134,11 @@ export function isBinary(category: FileCategory): boolean {
   return ["image", "video", "audio", "document", "unknown"].includes(category)
 }
 
+/** Files that require markitdown preprocessing — should read from the .cache.txt file. */
+export function needsPreprocess(category: FileCategory): boolean {
+  return category === "pdf" || category === "document"
+}
+
 export function getCodeLanguage(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
   const langMap: Record<string, string> = {

@@ -7,10 +7,31 @@ import { useActivityStore } from "@/stores/activity-store"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { getFileName, normalizePath } from "@/lib/path-utils"
 import { checkIngestCache, saveIngestCache } from "@/lib/ingest-cache"
+import { needsPreprocess } from "@/lib/file-types"
 
 const FILE_BLOCK_REGEX = /---FILE:\s*([^\n-]+?)\s*---\n([\s\S]*?)---END FILE---/g
 
 export const LANGUAGE_RULE = "## Language Rule\n- ALWAYS match the language of the source document. If the source is in Chinese, write in Chinese. If in English, write in English. Wiki page titles, content, and descriptions should all be in the same language as the source material."
+
+/**
+ * Ensure every wiki markdown file has proper YAML frontmatter delimiters.
+ * Handles the case where the LLM omits the surrounding `---` markers.
+ */
+function normalizeFrontmatter(content: string): string {
+  // Already has proper --- delimited frontmatter
+  if (/^-{3}[ \t]*\r?\n/.test(content)) return content
+
+  // Detect 2+ consecutive bare YAML key:value lines at the start of the file
+  // (lowercase/underscore keys only — avoids treating markdown headings as YAML)
+  const m = content.match(/^((?:[a-z_][a-z0-9_]*[ \t]*:[ \t]*[^\n]*\n){2,})/)
+  if (m) {
+    const yamlBlock = m[1]
+    const rest = content.slice(yamlBlock.length).replace(/^\n+/, "") // strip leading blank lines from body
+    return `---\n${yamlBlock}---\n\n${rest}`
+  }
+
+  return content
+}
 
 /**
  * Auto-ingest: reads source → LLM analyzes → LLM writes wiki pages, all in one go.
@@ -36,7 +57,7 @@ export async function autoIngest(
   })
 
   const [sourceContent, schema, purpose, index, overview] = await Promise.all([
-    tryReadFile(sp),
+    readSourceForIngest(sp),
     tryReadFile(`${pp}/schema.md`),
     tryReadFile(`${pp}/purpose.md`),
     tryReadFile(`${pp}/wiki/index.md`),
@@ -222,8 +243,19 @@ async function writeFileBlocks(projectPath: string, text: string): Promise<strin
 
   for (const match of matches) {
     const relativePath = match[1].trim()
-    const content = match[2]
+    let content = match[2]
     if (!relativePath) continue
+
+    // Normalize frontmatter format for markdown wiki pages
+    if (relativePath.endsWith(".md") && !relativePath.endsWith("/log.md") && relativePath !== "wiki/log.md") {
+      content = normalizeFrontmatter(content)
+    }
+
+    // Skip files with no substantive content (LLM sometimes generates empty FILE blocks)
+    if (!relativePath.endsWith("/log.md") && relativePath !== "wiki/log.md" && !content.trim()) {
+      console.warn(`[writeFileBlocks] Skipping empty content for ${relativePath}`)
+      continue
+    }
 
     const fullPath = `${projectPath}/${relativePath}`
     try {
@@ -470,6 +502,20 @@ async function tryReadFile(path: string): Promise<string> {
   }
 }
 
+/**
+ * Read a source file for ingest.
+ * For binary/preprocess-needed files (PDF, DOCX, etc.) prefer the .cache.txt
+ * extract so the LLM receives readable text instead of raw bytes.
+ */
+async function readSourceForIngest(path: string): Promise<string> {
+  const ext = path.split(".").pop()?.toLowerCase() ?? ""
+  if (needsPreprocess(ext)) {
+    const cached = await tryReadFile(path + ".cache.txt")
+    if (cached && !cached.startsWith("[Binary file:")) return cached
+  }
+  return tryReadFile(path)
+}
+
 export async function startIngest(
   projectPath: string,
   sourcePath: string,
@@ -485,7 +531,7 @@ export async function startIngest(
   store.setStreaming(false)
 
   const [sourceContent, schema, purpose, index] = await Promise.all([
-    tryReadFile(sp),
+    readSourceForIngest(sp),
     tryReadFile(`${pp}/wiki/schema.md`),
     tryReadFile(`${pp}/wiki/purpose.md`),
     tryReadFile(`${pp}/wiki/index.md`),
@@ -623,9 +669,14 @@ export async function executeIngestWrites(
 
   for (const match of matches) {
     const relativePath = match[1].trim()
-    const content = match[2]
+    let content = match[2]
 
     if (!relativePath) continue
+
+    // Normalize frontmatter for markdown files
+    if (relativePath.endsWith(".md") && !relativePath.endsWith("/log.md") && relativePath !== "wiki/log.md") {
+      content = normalizeFrontmatter(content)
+    }
 
     const fullPath = `${pp}/${relativePath}`
 

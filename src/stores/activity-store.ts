@@ -1,4 +1,5 @@
 import { create } from "zustand"
+import { persist } from "zustand/middleware"
 
 export interface ActivityItem {
   id: string
@@ -20,36 +21,58 @@ interface ActivityState {
 
 let counter = 0
 
-export const useActivityStore = create<ActivityState>((set, _get) => ({
-  items: [],
+export const useActivityStore = create<ActivityState>()(
+  persist(
+    (set, _get) => ({
+      items: [],
 
-  addItem: (item) => {
-    const id = `activity-${++counter}`
-    set((state) => ({
-      items: [
-        { ...item, id, createdAt: Date.now() },
-        ...state.items,
-      ],
-    }))
-    return id
-  },
+      addItem: (item) => {
+        const id = `activity-${++counter}`
+        set((state) => ({
+          items: [
+            { ...item, id, createdAt: Date.now() },
+            ...state.items,
+          ],
+        }))
+        return id
+      },
 
-  updateItem: (id, updates) =>
-    set((state) => ({
-      items: state.items.map((item) =>
-        item.id === id ? { ...item, ...updates } : item
-      ),
-    })),
+      updateItem: (id, updates) =>
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.id === id ? { ...item, ...updates } : item
+          ),
+        })),
 
-  appendDetail: (id, text) =>
-    set((state) => ({
-      items: state.items.map((item) =>
-        item.id === id ? { ...item, detail: item.detail + text } : item
-      ),
-    })),
+      appendDetail: (id, text) =>
+        set((state) => ({
+          items: state.items.map((item) =>
+            item.id === id ? { ...item, detail: item.detail + text } : item
+          ),
+        })),
 
-  clearDone: () =>
-    set((state) => ({
-      items: state.items.filter((i) => i.status === "running"),
-    })),
-}))
+      clearDone: () =>
+        set((state) => ({
+          items: state.items.filter((i) => i.status === "running"),
+        })),
+    }),
+    {
+      name: "llm-wiki-activity",
+      // Only persist items, not actions
+      partialize: (state) => ({ items: state.items }),
+      // On rehydration: any "running" item was killed by page refresh
+      onRehydrateStorage: () => (state) => {
+        if (!state) return
+        const now = Date.now()
+        state.items = state.items
+          .map((item) =>
+            item.status === "running"
+              ? { ...item, status: "error" as const, detail: "任务被页面刷新中断，请重新生成" }
+              : item
+          )
+          // Only keep items from the last 24 hours
+          .filter((item) => now - item.createdAt < 24 * 60 * 60 * 1000)
+      },
+    }
+  )
+)

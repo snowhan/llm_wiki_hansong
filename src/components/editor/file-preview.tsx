@@ -2,6 +2,7 @@ import { mediaUrl } from "@/lib/api-client"
 import { useTranslation } from "react-i18next"
 import AudiotrackIcon from "@mui/icons-material/Audiotrack"
 import HelpOutlineOutlinedIcon from "@mui/icons-material/HelpOutlineOutlined"
+import HourglassEmptyOutlinedIcon from "@mui/icons-material/HourglassEmptyOutlined"
 import ImageIcon from "@mui/icons-material/Image"
 import MovieIcon from "@mui/icons-material/Movie"
 import TableChartIcon from "@mui/icons-material/TableChart"
@@ -12,6 +13,8 @@ import { MarkdownView } from "@/components/ui/markdown-view"
 import { getFileCategory, getCodeLanguage } from "@/lib/file-types"
 import type { FileCategory } from "@/lib/file-types"
 import { getFileName } from "@/lib/path-utils"
+
+const NO_CACHE = "__NO_CACHE__"
 
 interface FilePreviewProps {
   filePath: string
@@ -31,15 +34,21 @@ export function FilePreview({ filePath, textContent }: FilePreviewProps) {
     case "audio":
       return <AudioPreview filePath={filePath} fileName={fileName} />
     case "pdf":
+      if (textContent === NO_CACHE || !textContent) {
+        return <ProcessingPlaceholder filePath={filePath} fileName={fileName} />
+      }
       return <TextPreview filePath={filePath} content={textContent} label={t("preview.pdfExtracted")} />
+    case "document":
+      if (textContent === NO_CACHE || !textContent) {
+        return <ProcessingPlaceholder filePath={filePath} fileName={fileName} />
+      }
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.documentExtracted")} />
     case "code":
       return <CodePreview filePath={filePath} content={textContent} />
     case "data":
       return <CodePreview filePath={filePath} content={textContent} />
     case "text":
       return <TextPreview filePath={filePath} content={textContent} label={t("preview.text")} />
-    case "document":
-      return <BinaryPlaceholder filePath={filePath} fileName={fileName} category={category} />
     default:
       return <BinaryPlaceholder filePath={filePath} fileName={fileName} category={category} />
   }
@@ -204,6 +213,37 @@ function TextPreview({ filePath, content, label }: { filePath: string; content: 
         </Typography>
       </Box>
       <MarkdownView markdown={content} sx={{ fontSize: "0.875rem" }} />
+    </Box>
+  )
+}
+
+function ProcessingPlaceholder({ filePath, fileName }: { filePath: string; fileName: string }) {
+  const { t } = useTranslation()
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        height: "100%",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        p: 3,
+        textAlign: "center",
+      }}
+    >
+      <HourglassEmptyOutlinedIcon sx={{ fontSize: 56, color: "action.disabled" }} />
+      <Box>
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {fileName}
+        </Typography>
+        <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: "text.secondary" }}>
+          {filePath}
+        </Typography>
+      </Box>
+      <Typography variant="body2" sx={{ color: "text.secondary", maxWidth: 360 }}>
+        {t("preview.processingRequired")}
+      </Typography>
     </Box>
   )
 }

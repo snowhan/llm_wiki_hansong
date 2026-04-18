@@ -83,8 +83,10 @@ router.post("/upload", upload.array("files"), async (req, res, next) => {
 
     const savedPaths: string[] = []
     for (const file of files) {
-      const relativePath = (file as Express.Multer.File & { originalname: string }).originalname
-      const destPath = path.join(destDir, relativePath)
+      // multer reads originalname as Latin-1; re-decode to UTF-8 to fix CJK mojibake
+      const rawName = (file as Express.Multer.File & { originalname: string }).originalname
+      const originalName = Buffer.from(rawName, "latin1").toString("utf8")
+      const destPath = path.join(destDir, originalName)
       await writeFileContent(destPath, "")
       const fsModule = await import("node:fs/promises")
       await fsModule.copyFile(file.path, destPath)

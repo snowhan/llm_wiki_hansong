@@ -45,7 +45,7 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
         gap: 0.25,
         px: 1,
         py: 0.5,
-        bgcolor: "#fff",
+        bgcolor: "background.paper",
         borderBottom: "1px solid",
         borderColor: "divider",
       }}

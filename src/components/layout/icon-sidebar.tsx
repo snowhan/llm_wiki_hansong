@@ -17,7 +17,7 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useResearchStore } from "@/stores/research-store"
 import { useTranslation } from "react-i18next"
-import logoImg from "@/assets/logo.jpg"
+import logoImg from "@/assets/logo.png"
 import type { WikiState } from "@/stores/wiki-store"
 
 type NavIcon = React.ComponentType<SvgIconProps>
@@ -127,11 +127,10 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
           src={logoImg}
           alt="LLM Wiki"
           sx={{
-            height: 32,
-            width: 32,
+            height: 34,
+            width: 34,
             borderRadius: "10px",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-            border: "1px solid rgba(194, 65, 12, 0.15)",
+            objectFit: "cover",
           }}
         />
       </Box>
