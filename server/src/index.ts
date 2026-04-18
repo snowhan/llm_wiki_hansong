@@ -12,6 +12,7 @@ import llmRouter from "./routes/llm.js"
 import vectorRouter from "./routes/vector.js"
 import preprocessRouter from "./routes/preprocess.js"
 import clipRouter from "./routes/clip.js"
+import ingestRouter from "./routes/ingest.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -28,6 +29,7 @@ app.use("/api/llm", llmRouter)
 app.use("/api/vector", vectorRouter)
 app.use("/api/preprocess", preprocessRouter)
 app.use("/api/clip", clipRouter)
+app.use("/api/ingest", ingestRouter)
 
 const distDir = path.resolve(__dirname, "../../dist")
 app.use(express.static(distDir))

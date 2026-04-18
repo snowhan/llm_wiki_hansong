@@ -20,9 +20,9 @@ import { copyFile, copyDirectory, listDirectory, readFile, writeFile, deleteFile
 import type { PreprocessStage } from "@/commands/fs"
 import { apiUpload } from "@/lib/api-client"
 import type { FileNode } from "@/types/wiki"
-import { autoIngest } from "@/lib/ingest"
 import { useTranslation } from "react-i18next"
 import { normalizePath, getFileName, getFileStem } from "@/lib/path-utils"
+import { startServerIngest, subscribeIngestSSE, getAllServerTasks } from "@/commands/ingest"
 
 export type PreprocessStatus = "idle" | "processing" | "done" | "error"
 export type IngestStatus = "idle" | "ingesting" | "interrupted" | "done" | "error"
@@ -39,6 +39,8 @@ export function SourcesView() {
   const ingestStatuses = useWikiStore((s) => s.ingestStatuses)
   const setIngestingPath = useWikiStore((s) => s.setIngestingPath)
   const setIngestStatus = useWikiStore((s) => s.setIngestStatus)
+  const serverTaskIds = useWikiStore((s) => s.serverTaskIds)
+  const setServerTaskId = useWikiStore((s) => s.setServerTaskId)
   const [sources, setSources] = useState<FileNode[]>([])
   const [importing, setImporting] = useState(false)
   const [preprocessStatuses, setPreprocessStatuses] = useState<Record<string, PreprocessStatus>>({})
@@ -106,37 +108,125 @@ export function SourcesView() {
     }
   }, [sources, project, setIngestStatus])
 
-  // Auto-retry files whose ingest was interrupted by a page refresh
+  // ── Reconnect to running server tasks on mount ──────────────────────────
   useEffect(() => {
     if (!sources.length || !project) return
     const allFiles = flattenAllFiles(sources)
-    const interrupted = allFiles.filter(
-      (f) => useWikiStore.getState().ingestStatuses[f.path] === "interrupted"
-    )
-    if (interrupted.length === 0) return
-    const pp = normalizePath(project.path)
+
     ;(async () => {
-      for (const file of interrupted) {
-        if (useWikiStore.getState().ingestingPath) break
-        useWikiStore.getState().setIngestingPath(file.path)
+      // 1. Reconnect to tasks that are stored but whose status may not be synced
+      const runningServerTasks = await getAllServerTasks()
+      const runningByPath = new Map(
+        runningServerTasks
+          .filter((t) => t.status === "running" || t.status === "pending")
+          .map((t) => [t.sourcePath, t.id]),
+      )
+
+      for (const file of allFiles) {
+        const storedTaskId = useWikiStore.getState().serverTaskIds[file.path]
+        const liveTaskId = runningByPath.get(file.path) ?? (storedTaskId ? storedTaskId : null)
+
+        if (!liveTaskId) continue
+
+        // Mark as ingesting and subscribe
         useWikiStore.getState().setIngestStatus(file.path, "ingesting")
-        try {
-          const written = await autoIngest(pp, file.path, llmConfig)
-          useWikiStore.getState().setIngestStatus(file.path, written.length > 0 ? "done" : "error")
-          if (written.length > 0) {
-            const tree = await listDirectory(pp)
-            setFileTree(tree)
-            useWikiStore.getState().bumpDataVersion()
-          }
-        } catch {
-          useWikiStore.getState().setIngestStatus(file.path, "error")
-        } finally {
-          useWikiStore.getState().setIngestingPath(null)
-        }
+        useWikiStore.getState().setIngestingPath(file.path)
+
+        subscribeIngestSSE(liveTaskId, {
+          onUpdate: (task) => {
+            useWikiStore.getState().setIngestStatus(
+              file.path,
+              task.status === "running" ? "ingesting" : task.status === "done" ? "done" : task.status === "error" ? "error" : "ingesting",
+            )
+          },
+          onDone: async (task) => {
+            const pp = normalizePath(project.path)
+            useWikiStore.getState().setIngestStatus(file.path, task.filesWritten.length > 0 ? "done" : "error")
+            useWikiStore.getState().setIngestingPath(null)
+            useWikiStore.getState().setServerTaskId(file.path, null)
+            if (task.filesWritten.length > 0) {
+              try {
+                const tree = await listDirectory(pp)
+                useWikiStore.getState().setFileTree(tree)
+                useWikiStore.getState().bumpDataVersion()
+              } catch { /* non-critical */ }
+            }
+          },
+          onError: () => {
+            useWikiStore.getState().setIngestStatus(file.path, "error")
+            useWikiStore.getState().setIngestingPath(null)
+            useWikiStore.getState().setServerTaskId(file.path, null)
+          },
+        })
+      }
+
+      // 2. Auto-retry "interrupted" files that have no running server task
+      const interruptedFiles = allFiles.filter(
+        (f) =>
+          useWikiStore.getState().ingestStatuses[f.path] === "interrupted" &&
+          !runningByPath.has(f.path),
+      )
+
+      for (const file of interruptedFiles) {
+        if (useWikiStore.getState().ingestingPath) break
+        await triggerServerIngest(file)
       }
     })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, project])
+
+  // ── Core: start a server-side ingest task and subscribe to its SSE ──────
+  async function triggerServerIngest(node: FileNode, folderContext = "") {
+    if (!project) return
+    const pp = normalizePath(project.path)
+
+    useWikiStore.getState().setIngestingPath(node.path)
+    useWikiStore.getState().setIngestStatus(node.path, "ingesting")
+
+    let taskId: string
+    try {
+      taskId = await startServerIngest({
+        projectPath: pp,
+        sourcePath: node.path,
+        llmConfig,
+        folderContext,
+      })
+    } catch (err) {
+      console.error("[SourcesView] Failed to start server ingest:", err)
+      useWikiStore.getState().setIngestStatus(node.path, "error")
+      useWikiStore.getState().setIngestingPath(null)
+      return
+    }
+
+    // Persist taskId so we can reconnect after page refresh
+    useWikiStore.getState().setServerTaskId(node.path, taskId)
+
+    subscribeIngestSSE(taskId, {
+      onUpdate: (task) => {
+        useWikiStore.getState().setIngestStatus(
+          node.path,
+          task.status === "running" ? "ingesting" : task.status === "done" ? "done" : task.status === "error" ? "error" : "ingesting",
+        )
+      },
+      onDone: async (task) => {
+        useWikiStore.getState().setIngestStatus(node.path, task.filesWritten.length > 0 ? "done" : "error")
+        useWikiStore.getState().setIngestingPath(null)
+        useWikiStore.getState().setServerTaskId(node.path, null)
+        if (task.filesWritten.length > 0) {
+          try {
+            const tree = await listDirectory(pp)
+            setFileTree(tree)
+            useWikiStore.getState().bumpDataVersion()
+          } catch { /* non-critical */ }
+        }
+      },
+      onError: () => {
+        useWikiStore.getState().setIngestStatus(node.path, "error")
+        useWikiStore.getState().setIngestingPath(null)
+        useWikiStore.getState().setServerTaskId(node.path, null)
+      },
+    })
+  }
 
   function handleImport() {
     fileInputRef.current?.click()
@@ -170,8 +260,9 @@ export function SourcesView() {
 
       if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "custom" || llmConfig.provider === "wps") {
         for (const destPath of importedPaths) {
-          enqueueIngest(pp, destPath).catch((err) =>
-            console.error(`Failed to enqueue ingest:`, err)
+          const node = { path: destPath, name: getFileName(destPath), is_dir: false }
+          triggerServerIngest(node).catch((err) =>
+            console.error(`Failed to start server ingest:`, err)
           )
         }
       }
@@ -238,8 +329,13 @@ export function SourcesView() {
           })
 
         if (tasks.length > 0) {
-          await enqueueBatch(pp, tasks)
-          console.log(`[Folder Import] Enqueued ${tasks.length} files for ingest`)
+          for (const { sourcePath, folderContext } of tasks) {
+            const node = { path: sourcePath, name: getFileName(sourcePath), is_dir: false }
+            triggerServerIngest(node, folderContext).catch((err) =>
+              console.error(`Failed to start server ingest:`, err)
+            )
+          }
+          console.log(`[Folder Import] Triggered server ingest for ${tasks.length} files`)
         }
       }
     } catch (err) {
@@ -394,47 +490,24 @@ export function SourcesView() {
 
   async function handleIngest(node: FileNode) {
     if (!project || ingestingPath) return
-    const pp = normalizePath(project.path)
-    setIngestingPath(node.path)
-    setIngestStatus(node.path, "ingesting")
-    try {
-      const written = await autoIngest(pp, node.path, llmConfig)
-      setIngestStatus(node.path, written.length > 0 ? "done" : "error")
-      if (written.length > 0) {
-        const tree = await listDirectory(pp)
-        setFileTree(tree)
-        useWikiStore.getState().bumpDataVersion()
-      }
-    } catch (err) {
-      console.error("Failed to ingest:", err)
-      setIngestStatus(node.path, "error")
-    } finally {
-      setIngestingPath(null)
-    }
+    await triggerServerIngest(node)
   }
 
   async function handleBatchIngest() {
     if (!project || ingestingPath) return
-    const pp = normalizePath(project.path)
     const allFiles = flattenAllFiles(sources)
     for (const file of allFiles) {
-      setIngestingPath(file.path)
-      setIngestStatus(file.path, "ingesting")
-      try {
-        const written = await autoIngest(pp, file.path, llmConfig)
-        setIngestStatus(file.path, written.length > 0 ? "done" : "error")
-      } catch (err) {
-        console.error(`Failed to ingest ${file.name}:`, err)
-        setIngestStatus(file.path, "error")
-      } finally {
-        setIngestingPath(null)
-      }
+      // Wait until no ingest is running before starting the next
+      await new Promise<void>((resolve) => {
+        const check = () => {
+          if (!useWikiStore.getState().ingestingPath) { resolve(); return }
+          setTimeout(check, 500)
+        }
+        check()
+      })
+      if (useWikiStore.getState().ingestingPath) break
+      await triggerServerIngest(file)
     }
-    try {
-      const tree = await listDirectory(pp)
-      setFileTree(tree)
-      useWikiStore.getState().bumpDataVersion()
-    } catch { /* non-critical */ }
   }
 
   return (

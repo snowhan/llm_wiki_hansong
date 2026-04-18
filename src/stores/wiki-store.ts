@@ -58,6 +58,9 @@ interface WikiState {
   ingestingPath: string | null
   ingestStatuses: Record<string, "idle" | "ingesting" | "interrupted" | "done" | "error">
 
+  // Server-side task IDs — persisted so we can reconnect after page refresh
+  serverTaskIds: Record<string, string> // sourcePath → taskId
+
   setProject: (project: WikiProject | null) => void
   setFileTree: (tree: FileNode[]) => void
   setSelectedFile: (path: string | null) => void
@@ -81,6 +84,7 @@ interface WikiState {
   // Ingest actions
   setIngestingPath: (path: string | null) => void
   setIngestStatus: (path: string, status: "idle" | "ingesting" | "interrupted" | "done" | "error") => void
+  setServerTaskId: (sourcePath: string, taskId: string | null) => void
 }
 
 function deriveTabPath(tabs: TabItem[], activeTabId: string | null): string | null {
@@ -114,6 +118,7 @@ export const useWikiStore = create<WikiState>()(
   activeTabPath: null,
   ingestingPath: null,
   ingestStatuses: {},
+  serverTaskIds: {},
 
   setProject: (project) => set({
     project,
@@ -246,12 +251,22 @@ export const useWikiStore = create<WikiState>()(
 
   setIngestStatus: (path, status) =>
     set((state) => ({ ingestStatuses: { ...state.ingestStatuses, [path]: status } })),
+
+  setServerTaskId: (sourcePath, taskId) =>
+    set((state) => {
+      if (taskId === null) {
+        const { [sourcePath]: _, ...rest } = state.serverTaskIds
+        return { serverTaskIds: rest }
+      }
+      return { serverTaskIds: { ...state.serverTaskIds, [sourcePath]: taskId } }
+    }),
   }),
   {
     name: "llm-wiki-store",
     // Only persist ingest progress — everything else is derived from disk
     partialize: (state) => ({
       ingestStatuses: state.ingestStatuses,
+      serverTaskIds: state.serverTaskIds,
     }),
     onRehydrateStorage: () => (state) => {
       if (!state) return
@@ -262,6 +277,7 @@ export const useWikiStore = create<WikiState>()(
       }
       state.ingestStatuses = updated
       state.ingestingPath = null
+      // serverTaskIds are kept as-is — the frontend will reconnect and verify
     },
   }
 ))
