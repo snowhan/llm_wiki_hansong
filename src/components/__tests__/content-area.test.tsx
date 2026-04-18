@@ -25,6 +25,10 @@ vi.mock("../graph/graph-view", () => ({
   GraphView: () => <div data-testid="graph" />,
 }))
 
+vi.mock("../admin/admin-view", () => ({
+  AdminView: () => <div data-testid="admin" />,
+}))
+
 beforeEach(() => {
   useWikiStore.setState({
     project: null,
@@ -48,10 +52,10 @@ beforeEach(() => {
 })
 
 describe("ContentArea", () => {
-  it("renders ChatPanel for the default wiki view", () => {
+  it("renders nothing for the default wiki view (EditorArea handles it)", () => {
     useWikiStore.setState({ activeView: "wiki" } as any)
-    render(<ContentArea />)
-    expect(screen.getByTestId("chat-panel")).toBeTruthy()
+    const { container } = render(<ContentArea />)
+    expect(container.firstChild).toBeNull()
   })
 
   it("renders SettingsView when activeView is settings", () => {
@@ -64,5 +68,29 @@ describe("ContentArea", () => {
     useWikiStore.setState({ activeView: "sources" } as any)
     render(<ContentArea />)
     expect(screen.getByTestId("sources")).toBeTruthy()
+  })
+
+  it("renders ReviewView when activeView is review", () => {
+    useWikiStore.setState({ activeView: "review" } as any)
+    render(<ContentArea />)
+    expect(screen.getByTestId("review")).toBeTruthy()
+  })
+
+  it("renders LintView when activeView is lint", () => {
+    useWikiStore.setState({ activeView: "lint" } as any)
+    render(<ContentArea />)
+    expect(screen.getByTestId("lint")).toBeTruthy()
+  })
+
+  it("renders SearchView when activeView is search", () => {
+    useWikiStore.setState({ activeView: "search" } as any)
+    render(<ContentArea />)
+    expect(screen.getByTestId("search")).toBeTruthy()
+  })
+
+  it("renders GraphView when activeView is graph", () => {
+    useWikiStore.setState({ activeView: "graph" } as any)
+    render(<ContentArea />)
+    expect(screen.getByTestId("graph")).toBeTruthy()
   })
 })

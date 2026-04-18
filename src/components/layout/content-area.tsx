@@ -5,6 +5,7 @@ import { ReviewView } from "@/components/review/review-view"
 import { LintView } from "@/components/lint/lint-view"
 import { SearchView } from "@/components/search/search-view"
 import { GraphView } from "@/components/graph/graph-view"
+import { AdminView } from "@/components/admin/admin-view"
 
 export function ContentArea() {
   const activeView = useWikiStore((s) => s.activeView)
@@ -22,6 +23,8 @@ export function ContentArea() {
       return <SearchView />
     case "graph":
       return <GraphView />
+    case "admin":
+      return <AdminView />
     default:
       return null
   }

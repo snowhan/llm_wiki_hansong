@@ -2,7 +2,6 @@ import { readFile, listDirectory } from "@/commands/fs"
 import { apiPost, apiGet } from "@/lib/api-client"
 import type { EmbeddingConfig } from "@/stores/wiki-store"
 import type { FileNode } from "@/types/wiki"
-import { normalizePath } from "@/lib/path-utils"
 
 // ── Embedding API ─────────────────────────────────────────────────────────
 
@@ -39,37 +38,38 @@ async function fetchEmbedding(
 
 // ── Vector operations via backend API ─────────────────────────────────────
 
-async function vectorUpsert(projectPath: string, pageId: string, embedding: number[]): Promise<void> {
+async function vectorUpsert(projectId: string, pageId: string, embedding: number[]): Promise<void> {
   await apiPost("/api/vector/upsert", {
-    projectPath: normalizePath(projectPath),
+    projectId,
     pageId,
     embedding: embedding.map((v) => Math.fround(v)),
   })
 }
 
-async function vectorSearchLance(projectPath: string, queryEmbedding: number[], topK: number): Promise<Array<{ page_id: string; score: number }>> {
-  return await apiPost<Array<{ page_id: string; score: number }>>("/api/vector/search", {
-    projectPath: normalizePath(projectPath),
+async function vectorSearchLance(
+  projectId: string,
+  queryEmbedding: number[],
+  topK: number,
+): Promise<Array<{ page_id: string; score: number }>> {
+  return apiPost<Array<{ page_id: string; score: number }>>("/api/vector/search", {
+    projectId,
     queryEmbedding: queryEmbedding.map((v) => Math.fround(v)),
     topK,
   })
 }
 
-async function vectorDelete(projectPath: string, pageId: string): Promise<void> {
-  await apiPost("/api/vector/delete", {
-    projectPath: normalizePath(projectPath),
-    pageId,
-  })
+async function vectorDelete(projectId: string, pageId: string): Promise<void> {
+  await apiPost("/api/vector/delete", { projectId, pageId })
 }
 
-async function vectorCount(projectPath: string): Promise<number> {
-  return await apiGet<number>(`/api/vector/count?projectPath=${encodeURIComponent(normalizePath(projectPath))}`)
+async function vectorCount(projectId: string): Promise<number> {
+  return apiGet<number>(`/api/vector/count?projectId=${encodeURIComponent(projectId)}`)
 }
 
 // ── Public API ────────────────────────────────────────────────────────────
 
 export async function embedPage(
-  projectPath: string,
+  projectId: string,
   pageId: string,
   title: string,
   content: string,
@@ -81,30 +81,30 @@ export async function embedPage(
   const text = `${title}\n${content.slice(0, 1500)}`
   const emb = await fetchEmbedding(text, embeddingConfig)
   if (emb) {
-    await vectorUpsert(projectPath, pageId, emb)
-    console.log(`[Embedding] Indexed "${pageId}" (${emb.length}d) in ${Math.round(performance.now() - t0)}ms`)
+    await vectorUpsert(projectId, pageId, emb)
+    console.log(
+      `[Embedding] Indexed "${pageId}" (${emb.length}d) in ${Math.round(performance.now() - t0)}ms`,
+    )
   } else {
     console.log(`[Embedding] Failed to embed "${pageId}"`)
   }
 }
 
 export async function embedAllPages(
-  projectPath: string,
+  projectId: string,
   embeddingConfig: EmbeddingConfig,
   onProgress?: (done: number, total: number) => void,
 ): Promise<number> {
   if (!embeddingConfig.enabled || !embeddingConfig.model) return 0
 
-  const pp = normalizePath(projectPath)
-
   let tree: FileNode[]
   try {
-    tree = await listDirectory(`${pp}/wiki`)
+    tree = await listDirectory(projectId, "wiki")
   } catch {
     return 0
   }
 
-  const mdFiles: { id: string; path: string }[] = []
+  const mdFiles: { id: string; relativePath: string }[] = []
   function walk(nodes: FileNode[]) {
     for (const node of nodes) {
       if (node.is_dir && node.children) {
@@ -112,7 +112,7 @@ export async function embedAllPages(
       } else if (!node.is_dir && node.name.endsWith(".md")) {
         const id = node.name.replace(/\.md$/, "")
         if (!["index", "log", "overview", "purpose", "schema"].includes(id)) {
-          mdFiles.push({ id, path: node.path })
+          mdFiles.push({ id, relativePath: node.relativePath })
         }
       }
     }
@@ -122,14 +122,14 @@ export async function embedAllPages(
   let done = 0
   for (const file of mdFiles) {
     try {
-      const content = await readFile(file.path)
+      const content = await readFile(projectId, file.relativePath)
       const titleMatch = content.match(/^---\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m)
       const title = titleMatch ? titleMatch[1].trim() : file.id
 
       const text = `${title}\n${content.slice(0, 1500)}`
       const emb = await fetchEmbedding(text, embeddingConfig)
       if (emb) {
-        await vectorUpsert(pp, file.id, emb)
+        await vectorUpsert(projectId, file.id, emb)
       }
     } catch {
       // skip
@@ -143,7 +143,7 @@ export async function embedAllPages(
 }
 
 export async function searchByEmbedding(
-  projectPath: string,
+  projectId: string,
   query: string,
   embeddingConfig: EmbeddingConfig,
   topK: number = 10,
@@ -155,31 +155,30 @@ export async function searchByEmbedding(
 
   try {
     const t0 = performance.now()
-    const results = await vectorSearchLance(projectPath, queryEmb, topK)
-    console.log(`[Embedding] Vector search: ${results.length} results in ${Math.round(performance.now() - t0)}ms`)
+    const results = await vectorSearchLance(projectId, queryEmb, topK)
+    console.log(
+      `[Embedding] Vector search: ${results.length} results in ${Math.round(performance.now() - t0)}ms`,
+    )
     return results.map((r) => ({ id: r.page_id, score: r.score }))
   } catch (err) {
-    console.log(`[Embedding] Vector search failed: ${err instanceof Error ? err.message : err}`)
+    console.log(
+      `[Embedding] Vector search failed: ${err instanceof Error ? err.message : err}`,
+    )
     return []
   }
 }
 
-export async function removePageEmbedding(
-  projectPath: string,
-  pageId: string,
-): Promise<void> {
+export async function removePageEmbedding(projectId: string, pageId: string): Promise<void> {
   try {
-    await vectorDelete(projectPath, pageId)
+    await vectorDelete(projectId, pageId)
   } catch {
     // non-critical
   }
 }
 
-export async function getEmbeddingCount(
-  projectPath: string,
-): Promise<number> {
+export async function getEmbeddingCount(projectId: string): Promise<number> {
   try {
-    return await vectorCount(projectPath)
+    return await vectorCount(projectId)
   } catch {
     return 0
   }

@@ -97,7 +97,7 @@ describe("GraphView", () => {
 
   it("renders sigma container when the graph has data", async () => {
     useWikiStore.setState({
-      project: { name: "P", path: "/tmp/wiki-proj" },
+      project: { id: "proj-uuid", name: "P", path: "/tmp/wiki-proj" },
       dataVersion: 1,
     } as any)
     vi.mocked(buildWikiGraph).mockResolvedValue({
@@ -106,7 +106,7 @@ describe("GraphView", () => {
           id: "a",
           label: "Page A",
           type: "entity",
-          path: "/tmp/wiki-proj/wiki/a.md",
+          relativePath: "wiki/a.md",
           linkCount: 1,
           community: 0,
         },

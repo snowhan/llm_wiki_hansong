@@ -15,7 +15,7 @@ describe("setupAutoSave", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.clearAllMocks()
-    useWikiStore.setState({ project: { name: "test", path: "/test" } } as any)
+    useWikiStore.setState({ project: { id: "test-uuid", name: "test", path: "/test" } } as any)
     useReviewStore.setState({ items: [] })
     useChatStore.setState({ conversations: [], messages: [], isStreaming: false })
   })
@@ -27,7 +27,7 @@ describe("setupAutoSave", () => {
     useReviewStore.setState({ items: [{ id: "1", type: "suggestion", title: "t", detail: "", options: [], resolved: false }] as any })
     expect(saveReviewItems).not.toHaveBeenCalled()
     vi.advanceTimersByTime(1000)
-    expect(saveReviewItems).toHaveBeenCalledWith("/test", expect.any(Array))
+    expect(saveReviewItems).toHaveBeenCalledWith("test-uuid", expect.any(Array))
   })
 
   it("saves chat history after 2s debounce", () => {

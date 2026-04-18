@@ -17,10 +17,11 @@ export function PreviewPanel() {
   const fileContent = useWikiStore((s) => s.fileContent)
   const setFileContent = useWikiStore((s) => s.setFileContent)
   const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
+  const project = useWikiStore((s) => s.project)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!selectedFile) {
+    if (!selectedFile || !project) {
       setFileContent("")
       return
     }
@@ -32,24 +33,24 @@ export function PreviewPanel() {
       return
     }
 
-    readFile(selectedFile)
+    readFile(project.id, selectedFile)
       .then(setFileContent)
       .catch((err) => setFileContent(t("preview.errorLoading", { err })))
-  }, [selectedFile, setFileContent, t])
+  }, [selectedFile, project, setFileContent, t])
 
   const { frontmatter, body: markdownBody } = splitFrontmatter(fileContent)
 
   const handleSave = useCallback(
     (markdown: string) => {
-      if (!selectedFile) return
+      if (!selectedFile || !project) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        writeFile(selectedFile, frontmatter + markdown).catch((err) =>
+        writeFile(project.id, selectedFile, frontmatter + markdown).catch((err) =>
           console.error("Failed to save:", err)
         )
       }, 1000)
     },
-    [selectedFile, frontmatter]
+    [selectedFile, project, frontmatter]
   )
 
   useEffect(() => {
@@ -113,6 +114,7 @@ export function PreviewPanel() {
         ) : (
           <FilePreview
             key={selectedFile}
+            projectId={project?.id ?? ""}
             filePath={selectedFile}
             textContent={fileContent}
           />

@@ -21,11 +21,11 @@ import { executeIngestWrites } from "@/lib/ingest"
 import { listDirectory, readFile, deleteFile } from "@/commands/fs"
 import { searchWiki } from "@/lib/search"
 import { buildRetrievalGraph, getRelatedNodes } from "@/lib/graph-relevance"
-import { normalizePath, getFileName, getRelativePath } from "@/lib/path-utils"
+import { getFileName } from "@/lib/path-utils"
 import { detectLanguage } from "@/lib/detect-language"
 
 // Store the page mapping from the last query so SourceFilesBar can show which pages were cited
-export let lastQueryPages: { title: string; path: string }[] = []
+export let lastQueryPages: { title: string; relativePath: string }[] = []
 
 function formatDate(timestamp: number): string {
   const d = new Date(timestamp)
@@ -205,7 +205,7 @@ function ChatHeader() {
                           deleteConversation(conv.id)
                           const proj = useWikiStore.getState().project
                           if (proj) {
-                            deleteFile(`${proj.path}/.llm-wiki/chats/${conv.id}.json`).catch(() => {})
+                          deleteFile(proj.id, `.llm-wiki/chats/${conv.id}.json`).catch(() => {})
                           }
                         }}
                       >
@@ -282,9 +282,8 @@ export function ChatPanel() {
       setStreaming(true)
 
       const systemMessages: LLMMessage[] = []
-      let queryRefs: { title: string; path: string }[] = []
+      let queryRefs: { title: string; relativePath: string }[] = []
       if (project) {
-        const pp = normalizePath(project.path)
         const dataVersion = useWikiStore.getState().dataVersion
         const maxCtx = llmConfig.maxContextSize || 204800
 
@@ -293,11 +292,11 @@ export function ChatPanel() {
         const MAX_PAGE_SIZE = Math.min(Math.floor(PAGE_BUDGET * 0.3), 30_000)
 
         const [rawIndex, purpose] = await Promise.all([
-          readFile(`${pp}/wiki/index.md`).catch(() => ""),
-          readFile(`${pp}/purpose.md`).catch(() => ""),
+          readFile(project.id, "wiki/index.md").catch(() => ""),
+          readFile(project.id, "purpose.md").catch(() => ""),
         ])
 
-        const searchResults = await searchWiki(pp, text)
+        const searchResults = await searchWiki(project.id, text)
         const topSearchResults = searchResults.slice(0, 10)
 
         let index = rawIndex
@@ -326,65 +325,64 @@ export function ChatPanel() {
           }
         }
 
-        const graph = await buildRetrievalGraph(pp, dataVersion)
+        const graph = await buildRetrievalGraph(project.id, dataVersion)
         const expandedIds = new Set<string>()
-        const searchHitPaths = new Set(topSearchResults.map((r) => r.path))
-        const graphExpansions: { title: string; path: string; relevance: number }[] = []
+        const searchHitPaths = new Set(topSearchResults.map((r) => r.relativePath))
+        const graphExpansions: { title: string; relativePath: string; relevance: number }[] = []
 
         for (const result of topSearchResults) {
-          const fileName = getFileName(result.path)
+          const fileName = getFileName(result.relativePath)
           const nodeId = fileName.replace(/\.md$/, "")
           const related = getRelatedNodes(nodeId, graph, 3)
           for (const { node, relevance } of related) {
             if (relevance < 2.0) continue
-            if (searchHitPaths.has(node.path)) continue
+            if (searchHitPaths.has(node.relativePath)) continue
             if (expandedIds.has(node.id)) continue
             expandedIds.add(node.id)
-            graphExpansions.push({ title: node.title, path: node.path, relevance })
+            graphExpansions.push({ title: node.title, relativePath: node.relativePath, relevance })
           }
         }
         graphExpansions.sort((a, b) => b.relevance - a.relevance)
 
         let usedChars = 0
-        type PageEntry = { title: string; path: string; content: string; priority: number }
+        type PageEntry = { title: string; relativePath: string; content: string; priority: number }
         const relevantPages: PageEntry[] = []
 
-        const tryAddPage = async (title: string, filePath: string, priority: number): Promise<boolean> => {
+        const tryAddPage = async (title: string, relPath: string, priority: number): Promise<boolean> => {
           if (usedChars >= PAGE_BUDGET) return false
           try {
-            const raw = await readFile(filePath)
-            const relativePath = getRelativePath(filePath, pp)
+            const raw = await readFile(project.id, relPath)
             const truncated = raw.length > MAX_PAGE_SIZE
               ? raw.slice(0, MAX_PAGE_SIZE) + "\n\n[...truncated...]"
               : raw
             if (usedChars + truncated.length > PAGE_BUDGET) return false
             usedChars += truncated.length
-            relevantPages.push({ title, path: relativePath, content: truncated, priority })
+            relevantPages.push({ title, relativePath: relPath, content: truncated, priority })
             return true
           } catch { return false }
         }
 
         for (const r of topSearchResults.filter((r) => r.titleMatch)) {
-          await tryAddPage(r.title, r.path, 0)
+          await tryAddPage(r.title, r.relativePath, 0)
         }
         for (const r of topSearchResults.filter((r) => !r.titleMatch)) {
-          await tryAddPage(r.title, r.path, 1)
+          await tryAddPage(r.title, r.relativePath, 1)
         }
         for (const exp of graphExpansions) {
-          await tryAddPage(exp.title, exp.path, 2)
+          await tryAddPage(exp.title, exp.relativePath, 2)
         }
         if (relevantPages.length === 0) {
-          await tryAddPage("Overview", `${pp}/wiki/overview.md`, 3)
+          await tryAddPage("Overview", "wiki/overview.md", 3)
         }
 
         const pagesContext = relevantPages.length > 0
           ? relevantPages.map((p, i) =>
-              `### [${i + 1}] ${p.title}\nPath: ${p.path}\n\n${p.content}`
+              `### [${i + 1}] ${p.title}\nPath: ${p.relativePath}\n\n${p.content}`
             ).join("\n\n---\n\n")
           : "(No wiki pages found)"
 
         const pageList = relevantPages.map((p, i) =>
-          `[${i + 1}] ${p.title} (${p.path})`
+          `[${i + 1}] ${p.title} (${p.relativePath})`
         ).join("\n")
 
         systemMessages.push({
@@ -412,7 +410,7 @@ export function ChatPanel() {
           ].filter(Boolean).join("\n"),
         })
 
-        lastQueryPages = relevantPages.map((p) => ({ title: p.title, path: p.path }))
+        lastQueryPages = relevantPages.map((p) => ({ title: p.title, relativePath: p.relativePath }))
         queryRefs = [...lastQueryPages]
       }
 
@@ -428,10 +426,9 @@ export function ChatPanel() {
       let accumulated = ""
 
       await streamChat(
-        llmConfig,
         llmMessages,
         {
-          onToken: (token) => {
+          onToken: (token: string) => {
             accumulated += token
             appendStreamToken(token)
           },
@@ -439,7 +436,7 @@ export function ChatPanel() {
             finalizeStream(accumulated, queryRefs)
             abortRef.current = null
           },
-          onError: (err) => {
+          onError: (err: Error) => {
             finalizeStream(`${t("chat.error")}${err.message}`, undefined)
             abortRef.current = null
           },
@@ -447,7 +444,7 @@ export function ChatPanel() {
         controller.signal,
       )
     },
-    [llmConfig, addMessage, setStreaming, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, t, project],
+    [addMessage, setStreaming, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, t, project],
   )
 
   const handleStop = useCallback(() => {
@@ -475,11 +472,10 @@ export function ChatPanel() {
 
   const handleWriteToWiki = useCallback(async () => {
     if (!project) return
-    const pp = normalizePath(project.path)
     try {
-      await executeIngestWrites(pp, llmConfig, undefined, undefined)
+      await executeIngestWrites(project.id, llmConfig, undefined, undefined)
       try {
-        const tree = await listDirectory(pp)
+        const tree = await listDirectory(project.id)
         setFileTree(tree)
       } catch {
         // ignore

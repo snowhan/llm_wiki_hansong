@@ -44,7 +44,7 @@ describe("WelcomeScreen", () => {
   })
 
   it("shows recent projects when the list is non-empty", async () => {
-    recentMocks.getRecentProjects.mockResolvedValue([{ name: "Old Wiki", path: "/path/old" }])
+    recentMocks.getRecentProjects.mockResolvedValue([{ id: "abc123def456", name: "Old Wiki" }])
     render(
       <WelcomeScreen onCreateProject={vi.fn()} onOpenProject={vi.fn()} onSelectProject={vi.fn()} />,
     )
@@ -52,6 +52,6 @@ describe("WelcomeScreen", () => {
       expect(screen.getByText("welcome.recentProjects")).toBeTruthy()
     })
     expect(screen.getByText("Old Wiki")).toBeTruthy()
-    expect(screen.getByText("/path/old")).toBeTruthy()
+    expect(screen.getByText("abc123de…")).toBeTruthy()
   })
 })

@@ -32,7 +32,6 @@ import { buildWikiGraph, type GraphNode, type GraphEdge, type CommunityInfo } fr
 import { findSurprisingConnections, detectKnowledgeGaps, type SurprisingConnection, type KnowledgeGap } from "@/lib/graph-insights"
 import { queueResearch } from "@/lib/deep-research"
 import { optimizeResearchTopic } from "@/lib/optimize-research-topic"
-import { normalizePath } from "@/lib/path-utils"
 
 const NODE_TYPE_COLORS: Record<string, string> = {
   entity: "#60a5fa",    // blue-400
@@ -132,7 +131,7 @@ function GraphLoader({ nodes, edges, colorMode }: { nodes: GraphNode[]; edges: G
         color,
         label: node.label,
         nodeType: node.type,
-        nodePath: node.path,
+        nodePath: node.relativePath,
         community: node.community,
       })
     }
@@ -355,7 +354,7 @@ export function GraphView() {
     setLoading(true)
     setError(null)
     try {
-      const result = await buildWikiGraph(normalizePath(project.path))
+      const result = await buildWikiGraph(project.id)
       setNodes(result.nodes)
       setEdges(result.edges)
       setCommunities(result.communities)
@@ -379,22 +378,21 @@ export function GraphView() {
   const handleNodeClick = useCallback(
     async (nodeId: string) => {
       const node = nodes.find((n) => n.id === nodeId)
-      if (!node) return
+      if (!node || !project) return
       try {
-        const content = await readFile(node.path)
-        setSelectedFile(node.path)
+        const content = await readFile(project.id, node.relativePath)
+        setSelectedFile(node.relativePath)
         setFileContent(content)
       } catch (err) {
         console.error("Failed to open wiki page:", err)
       }
     },
-    [nodes, setSelectedFile, setFileContent],
+    [nodes, project, setSelectedFile, setFileContent],
   )
 
   const handleResearchClick = useCallback(async (gapTitle: string, gapDescription: string, gapType: string) => {
     const store = useWikiStore.getState()
     if (!store.project) return
-    const pp = normalizePath(store.project.path)
 
     // Show loading state
     setResearchDialog({ loading: true, topic: "", queries: [] })
@@ -403,8 +401,8 @@ export function GraphView() {
       // Read overview and purpose for context
       let overview = ""
       let purpose = ""
-      try { overview = await readFile(`${pp}/wiki/overview.md`) } catch {}
-      try { purpose = await readFile(`${pp}/purpose.md`) } catch {}
+      try { overview = await readFile(store.project.id, "wiki/overview.md") } catch {}
+      try { purpose = await readFile(store.project.id, "purpose.md") } catch {}
 
       const result = await optimizeResearchTopic(
         store.llmConfig,
@@ -426,7 +424,7 @@ export function GraphView() {
     const store = useWikiStore.getState()
     if (!store.project) return
     queueResearch(
-      normalizePath(store.project.path),
+      store.project.id,
       researchDialog.topic,
       store.llmConfig,
       store.searchApiConfig,

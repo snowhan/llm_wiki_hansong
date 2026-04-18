@@ -21,7 +21,6 @@ import { useResearchStore, type ResearchTask } from "@/stores/research-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { queueResearch } from "@/lib/deep-research"
-import { normalizePath } from "@/lib/path-utils"
 
 export function ResearchPanel() {
   const { t } = useTranslation()
@@ -44,7 +43,7 @@ export function ResearchPanel() {
       window.alert(t("research.webSearchNotConfigured"))
       return
     }
-    queueResearch(normalizePath(project.path), topic, llmConfig, searchApiConfig)
+    queueResearch(project.id, topic, llmConfig, searchApiConfig)
     setInputValue("")
   }
 
@@ -318,10 +317,9 @@ function ResearchTaskCard({ task, onRemove }: { task: ResearchTask; onRemove: (i
 
   async function handleOpenSaved() {
     if (!project || !task.savedPath) return
-    const path = `${normalizePath(project.path)}/${task.savedPath}`
     try {
-      const content = await readFile(path)
-      setSelectedFile(path)
+      const content = await readFile(project.id, task.savedPath)
+      setSelectedFile(task.savedPath)
       setFileContent(content)
     } catch {
       // ignore

@@ -1,6 +1,28 @@
 import "@testing-library/jest-dom"
 import { vi } from "vitest"
 
+// ── localStorage stub for Zustand persist middleware ──────────────────────
+// Zustand's persist middleware caches the storage reference at module-init
+// time, before any beforeAll() hooks run.  Override synchronously here so
+// the mock is in place before any test-file imports happen.
+;(() => {
+  const _store: Record<string, string> = {}
+  const mock: Storage = {
+    getItem: (key) => _store[key] ?? null,
+    setItem: (key, value) => { _store[key] = String(value) },
+    removeItem: (key) => { delete _store[key] },
+    clear: () => { Object.keys(_store).forEach((k) => delete _store[k]) },
+    get length() { return Object.keys(_store).length },
+    key: (index) => Object.keys(_store)[index] ?? null,
+  }
+  try {
+    Object.defineProperty(globalThis, "localStorage", { value: mock, writable: true, configurable: true })
+  } catch {
+    // jsdom may not allow redefining localStorage — assign directly as fallback
+    ;(globalThis as Record<string, unknown>)["localStorage"] = mock
+  }
+})()
+
 vi.mock("@/lib/api-client", () => ({
   apiPost: vi.fn(),
   apiGet: vi.fn(),
@@ -8,7 +30,7 @@ vi.mock("@/lib/api-client", () => ({
   apiDelete: vi.fn(),
   apiUpload: vi.fn(),
   apiStream: vi.fn(),
-  mediaUrl: vi.fn((path: string) => `/api/media?path=${encodeURIComponent(path)}`),
+  mediaUrl: vi.fn((projectId: string, path: string) => `/api/media?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(path)}`),
 }))
 
 vi.mock("@/commands/fs", () => ({
@@ -23,7 +45,6 @@ vi.mock("@/commands/fs", () => ({
   findRelatedWikiPages: vi.fn(),
   createProject: vi.fn(),
   openProject: vi.fn(),
-  clipServerStatus: vi.fn().mockResolvedValue("running"),
   exists: vi.fn(),
   rename: vi.fn(),
 }))

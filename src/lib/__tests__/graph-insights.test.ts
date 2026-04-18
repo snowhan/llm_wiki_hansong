@@ -9,7 +9,7 @@ function makeNode(overrides: Partial<GraphNode> & { id: string }): GraphNode {
   return {
     label: overrides.id,
     type: "entity",
-    path: `/wiki/${overrides.id}.md`,
+    relativePath: `wiki/${overrides.id}.md`,
     linkCount: 2,
     community: 0,
     ...overrides,

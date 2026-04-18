@@ -1,13 +1,15 @@
 /**
  * Frontend commands for server-side ingest tasks.
+ * The server reads the LLM configuration from its own state — the frontend
+ * no longer needs to send API keys or provider URLs.
  */
 
-import type { LlmConfig } from "@/stores/wiki-store"
+import { getStoredToken } from "@/lib/auth"
 
 export interface ServerIngestTask {
   id: string
-  projectPath: string
-  sourcePath: string
+  projectId: string
+  sourcePath: string   // relative to project root
   folderContext: string
   status: "pending" | "running" | "done" | "error"
   detail: string
@@ -24,54 +26,25 @@ export interface SseCallbacks {
   onError?: (msg: string) => void
 }
 
-/**
- * Resolve provider-specific env vars that are only available on the frontend
- * (import.meta.env) before sending the config to the server.
- * The server has no access to Vite env vars, so we pre-compute them here.
- */
-function resolveConfigForServer(config: LlmConfig): LlmConfig {
-  if (config.provider !== "wps") return config
-
-  // WPS uses several VITE_ env vars that only Vite can expose.
-  // Pack them into standard LlmConfig fields before sending to the server.
-  const resolvedApiKey = import.meta.env.VITE_WPS_GATEWAY_TOKEN || config.apiKey || ""
-  const resolvedUrl = import.meta.env.VITE_WPS_GATEWAY_URL || "http://ai-gateway.wps.cn/api/v3"
-  const resolvedModel = config.model || import.meta.env.VITE_WPS_GATEWAY_MODEL || "azure/gpt-5.4"
-  // We also need UID and product name — pack them into a JSON string in apiKey
-  // by using a special "wps-resolved" scheme so the server knows to parse them.
-  const extra = {
-    token: resolvedApiKey,
-    url: resolvedUrl,
-    model: resolvedModel,
-    uid: import.meta.env.VITE_WPS_GATEWAY_UID || "",
-    productName: import.meta.env.VITE_WPS_GATEWAY_PRODUCT_NAME || "",
-  }
-  return {
-    ...config,
-    // Store resolved values in apiKey as JSON so the server can unpack them
-    apiKey: JSON.stringify(extra),
-    customEndpoint: resolvedUrl,
-    model: resolvedModel,
-  }
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken()
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
 }
 
 /**
  * Start a server-side ingest task.
- * Returns the taskId that can be used to subscribe to SSE progress.
+ * Returns the taskId for SSE subscription.
  */
 export async function startServerIngest(params: {
-  projectPath: string
-  sourcePath: string
-  llmConfig: LlmConfig
+  projectId: string
+  sourcePath: string   // relative to project root
   folderContext?: string
 }): Promise<string> {
   const res = await fetch("/api/ingest/start", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      ...params,
-      llmConfig: resolveConfigForServer(params.llmConfig),
-    }),
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(params),
   })
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
@@ -86,7 +59,9 @@ export async function startServerIngest(params: {
  */
 export async function getServerIngestStatus(taskId: string): Promise<ServerIngestTask | null> {
   try {
-    const res = await fetch(`/api/ingest/status/${taskId}`)
+    const res = await fetch(`/api/ingest/status/${taskId}`, {
+      headers: authHeaders(),
+    })
     if (!res.ok) return null
     const { task } = (await res.json()) as { task: ServerIngestTask }
     return task
@@ -101,7 +76,7 @@ export async function getServerIngestStatus(taskId: string): Promise<ServerInges
  */
 export async function getAllServerTasks(): Promise<ServerIngestTask[]> {
   try {
-    const res = await fetch("/api/ingest/tasks")
+    const res = await fetch("/api/ingest/tasks", { headers: authHeaders() })
     if (!res.ok) return []
     const { tasks } = (await res.json()) as { tasks: ServerIngestTask[] }
     return tasks
@@ -115,12 +90,33 @@ export async function getAllServerTasks(): Promise<ServerIngestTask[]> {
  * Returns a cleanup function — call it to close the connection.
  */
 export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () => void {
-  const es = new EventSource(`/api/ingest/stream/${taskId}`)
+  const token = getStoredToken()
+  const url = token
+    ? `/api/ingest/stream/${taskId}?token=${encodeURIComponent(token)}`
+    : `/api/ingest/stream/${taskId}`
+
+  const es = new EventSource(url)
+  let intentionallyClosed = false
+
+  const closeClean = () => {
+    intentionallyClosed = true
+    es.close()
+  }
 
   es.onmessage = (ev) => {
-    let data: { type: string; task?: ServerIngestTask; token?: string; step?: string; message?: string }
-    try { data = JSON.parse(ev.data as string) as typeof data }
-    catch { return }
+    let data: {
+      type: string
+      task?: ServerIngestTask
+      token?: string
+      step?: string
+      message?: string
+    }
+    try {
+      data = JSON.parse(ev.data as string) as typeof data
+    } catch {
+      callbacks.onError?.("Invalid SSE payload")
+      return
+    }
 
     if (data.type === "state" || data.type === "update") {
       if (data.task) callbacks.onUpdate?.(data.task)
@@ -129,18 +125,26 @@ export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () 
         callbacks.onToken?.(data.step, data.token)
       }
     } else if (data.type === "done") {
-      if (data.task) callbacks.onDone?.(data.task)
-      es.close()
+      closeClean()
+      if (data.task) {
+        callbacks.onDone?.(data.task)
+      } else {
+        callbacks.onError?.("Incomplete done event from server")
+      }
     } else if (data.type === "error") {
+      closeClean()
       callbacks.onError?.(data.message ?? "Unknown error")
-      es.close()
     }
   }
 
   es.onerror = () => {
-    callbacks.onError?.("SSE connection error")
-    es.close()
+    if (intentionallyClosed) return
+    if (es.readyState === EventSource.CLOSED) {
+      intentionallyClosed = true
+      callbacks.onError?.("SSE connection error")
+      return
+    }
   }
 
-  return () => { es.close() }
+  return closeClean
 }

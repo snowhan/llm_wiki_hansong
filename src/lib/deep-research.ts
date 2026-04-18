@@ -4,13 +4,12 @@ import { autoIngest } from "./ingest"
 import { writeFile, readFile, listDirectory } from "@/commands/fs"
 import { useWikiStore, type LlmConfig, type SearchApiConfig } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
-import { normalizePath } from "@/lib/path-utils"
 
 /**
  * Queue a deep research task. Automatically starts processing if under concurrency limit.
  */
 export function queueResearch(
-  projectPath: string,
+  projectId: string,
   topic: string,
   llmConfig: LlmConfig,
   searchConfig: SearchApiConfig,
@@ -26,7 +25,7 @@ export function queueResearch(
   store.setPanelOpen(true)
   // Start processing on next tick to ensure React has rendered the panel
   setTimeout(() => {
-    processQueue(projectPath, llmConfig, searchConfig)
+    processQueue(projectId, llmConfig, searchConfig)
   }, 50)
   return taskId
 }
@@ -35,7 +34,7 @@ export function queueResearch(
  * Process queued tasks up to maxConcurrent limit.
  */
 function processQueue(
-  projectPath: string,
+  projectId: string,
   llmConfig: LlmConfig,
   searchConfig: SearchApiConfig,
 ) {
@@ -46,18 +45,17 @@ function processQueue(
   for (let i = 0; i < available; i++) {
     const next = useResearchStore.getState().getNextQueued()
     if (!next) break
-    executeResearch(projectPath, next.id, next.topic, llmConfig, searchConfig)
+    executeResearch(projectId, next.id, next.topic, llmConfig, searchConfig)
   }
 }
 
 async function executeResearch(
-  projectPath: string,
+  projectId: string,
   taskId: string,
   topic: string,
   llmConfig: LlmConfig,
   searchConfig: SearchApiConfig,
 ) {
-  const pp = normalizePath(projectPath)
   const store = useResearchStore.getState()
 
   try {
@@ -91,7 +89,7 @@ async function executeResearch(
 
     if (webResults.length === 0) {
       store.updateTask(taskId, { status: "done", synthesis: "No web results found." })
-      onTaskFinished(pp, llmConfig, searchConfig)
+      onTaskFinished(projectId, llmConfig, searchConfig)
       return
     }
 
@@ -105,7 +103,7 @@ async function executeResearch(
     // Read existing wiki index to enable cross-referencing
     let wikiIndex = ""
     try {
-      wikiIndex = await readFile(`${pp}/wiki/index.md`)
+      wikiIndex = await readFile(projectId, "wiki/index.md")
     } catch {
       // no index yet
     }
@@ -135,7 +133,6 @@ async function executeResearch(
     let accumulated = ""
 
     await streamChat(
-      llmConfig,
       [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Research topic: **${topic}**\n\n## Web Search Results\n\n${searchContext}\n\nSynthesize into a wiki page.` },
@@ -158,7 +155,7 @@ async function executeResearch(
 
     // Check if errored during streaming
     if (useResearchStore.getState().tasks.find((t) => t.id === taskId)?.status === "error") {
-      onTaskFinished(pp, llmConfig, searchConfig)
+      onTaskFinished(projectId, llmConfig, searchConfig)
       return
     }
 
@@ -168,7 +165,7 @@ async function executeResearch(
     const date = new Date().toISOString().slice(0, 10)
     const slug = topic.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 50)
     const fileName = `research-${slug}-${date}.md`
-    const filePath = `${pp}/wiki/queries/${fileName}`
+    const savedPath = `wiki/queries/${fileName}`
 
     const references = webResults
       .map((r, i) => `${i + 1}. [${r.title}](${r.url}) — ${r.source}`)
@@ -199,8 +196,7 @@ async function executeResearch(
       "",
     ].join("\n")
 
-    await writeFile(filePath, pageContent)
-    const savedPath = `wiki/queries/${fileName}`
+    await writeFile(projectId, savedPath, pageContent)
 
     useResearchStore.getState().updateTask(taskId, {
       status: "done",
@@ -209,7 +205,7 @@ async function executeResearch(
 
     // Refresh tree
     try {
-      const tree = await listDirectory(pp)
+      const tree = await listDirectory(projectId)
       useWikiStore.getState().setFileTree(tree)
       useWikiStore.getState().bumpDataVersion()
     } catch {
@@ -217,7 +213,7 @@ async function executeResearch(
     }
 
     // Auto-ingest the research result to generate entities, concepts, cross-references
-    autoIngest(pp, `${pp}/${savedPath}`, llmConfig).catch((err) => {
+    autoIngest(projectId, savedPath, llmConfig).catch((err) => {
       console.error("Failed to auto-ingest research result:", err)
     })
   } catch (err) {
@@ -228,14 +224,14 @@ async function executeResearch(
     })
   }
 
-  onTaskFinished(pp, llmConfig, searchConfig)
+  onTaskFinished(projectId, llmConfig, searchConfig)
 }
 
 function onTaskFinished(
-  projectPath: string,
+  projectId: string,
   llmConfig: LlmConfig,
   searchConfig: SearchApiConfig,
 ) {
   // Process next queued task
-  setTimeout(() => processQueue(projectPath, llmConfig, searchConfig), 100)
+  setTimeout(() => processQueue(projectId, llmConfig, searchConfig), 100)
 }

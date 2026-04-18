@@ -110,3 +110,87 @@ describe("getRelativePath", () => {
     )
   })
 })
+
+// ── splitFrontmatter ──────────────────────────────────────────────────────
+
+import { splitFrontmatter } from "../path-utils"
+
+describe("splitFrontmatter", () => {
+  it("returns empty strings for empty input", () => {
+    const r = splitFrontmatter("")
+    expect(r.frontmatter).toBe("")
+    expect(r.body).toBe("")
+  })
+
+  it("returns body only when there is no frontmatter", () => {
+    const r = splitFrontmatter("# Hello\n\nWorld")
+    expect(r.frontmatter).toBe("")
+    expect(r.body).toBe("# Hello\n\nWorld")
+  })
+
+  it("parses standard --- delimited frontmatter", () => {
+    const content = "---\ntitle: Test\n---\n# Body"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter).toContain("title: Test")
+    expect(r.body).toBe("# Body")
+  })
+
+  it("includes delimiter lines in frontmatter", () => {
+    const content = "---\ntitle: Test\n---\nBody"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter.startsWith("---")).toBe(true)
+  })
+
+  it("handles CRLF line endings", () => {
+    const content = "---\r\ntitle: Test\r\n---\r\n# Body"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter).toContain("title: Test")
+    expect(r.body).toContain("Body")
+  })
+
+  it("handles trailing spaces on --- delimiters", () => {
+    const content = "---  \ntitle: Test\n---  \n# Body"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter).toContain("title: Test")
+    expect(r.body).toContain("Body")
+  })
+
+  it("parses multi-field frontmatter", () => {
+    const content = "---\ntitle: Test\ntype: concept\ntags: [a, b]\n---\nBody text"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter).toContain("title: Test")
+    expect(r.frontmatter).toContain("type: concept")
+    expect(r.body).toBe("Body text")
+  })
+
+  it("handles unclosed frontmatter (2+ YAML lines at start)", () => {
+    const content = "title: Test\ntype: concept\n\n# Body"
+    const r = splitFrontmatter(content)
+    // Should synthesise --- wrapper
+    expect(r.frontmatter).toContain("title: Test")
+    expect(r.frontmatter).toContain("---")
+    expect(r.body).toContain("Body")
+  })
+
+  it("does NOT parse single YAML line as frontmatter (avoids false positives)", () => {
+    const content = "title: Test\n\n# Body"
+    const r = splitFrontmatter(content)
+    // Only one YAML line — should not be treated as frontmatter
+    expect(r.frontmatter).toBe("")
+    expect(r.body).toContain("title: Test")
+  })
+
+  it("handles content with no trailing newline after closing ---", () => {
+    const content = "---\ntitle: Foo\n---"
+    const r = splitFrontmatter(content)
+    expect(r.frontmatter).toContain("title: Foo")
+    expect(r.body).toBe("")
+  })
+
+  it("preserves body content exactly", () => {
+    const body = "# Heading\n\nParagraph with **bold** and _italic_."
+    const content = `---\ntitle: T\n---\n${body}`
+    const r = splitFrontmatter(content)
+    expect(r.body).toBe(body)
+  })
+})

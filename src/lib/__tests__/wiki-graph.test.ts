@@ -21,8 +21,8 @@ vi.mock("@/stores/wiki-store", async (importOriginal) => {
   }
 })
 
-function makeTree(files: { name: string; path: string }[]): FileNode[] {
-  return files.map((f) => ({ name: f.name, path: f.path, is_dir: false, children: [] }))
+function makeTree(files: { name: string; relativePath: string }[]): FileNode[] {
+  return files.map((f) => ({ name: f.name, relativePath: f.relativePath, is_dir: false, children: [] }))
 }
 
 describe("buildWikiGraph", () => {
@@ -42,8 +42,8 @@ describe("buildWikiGraph", () => {
 
   it("builds nodes from wiki files with frontmatter", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "openai.md", path: "/proj/wiki/entities/openai.md" },
-      { name: "transformers.md", path: "/proj/wiki/concepts/transformers.md" },
+      { name: "openai.md", relativePath: "wiki/entities/openai.md" },
+      { name: "transformers.md", relativePath: "wiki/concepts/transformers.md" },
     ]))
     vi.mocked(readFile)
       .mockResolvedValueOnce("---\ntype: entity\ntitle: OpenAI\n---\nContent about [[transformers]]")
@@ -57,8 +57,8 @@ describe("buildWikiGraph", () => {
 
   it("creates edges from wikilinks", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "a.md", path: "/proj/wiki/entities/a.md" },
-      { name: "b.md", path: "/proj/wiki/entities/b.md" },
+      { name: "a.md", relativePath: "wiki/entities/a.md" },
+      { name: "b.md", relativePath: "wiki/entities/b.md" },
     ]))
     vi.mocked(readFile)
       .mockResolvedValueOnce("---\ntype: entity\ntitle: A\n---\nSee [[b]]")
@@ -71,8 +71,8 @@ describe("buildWikiGraph", () => {
 
   it("filters out query type nodes", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "entity.md", path: "/proj/wiki/entities/entity.md" },
-      { name: "research.md", path: "/proj/wiki/queries/research.md" },
+      { name: "entity.md", relativePath: "wiki/entities/entity.md" },
+      { name: "research.md", relativePath: "wiki/queries/research.md" },
     ]))
     vi.mocked(readFile)
       .mockResolvedValueOnce("---\ntype: entity\ntitle: Entity\n---\n")
@@ -85,8 +85,8 @@ describe("buildWikiGraph", () => {
 
   it("deduplicates edges between same nodes", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "a.md", path: "/proj/wiki/entities/a.md" },
-      { name: "b.md", path: "/proj/wiki/entities/b.md" },
+      { name: "a.md", relativePath: "wiki/entities/a.md" },
+      { name: "b.md", relativePath: "wiki/entities/b.md" },
     ]))
     vi.mocked(readFile)
       .mockResolvedValueOnce("---\ntype: entity\ntitle: A\n---\n[[b]] and again [[b]]")
@@ -101,9 +101,9 @@ describe("buildWikiGraph", () => {
 
   it("computes community assignments", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "a.md", path: "/proj/wiki/entities/a.md" },
-      { name: "b.md", path: "/proj/wiki/entities/b.md" },
-      { name: "c.md", path: "/proj/wiki/entities/c.md" },
+      { name: "a.md", relativePath: "wiki/entities/a.md" },
+      { name: "b.md", relativePath: "wiki/entities/b.md" },
+      { name: "c.md", relativePath: "wiki/entities/c.md" },
     ]))
     vi.mocked(readFile)
       .mockResolvedValueOnce("---\ntype: entity\ntitle: A\n---\n[[b]]")
@@ -119,7 +119,7 @@ describe("buildWikiGraph", () => {
 
   it("falls back to filename when no frontmatter title", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "page.md", path: "/proj/wiki/page.md" },
+      { name: "page.md", relativePath: "wiki/page.md" },
     ]))
     vi.mocked(readFile).mockResolvedValue("# My Page Title\n\nContent here")
 
@@ -129,7 +129,7 @@ describe("buildWikiGraph", () => {
 
   it("falls back to filename for title", async () => {
     vi.mocked(listDirectory).mockResolvedValue(makeTree([
-      { name: "my-page.md", path: "/proj/wiki/my-page.md" },
+      { name: "my-page.md", relativePath: "wiki/my-page.md" },
     ]))
     vi.mocked(readFile).mockResolvedValue("Just content, no title")
 

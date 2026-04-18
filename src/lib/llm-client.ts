@@ -1,7 +1,7 @@
-import type { LlmConfig } from "@/stores/wiki-store"
-import { getProviderConfig } from "./llm-providers"
-
-export type { ChatMessage } from "./llm-providers"
+export interface ChatMessage {
+  role: "system" | "user" | "assistant"
+  content: string
+}
 
 export interface StreamCallbacks {
   onToken: (token: string) => void
@@ -18,14 +18,17 @@ function parseLines(chunk: Uint8Array, buffer: string): [string[], string] {
   return [lines, remaining]
 }
 
+/**
+ * Stream a chat completion via the server-side LLM proxy.
+ * The server reads the LLM configuration from its own state.
+ * No API keys or provider URLs are sent from the frontend.
+ */
 export async function streamChat(
-  config: LlmConfig,
-  messages: import("./llm-providers").ChatMessage[],
+  messages: ChatMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
   const { onToken, onDone, onError } = callbacks
-  const providerConfig = getProviderConfig(config)
 
   const timeoutMs = 15 * 60 * 1000
   let combinedSignal = signal
@@ -44,16 +47,17 @@ export async function streamChat(
     combinedSignal = timeoutController.signal
   }
 
+  const { getStoredToken } = await import("@/lib/auth")
+  const token = getStoredToken()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (token) headers["Authorization"] = `Bearer ${token}`
+
   let response: Response
   try {
     response = await fetch("/api/llm/stream", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: providerConfig.url,
-        headers: providerConfig.headers,
-        body: providerConfig.buildBody(messages),
-      }),
+      headers,
+      body: JSON.stringify({ messages }),
       signal: combinedSignal,
     })
   } catch (err) {
@@ -89,13 +93,50 @@ export async function streamChat(
   const reader = response.body.getReader()
   let lineBuffer = ""
 
+  // The server proxies the raw SSE stream, so we need to parse it here
+  // using the stored provider's parseStream function
+  // But since the server now handles the provider config, we receive
+  // the raw provider stream. We need to parse it generically.
+  // For now, we'll just extract text from SSE data lines using OpenAI format
+  // as the most common pattern. The server can add a content-type header hint.
+
+  function parseServerSentLine(line: string): string | null {
+    if (!line.startsWith("data: ")) return null
+    const data = line.slice(6).trim()
+    if (data === "[DONE]") return null
+    try {
+      // Try OpenAI/compatible format
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{ delta: { content?: string } }>
+        candidates?: Array<{ content: { parts: Array<{ text?: string }> } }>
+        type?: string
+        delta?: { type: string; text?: string }
+      }
+      // OpenAI/Ollama/Minimax/WPS/Custom
+      if (parsed.choices?.[0]?.delta?.content !== undefined) {
+        return parsed.choices[0].delta.content ?? null
+      }
+      // Google
+      if (parsed.candidates?.[0]?.content?.parts?.[0]?.text !== undefined) {
+        return parsed.candidates[0].content.parts[0].text ?? null
+      }
+      // Anthropic
+      if (parsed.type === "content_block_delta" && parsed.delta?.type === "text_delta") {
+        return parsed.delta.text ?? null
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
+
   try {
     while (true) {
       const { done, value } = await reader.read()
 
       if (done) {
         if (lineBuffer.trim()) {
-          const token = providerConfig.parseStream(lineBuffer.trim())
+          const token = parseServerSentLine(lineBuffer.trim())
           if (token !== null) onToken(token)
         }
         break
@@ -107,14 +148,14 @@ export async function streamChat(
       for (const line of lines) {
         const trimmed = line.trim()
         if (!trimmed) continue
-        const token = providerConfig.parseStream(trimmed)
+        const token = parseServerSentLine(trimmed)
         if (token !== null) onToken(token)
       }
     }
 
     onDone()
   } catch (err) {
-    if (err instanceof Error && (err.name === "AbortError" || (signal?.aborted))) {
+    if (err instanceof Error && (err.name === "AbortError" || signal?.aborted)) {
       onDone()
       return
     }

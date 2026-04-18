@@ -33,15 +33,15 @@ describe("FileTree", () => {
 
   it("renders folder and file nodes from fileTree", () => {
     useWikiStore.setState({
-      project: { name: "My Wiki", path: "/wiki" },
+      project: { id: "wiki-uuid", name: "My Wiki", path: "/wiki" },
       fileTree: [
         {
           name: "docs",
-          path: "/wiki/docs",
+          relativePath: "docs",
           is_dir: true,
-          children: [{ name: "readme.md", path: "/wiki/docs/readme.md", is_dir: false }],
+          children: [{ name: "readme.md", relativePath: "docs/readme.md", is_dir: false }],
         },
-        { name: "notes.md", path: "/wiki/notes.md", is_dir: false },
+        { name: "notes.md", relativePath: "notes.md", is_dir: false },
       ],
     } as any)
     render(<FileTree />)
@@ -53,23 +53,23 @@ describe("FileTree", () => {
 
   it("calls setSelectedFile when a file is clicked", () => {
     useWikiStore.setState({
-      project: { name: "P", path: "/p" },
-      fileTree: [{ name: "a.md", path: "/p/a.md", is_dir: false }],
+      project: { id: "p-uuid", name: "P", path: "/p" },
+      fileTree: [{ name: "a.md", relativePath: "a.md", is_dir: false }],
     } as any)
     render(<FileTree />)
     fireEvent.click(screen.getByText("a.md"))
-    expect(useWikiStore.getState().selectedFile).toBe("/p/a.md")
+    expect(useWikiStore.getState().selectedFile).toBe("a.md")
   })
 
   it("toggles folder expand/collapse for children", () => {
     useWikiStore.setState({
-      project: { name: "P", path: "/p" },
+      project: { id: "p-uuid", name: "P", path: "/p" },
       fileTree: [
         {
           name: "src",
-          path: "/p/src",
+          relativePath: "src",
           is_dir: true,
-          children: [{ name: "main.ts", path: "/p/src/main.ts", is_dir: false }],
+          children: [{ name: "main.ts", relativePath: "src/main.ts", is_dir: false }],
         },
       ],
     } as any)

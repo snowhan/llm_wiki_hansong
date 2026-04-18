@@ -1,32 +1,13 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
-import type { WikiProject, FileNode } from "@/types/wiki"
+import type { WikiProject, FileNode, LlmConfig, SearchApiConfig, EmbeddingConfig } from "@shared"
 import { getFileName } from "@/lib/path-utils"
 
-interface LlmConfig {
-  provider: "openai" | "anthropic" | "google" | "ollama" | "custom" | "minimax" | "wps"
-  apiKey: string
-  model: string
-  ollamaUrl: string
-  customEndpoint: string
-  maxContextSize: number
-}
-
-interface SearchApiConfig {
-  provider: "tavily" | "none"
-  apiKey: string
-}
-
-interface EmbeddingConfig {
-  enabled: boolean
-  endpoint: string
-  apiKey: string
-  model: string
-}
+export type { LlmConfig, SearchApiConfig, EmbeddingConfig }
 
 export interface TabItem {
   id: string         // stable unique identity (never changes after creation)
-  path: string       // "__new_tab_<id>" means an empty placeholder tab
+  path: string       // "__new_tab_<id>" means an empty placeholder tab; otherwise a relativePath
   title: string
   isDirty?: boolean
 }
@@ -40,10 +21,10 @@ function newTabId() { return `tab_${Date.now()}_${++_tabSeq}` }
 interface WikiState {
   project: WikiProject | null
   fileTree: FileNode[]
-  selectedFile: string | null
+  selectedFile: string | null       // relativePath within project, or null
   fileContent: string
   chatExpanded: boolean
-  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "review" | "settings"
+  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "review" | "settings" | "admin"
   llmConfig: LlmConfig
   searchApiConfig: SearchApiConfig
   embeddingConfig: EmbeddingConfig
@@ -51,15 +32,15 @@ interface WikiState {
 
   // Tab management
   openTabs: TabItem[]
-  activeTabId: string | null   // which tab is visually selected (by id)
-  activeTabPath: string | null // derived: the file path of the active tab (null for empty/no tab)
+  activeTabId: string | null        // which tab is visually selected (by id)
+  activeTabPath: string | null      // derived: the relativePath of the active tab (null for empty/no tab)
 
   // Ingest progress — stored globally so state survives view switches
-  ingestingPath: string | null
-  ingestStatuses: Record<string, "idle" | "ingesting" | "interrupted" | "done" | "error">
+  ingestingPath: string | null      // relativePath of currently ingesting file
+  ingestStatuses: Record<string, "idle" | "ingesting" | "interrupted" | "done" | "error">  // key: relativePath
 
   // Server-side task IDs — persisted so we can reconnect after page refresh
-  serverTaskIds: Record<string, string> // sourcePath → taskId
+  serverTaskIds: Record<string, string>  // key: relativePath → taskId
 
   setProject: (project: WikiProject | null) => void
   setFileTree: (tree: FileNode[]) => void
@@ -73,18 +54,18 @@ interface WikiState {
   bumpDataVersion: () => void
 
   // Tab actions
-  openTab: (path: string, title?: string) => void
+  openTab: (relativePath: string, title?: string) => void
   closeTab: (tabId: string) => void
   setActiveTab: (tabId: string) => void
   /** Open file in current tab. If file is already open in another tab, switch to it. Creates first tab if none exist. */
-  navigateInCurrentTab: (path: string, title?: string) => void
+  navigateInCurrentTab: (relativePath: string, title?: string) => void
   /** Create a blank placeholder tab and make it active. */
   openNewTab: () => void
 
   // Ingest actions
   setIngestingPath: (path: string | null) => void
-  setIngestStatus: (path: string, status: "idle" | "ingesting" | "interrupted" | "done" | "error") => void
-  setServerTaskId: (sourcePath: string, taskId: string | null) => void
+  setIngestStatus: (relativePath: string, status: "idle" | "ingesting" | "interrupted" | "done" | "error") => void
+  setServerTaskId: (relativePath: string, taskId: string | null) => void
 }
 
 function deriveTabPath(tabs: TabItem[], activeTabId: string | null): string | null {
@@ -111,7 +92,16 @@ export const useWikiStore = create<WikiState>()(
     ollamaUrl: "http://localhost:11434",
     customEndpoint: "",
   },
-
+  searchApiConfig: {
+    provider: "none",
+    apiKey: "",
+  },
+  embeddingConfig: {
+    enabled: false,
+    endpoint: "",
+    apiKey: "",
+    model: "",
+  },
   dataVersion: 0,
   openTabs: [],
   activeTabId: null,
@@ -122,55 +112,47 @@ export const useWikiStore = create<WikiState>()(
 
   setProject: (project) => set({
     project,
-    // Reset tab state when switching projects
+    // Reset tab and ingest state when switching projects
     openTabs: [],
     activeTabId: null,
     activeTabPath: null,
     fileContent: "",
     selectedFile: null,
     activeView: "wiki",
+    // Clear ingest state so previous project's status doesn't bleed into new project
+    ingestingPath: null,
+    ingestStatuses: {},
+    serverTaskIds: {},
   }),
   setFileTree: (fileTree) => set({ fileTree }),
   setSelectedFile: (selectedFile) => set({ selectedFile }),
   setFileContent: (fileContent) => set({ fileContent }),
   setChatExpanded: (chatExpanded) => set({ chatExpanded }),
   setActiveView: (activeView) => set({ activeView }),
-  searchApiConfig: {
-    provider: "none",
-    apiKey: "",
-  },
-
-  embeddingConfig: {
-    enabled: false,
-    endpoint: "",
-    apiKey: "",
-    model: "",
-  },
 
   setLlmConfig: (llmConfig) => set({ llmConfig }),
   setSearchApiConfig: (searchApiConfig) => set({ searchApiConfig }),
   setEmbeddingConfig: (embeddingConfig) => set({ embeddingConfig }),
   bumpDataVersion: () => set((state) => ({ dataVersion: state.dataVersion + 1 })),
 
-  openTab: (path, title) => {
+  openTab: (relativePath, title) => {
     const { openTabs } = get()
-    // Check if already open
-    const existing = openTabs.find((t) => t.path === path)
+    const existing = openTabs.find((t) => t.path === relativePath)
     if (existing) {
       set({
         activeTabId: existing.id,
-        activeTabPath: path,
-        selectedFile: path,
+        activeTabPath: relativePath,
+        selectedFile: relativePath,
       })
       return
     }
     const id = newTabId()
-    const resolvedTitle = title ?? getFileName(path)
+    const resolvedTitle = title ?? getFileName(relativePath)
     set({
-      openTabs: [...openTabs, { id, path, title: resolvedTitle }],
+      openTabs: [...openTabs, { id, path: relativePath, title: resolvedTitle }],
       activeTabId: id,
-      activeTabPath: path,
-      selectedFile: path,
+      activeTabPath: relativePath,
+      selectedFile: relativePath,
     })
   },
 
@@ -194,45 +176,41 @@ export const useWikiStore = create<WikiState>()(
     set({ activeTabId: tabId, activeTabPath: path, selectedFile: path })
   },
 
-  navigateInCurrentTab: (path, title) => {
+  navigateInCurrentTab: (relativePath, title) => {
     const { openTabs, activeTabId } = get()
-    const resolvedTitle = title ?? getFileName(path)
+    const resolvedTitle = title ?? getFileName(relativePath)
 
-    // If this file is already open in any tab, switch to that tab
-    const existingTab = openTabs.find((t) => t.path === path)
+    const existingTab = openTabs.find((t) => t.path === relativePath)
     if (existingTab) {
-      set({ activeTabId: existingTab.id, activeTabPath: path, selectedFile: path })
+      set({ activeTabId: existingTab.id, activeTabPath: relativePath, selectedFile: relativePath })
       return
     }
 
     if (openTabs.length === 0) {
-      // No tabs yet — create the first one
       const id = newTabId()
       set({
-        openTabs: [{ id, path, title: resolvedTitle }],
+        openTabs: [{ id, path: relativePath, title: resolvedTitle }],
         activeTabId: id,
-        activeTabPath: path,
-        selectedFile: path,
+        activeTabPath: relativePath,
+        selectedFile: relativePath,
       })
       return
     }
 
-    // Replace the active tab in-place
     const idx = openTabs.findIndex((t) => t.id === activeTabId)
     if (idx === -1) {
-      // Active tab not found, append
       const id = newTabId()
       set({
-        openTabs: [...openTabs, { id, path, title: resolvedTitle }],
+        openTabs: [...openTabs, { id, path: relativePath, title: resolvedTitle }],
         activeTabId: id,
-        activeTabPath: path,
-        selectedFile: path,
+        activeTabPath: relativePath,
+        selectedFile: relativePath,
       })
       return
     }
     const newTabs = [...openTabs]
-    newTabs[idx] = { ...newTabs[idx], path, title: resolvedTitle }
-    set({ openTabs: newTabs, activeTabPath: path, selectedFile: path })
+    newTabs[idx] = { ...newTabs[idx], path: relativePath, title: resolvedTitle }
+    set({ openTabs: newTabs, activeTabPath: relativePath, selectedFile: relativePath })
   },
 
   openNewTab: () => {
@@ -249,21 +227,20 @@ export const useWikiStore = create<WikiState>()(
 
   setIngestingPath: (path) => set({ ingestingPath: path }),
 
-  setIngestStatus: (path, status) =>
-    set((state) => ({ ingestStatuses: { ...state.ingestStatuses, [path]: status } })),
+  setIngestStatus: (relativePath, status) =>
+    set((state) => ({ ingestStatuses: { ...state.ingestStatuses, [relativePath]: status } })),
 
-  setServerTaskId: (sourcePath, taskId) =>
+  setServerTaskId: (relativePath, taskId) =>
     set((state) => {
       if (taskId === null) {
-        const { [sourcePath]: _, ...rest } = state.serverTaskIds
+        const { [relativePath]: _, ...rest } = state.serverTaskIds
         return { serverTaskIds: rest }
       }
-      return { serverTaskIds: { ...state.serverTaskIds, [sourcePath]: taskId } }
+      return { serverTaskIds: { ...state.serverTaskIds, [relativePath]: taskId } }
     }),
   }),
   {
     name: "llm-wiki-store",
-    // Only persist ingest progress — everything else is derived from disk
     partialize: (state) => ({
       ingestStatuses: state.ingestStatuses,
       serverTaskIds: state.serverTaskIds,
@@ -275,14 +252,13 @@ export const useWikiStore = create<WikiState>()(
       const updated: Record<string, "idle" | "ingesting" | "interrupted" | "done" | "error"> = {}
       for (const [path, status] of Object.entries(state.ingestStatuses)) {
         if (status === "ingesting") updated[path] = "interrupted"
-        else if (status === "error") updated[path] = "idle"  // reset errors so user can retry
+        else if (status === "error") updated[path] = "idle"
         else updated[path] = status
       }
       state.ingestStatuses = updated
       state.ingestingPath = null
-      // serverTaskIds are kept as-is — the frontend will reconnect and verify
     },
   }
 ))
 
-export type { WikiState, LlmConfig, SearchApiConfig, EmbeddingConfig }
+export type { WikiState }

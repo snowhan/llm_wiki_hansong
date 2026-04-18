@@ -11,7 +11,7 @@ vi.mock("../editor/wiki-editor", () => ({
 }))
 
 vi.mock("../editor/file-preview", () => ({
-  FilePreview: ({ filePath }: { filePath: string }) => (
+  FilePreview: ({ filePath }: { filePath: string; projectId?: string }) => (
     <div data-testid="file-preview">{filePath}</div>
   ),
 }))

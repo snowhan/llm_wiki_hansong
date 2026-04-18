@@ -1,30 +1,49 @@
 import { Router } from "express"
 import type { Request, Response, NextFunction } from "express"
+import { getProviderConfig } from "../lib/llm-providers.js"
+import type { ChatMessage } from "../lib/llm-providers.js"
+import { getState } from "../services/state-service.js"
+import type { LlmConfig } from "../types.js"
+import { llmStreamSchema } from "../lib/schemas.js"
 
 const router = Router()
 
+/**
+ * POST /api/llm/stream
+ * Body: { messages: ChatMessage[], stream?: boolean }
+ *
+ * The server reads the stored LLM configuration from app-state and uses it
+ * to proxy the request to the actual LLM provider.
+ * The frontend never needs to send API keys or provider URLs.
+ */
 router.post("/stream", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { url, headers, body } = req.body as {
-      url: string
-      headers: Record<string, string>
-      body: unknown
+    const parsed = llmStreamSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message })
+      return
     }
+    const { messages } = parsed.data as { messages: ChatMessage[] }
 
-    if (!url) {
-      res.status(400).json({ error: "url is required" })
+    const llmConfig = await getState("llmConfig") as LlmConfig | null
+    if (!llmConfig?.provider) {
+      res.status(400).json({ error: "LLM is not configured. Please set up your LLM in Settings." })
       return
     }
 
-    const upstream = await fetch(url, {
+    const providerConfig = getProviderConfig(llmConfig)
+
+    const upstream = await fetch(providerConfig.url, {
       method: "POST",
-      headers: { ...headers, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers: { ...providerConfig.headers, "Content-Type": "application/json" },
+      body: JSON.stringify(providerConfig.buildBody(messages)),
     })
 
     if (!upstream.ok) {
       const errText = await upstream.text().catch(() => "")
-      res.status(upstream.status).send(`LLM API error: ${upstream.status} ${upstream.statusText} — ${errText}`)
+      res.status(upstream.status).send(
+        `LLM API error: ${upstream.status} ${upstream.statusText} — ${errText}`,
+      )
       return
     }
 

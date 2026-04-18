@@ -13,7 +13,7 @@ export function setupAutoSave(): void {
     reviewTimer = setTimeout(() => {
       const project = useWikiStore.getState().project
       if (project) {
-        saveReviewItems(project.path, state.items).catch(() => {})
+        saveReviewItems(project.id, state.items).catch(() => {})
       }
     }, 1000)
   })
@@ -25,7 +25,7 @@ export function setupAutoSave(): void {
     chatTimer = setTimeout(() => {
       const project = useWikiStore.getState().project
       if (project) {
-        saveChatHistory(project.path, state.conversations, state.messages).catch(() => {})
+        saveChatHistory(project.id, state.conversations, state.messages).catch(() => {})
       }
     }, 2000)
   })

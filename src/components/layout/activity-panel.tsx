@@ -1,11 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react"
-import { useTranslation } from "react-i18next"
+import { useState, useEffect, useRef } from "react"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
-import IconButton from "@mui/material/IconButton"
 import Collapse from "@mui/material/Collapse"
-import Tooltip from "@mui/material/Tooltip"
 import CheckCircle from "@mui/icons-material/CheckCircle"
 import ErrorOutlineOutlined from "@mui/icons-material/ErrorOutlineOutlined"
 import Description from "@mui/icons-material/Description"
@@ -16,17 +13,12 @@ import MergeType from "@mui/icons-material/MergeType"
 import BarChart from "@mui/icons-material/BarChart"
 import HelpOutlineOutlined from "@mui/icons-material/HelpOutlineOutlined"
 import ViewModule from "@mui/icons-material/ViewModule"
-import RotateLeft from "@mui/icons-material/RotateLeft"
-import Close from "@mui/icons-material/Close"
-import AccessTime from "@mui/icons-material/AccessTime"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
-import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
 import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useActivityStore, type ActivityItem } from "@/stores/activity-store"
 import { useWikiStore } from "@/stores/wiki-store"
-import { normalizePath, getFileName } from "@/lib/path-utils"
-import { getQueue, getQueueSummary, retryTask, cancelTask, type IngestTask } from "@/lib/ingest-queue"
+import { getFileName } from "@/lib/path-utils"
 
 type IconComp = React.ComponentType<SvgIconProps>
 
@@ -67,55 +59,28 @@ function parseStep(detail: string): { step: number; total: number; label: string
 }
 
 export function ActivityPanel() {
-  const { t } = useTranslation()
   const items = useActivityStore((s) => s.items)
   const clearDone = useActivityStore((s) => s.clearDone)
-  const project = useWikiStore((s) => s.project)
+  const clearErrors = useActivityStore((s) => s.clearErrors)
   const [expanded, setExpanded] = useState(false)
-  const [queueTasks, setQueueTasks] = useState<IngestTask[]>([])
   const prevRunningRef = useRef(0)
 
   const runningItems = items.filter((i) => i.status === "running")
   const runningCount = runningItems.length
   const hasItems = items.length > 0
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setQueueTasks([...getQueue()])
-    }, 800)
-    return () => clearInterval(interval)
-  }, [])
-
-  const queueSummary = getQueueSummary()
-  const hasQueue = queueSummary.total > 0
-
-  const handleRetry = useCallback((taskId: string) => {
-    if (!project) return
-    retryTask(normalizePath(project.path), taskId)
-  }, [project])
-
-  const handleCancel = useCallback((taskId: string) => {
-    if (!project) return
-    cancelTask(normalizePath(project.path), taskId)
-  }, [project])
-
-  // Auto-expand when a task starts
+  // Auto-expand when a NEW task starts (0 → 1+ running), but respect manual collapse.
+  // Do NOT force expand if the user already collapsed the panel while tasks are running.
   useEffect(() => {
     if (runningCount > 0 && prevRunningRef.current === 0) setExpanded(true)
-    if (hasQueue && !expanded) setExpanded(true)
     prevRunningRef.current = runningCount
-  }, [runningCount, hasQueue, expanded])
+  }, [runningCount])
 
-  if (!hasItems && !hasQueue) return null
+  if (!hasItems) return null
 
-  const isActive = runningCount > 0 || queueSummary.processing > 0 || queueSummary.pending > 0
+  const isActive = runningCount > 0
   const activeItem = runningItems[0] ?? items[0]
   const stepInfo = activeItem?.status === "running" ? parseStep(activeItem.detail) : null
-
-  const progressPct =
-    queueSummary.total > 0
-      ? ((queueSummary.total - queueSummary.pending - queueSummary.processing) / queueSummary.total) * 100
-      : 0
 
   return (
     <Box
@@ -214,64 +179,58 @@ export function ActivityPanel() {
       {/* ── Expanded details ── */}
       <Collapse in={expanded}>
         <Box sx={{ maxHeight: 300, overflowY: "auto", borderTop: 1, borderColor: "divider" }}>
-          {/* Queue progress bar */}
-          {hasQueue && (queueSummary.processing > 0 || queueSummary.pending > 0) && (
-            <Box sx={{ px: 1.5, py: 0.875, borderBottom: 1, borderColor: "divider" }}>
-              <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
-                  队列进度
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
-                  {queueSummary.total - queueSummary.pending - queueSummary.processing}/{queueSummary.total}
-                </Typography>
-              </Stack>
-              <Box sx={{ height: 3, borderRadius: 999, bgcolor: "action.selected", overflow: "hidden" }}>
-                <Box sx={{ height: "100%", borderRadius: 999, bgcolor: "#7c3aed", width: `${progressPct}%`, transition: "width 0.4s ease" }} />
-              </Box>
-            </Box>
-          )}
-
-          {/* Queue tasks */}
-          {queueTasks.filter((t) => t.status !== "done").map((task) => (
-            <QueueRow key={task.id} task={task} onRetry={handleRetry} onCancel={handleCancel} />
+          {/* Activity items */}
+          {items.map((item) => (
+            <ActivityRow key={item.id} item={item} />
           ))}
 
-          {/* Activity items */}
-          {items.map((item) => {
-            const matchingTask = item.status === "running"
-              ? queueTasks.find((task) => task.status === "processing" && getFileName(task.sourcePath) === item.title)
-              : undefined
-            return (
-              <ActivityRow
-                key={item.id}
-                item={item}
-                onCancel={matchingTask ? () => handleCancel(matchingTask.id) : undefined}
-              />
-            )
-          })}
-
-          {/* Clear button */}
+          {/* Clear buttons */}
           {items.some((i) => i.status !== "running") && (
-            <Box
-              component="button"
-              type="button"
-              onClick={clearDone}
-              sx={{
-                width: "100%",
-                px: 1.5,
-                py: 0.5,
-                border: "none",
-                background: "none",
-                cursor: "pointer",
-                font: "inherit",
-                fontSize: "0.6rem",
-                color: "text.secondary",
-                opacity: 0.6,
-                "&:hover": { opacity: 1 },
-                textAlign: "center",
-              }}
-            >
-              清除已完成
+            <Box sx={{ display: "flex", gap: 0.5 }}>
+              <Box
+                component="button"
+                type="button"
+                onClick={clearDone}
+                sx={{
+                  flex: 1,
+                  px: 1.5,
+                  py: 0.5,
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  font: "inherit",
+                  fontSize: "0.6rem",
+                  color: "text.secondary",
+                  opacity: 0.6,
+                  "&:hover": { opacity: 1 },
+                  textAlign: "center",
+                }}
+              >
+                清除已完成
+              </Box>
+              {items.some((i) => i.status === "error") && (
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={clearErrors}
+                  sx={{
+                    flex: 1,
+                    px: 1.5,
+                    py: 0.5,
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    font: "inherit",
+                    fontSize: "0.6rem",
+                    color: "error.main",
+                    opacity: 0.6,
+                    "&:hover": { opacity: 1 },
+                    textAlign: "center",
+                  }}
+                >
+                  清除失败
+                </Box>
+              )}
             </Box>
           )}
         </Box>
@@ -280,65 +239,13 @@ export function ActivityPanel() {
   )
 }
 
-function QueueRow({ task, onRetry, onCancel }: { task: IngestTask; onRetry: (id: string) => void; onCancel: (id: string) => void }) {
-  const fileName = getFileName(task.sourcePath)
-
-  return (
-    <Box sx={{ px: 1.5, py: 0.75, borderBottom: 1, borderColor: "divider" }}>
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Box sx={{ flexShrink: 0, width: 12, height: 12, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {task.status === "processing" && <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#7c3aed", animation: "preprocess-dot-pulse 1.4s ease-in-out infinite" }} />}
-          {task.status === "pending" && <AccessTime sx={{ fontSize: 11, color: "text.secondary" }} />}
-          {task.status === "failed" && <ErrorOutlineOutlined sx={{ fontSize: 11, color: "error.main" }} />}
-        </Box>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography variant="caption" noWrap sx={{ fontWeight: 500, fontSize: "0.68rem", display: "block", color: task.status === "processing" ? "#5b21b6" : "text.secondary" }}>
-            {fileName}
-          </Typography>
-          {task.folderContext && (
-            <Typography variant="caption" noWrap sx={{ fontSize: "0.62rem", color: "text.secondary", opacity: 0.7, display: "block" }}>
-              {task.folderContext}
-            </Typography>
-          )}
-          {task.status === "failed" && task.error && (
-            <Typography variant="caption" noWrap sx={{ fontSize: "0.62rem", color: "error.main", display: "block" }}>
-              {task.error}
-            </Typography>
-          )}
-        </Box>
-        <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0 }}>
-          {task.status === "failed" && (
-            <Tooltip title="重试" enterDelay={400}>
-              <IconButton size="small" onClick={() => onRetry(task.id)} sx={{ p: 0.25, color: "text.secondary", "&:hover": { color: "text.primary" } }}>
-                <RotateLeft sx={{ fontSize: 11 }} />
-              </IconButton>
-            </Tooltip>
-          )}
-          {(task.status === "pending" || task.status === "processing") && (
-            <Tooltip title="取消" enterDelay={400}>
-              <IconButton size="small" onClick={() => onCancel(task.id)} sx={{ p: 0.25, color: "text.secondary", "&:hover": { color: "error.main" } }}>
-                <Close sx={{ fontSize: 11 }} />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Stack>
-      </Stack>
-    </Box>
-  )
-}
-
-function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => void }) {
-  const { t } = useTranslation()
+function ActivityRow({ item }: { item: ActivityItem }) {
   const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
-  const project = useWikiStore((s) => s.project)
   const stepInfo = item.status === "running" ? parseStep(item.detail) : null
 
-  function handleFileClick(filePath: string) {
-    if (!project) return
-    const pp = normalizePath(project.path)
-    const fullPath = filePath.startsWith("/") ? normalizePath(filePath) : `${pp}/${filePath}`
-    navigateInCurrentTab(fullPath)
+  function handleFileClick(relativePath: string) {
+    navigateInCurrentTab(relativePath)
     setActiveView("wiki")
   }
 
@@ -354,7 +261,7 @@ function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => 
         bgcolor: isRunning ? "rgba(124,58,237,0.02)" : "transparent",
       }}
     >
-      <Stack direction="row" spacing={1} alignItems="flex-start">
+      <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
         {/* Status icon */}
         <Box sx={{ mt: 0.2, flexShrink: 0, width: 12, display: "flex", justifyContent: "center" }}>
           {isRunning && <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "#7c3aed", mt: 0.2, animation: "preprocess-dot-pulse 1.4s ease-in-out infinite" }} />}
@@ -395,7 +302,7 @@ function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => 
           {item.filesWritten.length > 0 && item.status === "done" && (
             <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.15 }}>
               {item.filesWritten.slice(0, 8).map((filePath) => {
-                const { icon: Icon, typeKey } = getFileTypeInfo(filePath)
+                const { icon: Icon } = getFileTypeInfo(filePath)
                 const name = getFileName(filePath)
                 return (
                   <Box
@@ -435,18 +342,6 @@ function ActivityRow({ item, onCancel }: { item: ActivityItem; onCancel?: () => 
           )}
         </Box>
 
-        {/* Cancel button */}
-        {isRunning && onCancel && (
-          <Tooltip title="取消" enterDelay={400}>
-            <IconButton
-              size="small"
-              onClick={onCancel}
-              sx={{ flexShrink: 0, p: 0.25, color: "text.secondary", "&:hover": { color: "error.main" } }}
-            >
-              <Close sx={{ fontSize: 11 }} />
-            </IconButton>
-          </Tooltip>
-        )}
       </Stack>
     </Box>
   )

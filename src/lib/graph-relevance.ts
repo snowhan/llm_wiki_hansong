@@ -1,6 +1,5 @@
 import { readFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
-import { normalizePath } from "@/lib/path-utils"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,7 +9,7 @@ export interface RetrievalNode {
   readonly id: string
   readonly title: string
   readonly type: string
-  readonly path: string
+  readonly relativePath: string
   readonly sources: readonly string[]
   readonly outLinks: ReadonlySet<string>
   readonly inLinks: ReadonlySet<string>
@@ -153,7 +152,7 @@ function getNodeDegree(node: RetrievalNode): number {
 // ---------------------------------------------------------------------------
 
 export async function buildRetrievalGraph(
-  projectPath: string,
+  projectId: string,
   dataVersion: number = 0,
 ): Promise<RetrievalGraph> {
   // Return cached if version matches
@@ -161,10 +160,9 @@ export async function buildRetrievalGraph(
     return cachedGraph
   }
 
-  const wikiRoot = `${normalizePath(projectPath)}/wiki`
   let tree: FileNode[]
   try {
-    tree = await listDirectory(wikiRoot)
+    tree = await listDirectory(projectId, "wiki")
   } catch {
     const emptyGraph: RetrievalGraph = { nodes: new Map(), dataVersion }
     cachedGraph = emptyGraph
@@ -178,7 +176,7 @@ export async function buildRetrievalGraph(
     id: string
     title: string
     type: string
-    path: string
+    relativePath: string
     sources: string[]
     rawLinks: string[]
     fileName: string
@@ -188,7 +186,7 @@ export async function buildRetrievalGraph(
     const id = fileNameToId(file.name)
     let content = ""
     try {
-      content = await readFile(file.path)
+      content = await readFile(projectId, file.relativePath)
     } catch {
       continue
     }
@@ -198,7 +196,7 @@ export async function buildRetrievalGraph(
       id,
       title: fm.title || file.name.replace(/\.md$/, "").replace(/-/g, " "),
       type: fm.type,
-      path: file.path,
+      relativePath: file.relativePath,
       sources: fm.sources,
       rawLinks: extractWikilinks(content),
       fileName: file.name,
@@ -232,7 +230,7 @@ export async function buildRetrievalGraph(
       id: raw.id,
       title: raw.title,
       type: raw.type,
-      path: raw.path,
+      relativePath: raw.relativePath,
       sources: Object.freeze([...raw.sources]),
       outLinks: Object.freeze(outLinksMap.get(raw.id) ?? new Set<string>()) as ReadonlySet<string>,
       inLinks: Object.freeze(inLinksMap.get(raw.id) ?? new Set<string>()) as ReadonlySet<string>,

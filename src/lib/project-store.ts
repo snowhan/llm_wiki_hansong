@@ -7,12 +7,15 @@ const LAST_PROJECT_KEY = "lastProject"
 
 export async function getRecentProjects(): Promise<WikiProject[]> {
   const projects = await apiGet<WikiProject[] | null>(`/api/state/${RECENT_PROJECTS_KEY}`)
-  return projects ?? []
+  // Filter out any legacy entries that don't have an id (pre-migration)
+  return (projects ?? []).filter((p): p is WikiProject => !!p.id)
 }
 
 export async function getLastProject(): Promise<WikiProject | null> {
   const project = await apiGet<WikiProject | null>(`/api/state/${LAST_PROJECT_KEY}`)
-  return project ?? null
+  // Ignore legacy entries without an id
+  if (!project?.id) return null
+  return project
 }
 
 export async function saveLastProject(project: WikiProject): Promise<void> {
@@ -20,11 +23,9 @@ export async function saveLastProject(project: WikiProject): Promise<void> {
   await addToRecentProjects(project)
 }
 
-export async function addToRecentProjects(
-  project: WikiProject
-): Promise<void> {
+export async function addToRecentProjects(project: WikiProject): Promise<void> {
   const existing = await getRecentProjects()
-  const filtered = existing.filter((p) => p.path !== project.path)
+  const filtered = existing.filter((p) => p.id !== project.id)
   const updated = [project, ...filtered].slice(0, 10)
   await apiPut(`/api/state/${RECENT_PROJECTS_KEY}`, { value: updated })
 }
@@ -59,11 +60,9 @@ export async function loadEmbeddingConfig(): Promise<EmbeddingConfig | null> {
   return apiGet<EmbeddingConfig | null>(`/api/state/${EMBEDDING_KEY}`)
 }
 
-export async function removeFromRecentProjects(
-  path: string
-): Promise<void> {
+export async function removeFromRecentProjects(projectId: string): Promise<void> {
   const existing = await getRecentProjects()
-  const updated = existing.filter((p) => p.path !== path)
+  const updated = existing.filter((p) => p.id !== projectId)
   await apiPut(`/api/state/${RECENT_PROJECTS_KEY}`, { value: updated })
 }
 

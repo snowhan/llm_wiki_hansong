@@ -7,10 +7,16 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useChatStore } from "@/stores/chat-store"
 import { listDirectory, openProject } from "@/commands/fs"
-import { getLastProject, saveLastProject, loadLlmConfig, loadLanguage, loadSearchApiConfig, loadEmbeddingConfig } from "@/lib/project-store"
+import {
+  getLastProject,
+  saveLastProject,
+  loadLlmConfig,
+  loadLanguage,
+  loadSearchApiConfig,
+  loadEmbeddingConfig,
+} from "@/lib/project-store"
 import { loadReviewItems, loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
-import { startClipWatcher } from "@/lib/clip-watcher"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
@@ -30,7 +36,6 @@ function App() {
 
   useEffect(() => {
     setupAutoSave()
-    startClipWatcher()
   }, [])
 
   useEffect(() => {
@@ -53,10 +58,9 @@ function App() {
           await i18n.changeLanguage(savedLang)
         }
         const lastProject = await getLastProject()
-        if (lastProject) {
+        if (lastProject?.id) {
           try {
-            const proj = await openProject(lastProject.path)
-            await handleProjectOpened(proj)
+            await handleProjectOpened(lastProject)
           } catch {
             // Last project no longer valid
           }
@@ -68,6 +72,7 @@ function App() {
       }
     }
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleProjectOpened(proj: WikiProject) {
@@ -76,19 +81,14 @@ function App() {
     setActiveView("wiki")
     await saveLastProject(proj)
 
-    import("@/lib/ingest-queue").then(({ restoreQueue }) => {
-      restoreQueue(proj.path).catch((err) =>
-        console.error("Failed to restore ingest queue:", err)
-      )
-    })
     try {
-      const tree = await listDirectory(proj.path)
+      const tree = await listDirectory(proj.id)
       setFileTree(tree)
     } catch (err) {
       console.error("Failed to load file tree:", err)
     }
     try {
-      const savedReview = await loadReviewItems(proj.path)
+      const savedReview = await loadReviewItems(proj.id)
       if (savedReview.length > 0) {
         useReviewStore.getState().setItems(savedReview)
       }
@@ -96,7 +96,7 @@ function App() {
       // ignore, start fresh
     }
     try {
-      const savedChat = await loadChatHistory(proj.path)
+      const savedChat = await loadChatHistory(proj.id)
       if (savedChat.conversations.length > 0) {
         useChatStore.getState().setConversations(savedChat.conversations)
         useChatStore.getState().setMessages(savedChat.messages)
@@ -112,8 +112,7 @@ function App() {
 
   async function handleSelectRecent(proj: WikiProject) {
     try {
-      const validated = await openProject(proj.path)
-      await handleProjectOpened(validated)
+      await handleProjectOpened(proj)
     } catch (err) {
       window.alert(t("app.failedToOpen", { err }))
     }
@@ -161,7 +160,9 @@ function App() {
             "50%": { opacity: 1, width: 72 },
           },
         }} />
-        <Typography sx={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>{t("app.loading")}</Typography>
+        <Typography sx={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>
+          {t("app.loading")}
+        </Typography>
       </Box>
     )
   }

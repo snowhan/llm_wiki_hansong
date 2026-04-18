@@ -4,7 +4,6 @@ import Stack from "@mui/material/Stack"
 import { alpha, useTheme } from "@mui/material/styles"
 import { useWikiStore } from "@/stores/wiki-store"
 import { listDirectory } from "@/commands/fs"
-import { normalizePath } from "@/lib/path-utils"
 import { IconSidebar } from "./icon-sidebar"
 import { SidebarPanel } from "./sidebar-panel"
 import { ContentArea } from "./content-area"
@@ -34,7 +33,7 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   const loadFileTree = useCallback(async () => {
     if (!project) return
     try {
-      const tree = await listDirectory(normalizePath(project.path))
+      const tree = await listDirectory(project.id)
       setFileTree(tree)
     } catch (err) {
       console.error("Failed to load file tree:", err)
@@ -76,10 +75,14 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
         delete document.body.dataset.panelResizing
         document.removeEventListener("mousemove", handleMouseMove)
         document.removeEventListener("mouseup", handleMouseUp)
+        // Also listen on window so that mouseup outside the browser window clears drag state
+        window.removeEventListener("blur", handleMouseUp)
       }
 
       document.addEventListener("mousemove", handleMouseMove)
       document.addEventListener("mouseup", handleMouseUp)
+      // Clear drag state if user alt-tabs or releases mouse outside the window
+      window.addEventListener("blur", handleMouseUp)
     },
     []
   )

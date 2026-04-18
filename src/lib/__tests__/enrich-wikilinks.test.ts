@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { enrichWithWikilinks } from "../enrich-wikilinks"
-import { readFile, writeFile } from "@/commands/fs"
-import { useWikiStore } from "@/stores/wiki-store"
 import type { LlmConfig } from "@/stores/wiki-store"
 
 vi.mock("../llm-client", () => ({
@@ -12,7 +10,14 @@ vi.mock("../ingest", () => ({
   LANGUAGE_RULE: "Respond in the user's language.",
 }))
 
+vi.mock("@/commands/fs", () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn().mockResolvedValue(undefined),
+}))
+
 const { streamChat } = await import("../llm-client")
+const { readFile, writeFile } = await import("@/commands/fs")
+
 const config: LlmConfig = {
   provider: "openai",
   apiKey: "key",
@@ -27,12 +32,11 @@ describe("enrichWithWikilinks", () => {
     vi.clearAllMocks()
     vi.mocked(readFile).mockResolvedValue("")
     vi.mocked(writeFile).mockResolvedValue(undefined)
-    useWikiStore.setState({ project: { name: "t", path: "/p" } } as any)
   })
 
   it("does not write if content is empty", async () => {
     vi.mocked(readFile).mockResolvedValue("")
-    await enrichWithWikilinks("/proj", "/proj/wiki/entities/foo.md", config)
+    await enrichWithWikilinks("proj-uuid", "wiki/entities/foo.md", config)
     expect(writeFile).not.toHaveBeenCalled()
   })
 
@@ -40,7 +44,7 @@ describe("enrichWithWikilinks", () => {
     vi.mocked(readFile)
       .mockResolvedValueOnce("Some content")
       .mockResolvedValueOnce("")
-    await enrichWithWikilinks("/proj", "/proj/wiki/entities/foo.md", config)
+    await enrichWithWikilinks("proj-uuid", "wiki/entities/foo.md", config)
     expect(writeFile).not.toHaveBeenCalled()
   })
 
@@ -50,16 +54,13 @@ describe("enrichWithWikilinks", () => {
     vi.mocked(readFile)
       .mockResolvedValueOnce(original)
       .mockResolvedValueOnce("- [[openai]] — Company\n- [[gpt-4]] — Model")
-    vi.mocked(streamChat).mockImplementation(async (_c, _m, cb) => {
+    vi.mocked(streamChat as any).mockImplementation(async (_m: unknown, cb: any) => {
       cb.onToken(enriched)
       cb.onDone()
     })
-    const bumpSpy = vi.fn()
-    useWikiStore.setState({ bumpDataVersion: bumpSpy } as any)
 
-    await enrichWithWikilinks("/proj", "/proj/wiki/entities/foo.md", config)
-    expect(writeFile).toHaveBeenCalledWith("/proj/wiki/entities/foo.md", enriched)
-    expect(bumpSpy).toHaveBeenCalled()
+    await enrichWithWikilinks("proj-uuid", "wiki/entities/foo.md", config)
+    expect(writeFile).toHaveBeenCalledWith("proj-uuid", "wiki/entities/foo.md", enriched)
   })
 
   it("does not write if LLM output is too short (< 50% of original)", async () => {
@@ -67,12 +68,12 @@ describe("enrichWithWikilinks", () => {
     vi.mocked(readFile)
       .mockResolvedValueOnce(original)
       .mockResolvedValueOnce("- [[page]] — desc")
-    vi.mocked(streamChat).mockImplementation(async (_c, _m, cb) => {
+    vi.mocked(streamChat as any).mockImplementation(async (_m: unknown, cb: any) => {
       cb.onToken("short")
       cb.onDone()
     })
 
-    await enrichWithWikilinks("/proj", "/proj/wiki/entities/foo.md", config)
+    await enrichWithWikilinks("proj-uuid", "wiki/entities/foo.md", config)
     expect(writeFile).not.toHaveBeenCalled()
   })
 
@@ -80,11 +81,11 @@ describe("enrichWithWikilinks", () => {
     vi.mocked(readFile)
       .mockResolvedValueOnce("content")
       .mockResolvedValueOnce("index")
-    vi.mocked(streamChat).mockImplementation(async (_c, _m, cb) => {
+    vi.mocked(streamChat as any).mockImplementation(async (_m: unknown, cb: any) => {
       cb.onDone()
     })
 
-    await enrichWithWikilinks("/proj", "/proj/wiki/entities/foo.md", config)
+    await enrichWithWikilinks("proj-uuid", "wiki/entities/foo.md", config)
     expect(writeFile).not.toHaveBeenCalled()
   })
 })

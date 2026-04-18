@@ -17,12 +17,11 @@ import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
-import { normalizePath } from "@/lib/path-utils"
 
 type IconComp = React.ComponentType<SvgIconProps>
 
 interface WikiPageInfo {
-  path: string
+  relativePath: string
   title: string
   type: string
   tags: string[]
@@ -58,21 +57,20 @@ export function KnowledgeTree() {
 
   const loadPages = useCallback(async () => {
     if (!project) return
-    const pp = normalizePath(project.path)
     try {
-      const wikiTree = await listDirectory(`${pp}/wiki`)
+      const wikiTree = await listDirectory(project.id, "wiki")
       const mdFiles = flattenMdFiles(wikiTree)
 
       const pageInfos: WikiPageInfo[] = []
       for (const file of mdFiles) {
         if (file.name === "index.md" || file.name === "log.md") continue
         try {
-          const content = await readFile(file.path)
-          const info = parsePageInfo(file.path, file.name, content)
+          const content = await readFile(project.id, file.relativePath)
+          const info = parsePageInfo(file.relativePath, file.name, content)
           pageInfos.push(info)
         } catch {
           pageInfos.push({
-            path: file.path,
+            relativePath: file.relativePath,
             title: file.name.replace(".md", "").replace(/-/g, " "),
             type: "other",
             tags: [],
@@ -197,14 +195,14 @@ export function KnowledgeTree() {
               {isExpanded && (
                 <Box sx={{ ml: 1.5 }}>
                   {items.map((page) => {
-                    const isSelected = selectedFile === page.path
+                    const isSelected = selectedFile === page.relativePath
                     return (
                       <Box
-                        key={page.path}
+                        key={page.relativePath}
                         component="button"
                         type="button"
-                        onClick={() => { navigateInCurrentTab(page.path); setActiveView("wiki") }}
-                        title={page.path}
+                        onClick={() => { navigateInCurrentTab(page.relativePath); setActiveView("wiki") }}
+                        title={page.relativePath}
                         sx={{
                           display: "flex",
                           width: "100%",
@@ -254,8 +252,7 @@ function RawSourcesSection() {
 
   useEffect(() => {
     if (!project) return
-    const pp = normalizePath(project.path)
-    listDirectory(`${pp}/raw/sources`)
+    listDirectory(project.id, "raw/sources")
       .then((tree) => setSources(flattenAllFiles(tree)))
       .catch(() => setSources([]))
   }, [project])
@@ -300,13 +297,13 @@ function RawSourcesSection() {
       {expanded && (
         <Box sx={{ ml: 1.5 }}>
           {sources.map((file) => {
-            const isSelected = selectedFile === file.path
+            const isSelected = selectedFile === file.relativePath
             return (
               <Box
-                key={file.path}
+                key={file.relativePath}
                 component="button"
                 type="button"
-                onClick={() => { navigateInCurrentTab(file.path); setActiveView("wiki") }}
+                onClick={() => { navigateInCurrentTab(file.relativePath); setActiveView("wiki") }}
                 sx={{
                   display: "flex",
                   width: "100%",
@@ -336,7 +333,7 @@ function RawSourcesSection() {
   )
 }
 
-function parsePageInfo(path: string, fileName: string, content: string): WikiPageInfo {
+function parsePageInfo(relativePath: string, fileName: string, content: string): WikiPageInfo {
   let type = "other"
   let title = fileName.replace(".md", "").replace(/-/g, " ")
   const tags: string[] = []
@@ -361,16 +358,16 @@ function parsePageInfo(path: string, fileName: string, content: string): WikiPag
   }
 
   if (type === "other") {
-    if (path.includes("/entities/")) type = "entity"
-    else if (path.includes("/concepts/")) type = "concept"
-    else if (path.includes("/sources/")) type = "source"
-    else if (path.includes("/queries/")) type = "query"
-    else if (path.includes("/comparisons/")) type = "comparison"
-    else if (path.includes("/synthesis/")) type = "synthesis"
+    if (relativePath.includes("/entities/")) type = "entity"
+    else if (relativePath.includes("/concepts/")) type = "concept"
+    else if (relativePath.includes("/sources/")) type = "source"
+    else if (relativePath.includes("/queries/")) type = "query"
+    else if (relativePath.includes("/comparisons/")) type = "comparison"
+    else if (relativePath.includes("/synthesis/")) type = "synthesis"
     else if (fileName === "overview.md") type = "overview"
   }
 
-  return { path, title, type, tags, origin }
+  return { relativePath, title, type, tags, origin }
 }
 
 function flattenMdFiles(nodes: FileNode[]): FileNode[] {
@@ -390,7 +387,7 @@ function flattenAllFiles(nodes: FileNode[]): FileNode[] {
   for (const node of nodes) {
     if (node.is_dir && node.children) {
       files.push(...flattenAllFiles(node.children))
-    } else if (!node.is_dir && !node.path.endsWith(".cache.txt")) {
+    } else if (!node.is_dir && !node.relativePath.endsWith(".cache.txt")) {
       files.push(node)
     }
   }

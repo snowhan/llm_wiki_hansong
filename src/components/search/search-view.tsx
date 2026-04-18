@@ -12,7 +12,6 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { readFile } from "@/commands/fs"
 import { searchWiki, type SearchResult } from "@/lib/search"
 import { useTranslation } from "react-i18next"
-import { normalizePath } from "@/lib/path-utils"
 import { useTheme } from "@mui/material/styles"
 
 export function SearchView() {
@@ -35,7 +34,7 @@ export function SearchView() {
       setSearching(true)
       setHasSearched(true)
       try {
-        const found = await searchWiki(normalizePath(project.path), q)
+        const found = await searchWiki(project.id, q)
         setResults(found)
       } catch (err) {
         console.error("Search failed:", err)
@@ -48,9 +47,10 @@ export function SearchView() {
   )
 
   async function handleOpen(result: SearchResult) {
+    if (!project) return
     try {
-      const content = await readFile(result.path)
-      setSelectedFile(result.path)
+      const content = await readFile(project.id, result.relativePath)
+      setSelectedFile(result.relativePath)
       setFileContent(content)
       setActiveView("wiki")
     } catch (err) {
@@ -127,7 +127,7 @@ export function SearchView() {
             <List disablePadding dense>
               {results.map((result) => (
                 <SearchResultCard
-                  key={result.path}
+                  key={result.relativePath}
                   result={result}
                   query={query}
                   onClick={() => handleOpen(result)}
@@ -151,7 +151,7 @@ function SearchResultCard({
   onClick: () => void
 }) {
   const { t } = useTranslation()
-  const rawShortPath = result.path.split("/wiki/").pop() ?? result.path
+  const rawShortPath = result.relativePath.replace(/^wiki\//, "")
   const shortPath = rawShortPath
     .split("/")
     .map((seg) => (seg.endsWith(".md") ? seg : t(`folderNames.${seg}`, { defaultValue: seg })))

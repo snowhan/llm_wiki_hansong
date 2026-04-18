@@ -165,3 +165,53 @@ describe("getCodeLanguage", () => {
     expect(getCodeLanguage("file.lua")).toBe("lua")
   })
 })
+
+// ── needsPreprocess ───────────────────────────────────────────────────────
+
+import { needsPreprocess } from "../file-types"
+
+describe("needsPreprocess", () => {
+  it("returns true for pdf", () => {
+    expect(needsPreprocess("pdf")).toBe(true)
+  })
+
+  it("returns true for document", () => {
+    expect(needsPreprocess("document")).toBe(true)
+  })
+
+  it("returns false for markdown", () => {
+    expect(needsPreprocess("markdown")).toBe(false)
+  })
+
+  it("returns false for text", () => {
+    expect(needsPreprocess("text")).toBe(false)
+  })
+
+  it("returns false for code", () => {
+    expect(needsPreprocess("code")).toBe(false)
+  })
+
+  it("returns false for image", () => {
+    expect(needsPreprocess("image")).toBe(false)
+  })
+
+  it("returns false for data", () => {
+    expect(needsPreprocess("data")).toBe(false)
+  })
+
+  it("returns false for unknown", () => {
+    expect(needsPreprocess("unknown")).toBe(false)
+  })
+
+  it("pdf file path → needsPreprocess via getFileCategory", () => {
+    expect(needsPreprocess(getFileCategory("report.pdf"))).toBe(true)
+  })
+
+  it("docx file path → needsPreprocess via getFileCategory", () => {
+    expect(needsPreprocess(getFileCategory("slides.pptx"))).toBe(true)
+  })
+
+  it("md file path → not needsPreprocess via getFileCategory", () => {
+    expect(needsPreprocess(getFileCategory("notes.md"))).toBe(false)
+  })
+})

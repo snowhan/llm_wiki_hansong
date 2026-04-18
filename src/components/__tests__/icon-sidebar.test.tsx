@@ -4,7 +4,6 @@ import { IconSidebar } from "../layout/icon-sidebar"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useResearchStore } from "@/stores/research-store"
-import { clipServerStatus } from "@/commands/fs"
 
 describe("IconSidebar", () => {
   beforeEach(() => {
@@ -29,13 +28,12 @@ describe("IconSidebar", () => {
     } as any)
     useReviewStore.setState({ items: [] })
     useResearchStore.setState({ panelOpen: false, tasks: [] })
-    vi.mocked(clipServerStatus).mockResolvedValue("running")
   })
 
   it("renders nav buttons for all views", () => {
     render(<IconSidebar onSwitchProject={() => {}} />)
     const buttons = screen.getAllByRole("button")
-    // Main nav (6) + research + clip status + settings + switch project
+    // 6 main nav + 1 research + 1 admin + 1 settings + 1 switch project = 10
     expect(buttons.length).toBe(10)
     expect(buttons.slice(0, 7).every((b) => b.className.includes("MuiIconButton"))).toBe(true)
   })

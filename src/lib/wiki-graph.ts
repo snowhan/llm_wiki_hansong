@@ -1,7 +1,6 @@
 import { readFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { buildRetrievalGraph, calculateRelevance } from "./graph-relevance"
-import { normalizePath } from "@/lib/path-utils"
 import Graph from "graphology"
 import louvain from "graphology-communities-louvain"
 
@@ -9,7 +8,7 @@ export interface GraphNode {
   id: string
   label: string
   type: string
-  path: string
+  relativePath: string
   linkCount: number // inbound + outbound
   community: number // community id from Louvain detection
 }
@@ -154,13 +153,11 @@ function fileNameToId(fileName: string): string {
 }
 
 export async function buildWikiGraph(
-  projectPath: string,
+  projectId: string,
 ): Promise<{ nodes: GraphNode[]; edges: GraphEdge[]; communities: CommunityInfo[] }> {
-  const wikiRoot = `${normalizePath(projectPath)}/wiki`
-
   let tree: FileNode[]
   try {
-    tree = await listDirectory(wikiRoot)
+    tree = await listDirectory(projectId, "wiki")
   } catch {
     return { nodes: [], edges: [], communities: [] }
   }
@@ -173,14 +170,14 @@ export async function buildWikiGraph(
   // Build a map of id -> node data
   const nodeMap = new Map<
     string,
-    { id: string; label: string; type: string; path: string; links: string[] }
+    { id: string; label: string; type: string; relativePath: string; links: string[] }
   >()
 
   for (const file of mdFiles) {
     const id = fileNameToId(file.name)
     let content = ""
     try {
-      content = await readFile(file.path)
+      content = await readFile(projectId, file.relativePath)
     } catch {
       // Skip unreadable files
       continue
@@ -190,7 +187,7 @@ export async function buildWikiGraph(
       id,
       label: extractTitle(content, file.name),
       type: extractType(content),
-      path: file.path,
+      relativePath: file.relativePath,
       links: extractWikilinks(content),
     })
   }
@@ -243,8 +240,9 @@ export async function buildWikiGraph(
   let retrievalGraph: Awaited<ReturnType<typeof buildRetrievalGraph>> | null = null
   try {
     const { useWikiStore } = await import("@/stores/wiki-store")
-    const dv = useWikiStore.getState().dataVersion
-    retrievalGraph = await buildRetrievalGraph(normalizePath(projectPath), dv)
+    const state = useWikiStore.getState()
+    const dv = state.dataVersion
+    retrievalGraph = await buildRetrievalGraph(projectId, dv)
   } catch {
     // ignore — weights will default to 1
   }
@@ -274,7 +272,7 @@ export async function buildWikiGraph(
     id: n.id,
     label: n.label,
     type: n.type,
-    path: n.path,
+    relativePath: n.relativePath,
     linkCount: linkCounts.get(n.id) ?? 0,
     community: assignments.get(n.id) ?? 0,
   }))

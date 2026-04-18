@@ -1,46 +1,26 @@
 /**
  * Server-side ingest service.
- * Mirrors the browser-side autoIngest logic but runs inside the Node.js process,
- * so it survives page refreshes.  Progress is streamed to subscribers via SSE.
+ * Runs wiki generation tasks in the background, surviving page refreshes.
+ * Progress is streamed to subscribers via SSE.
+ *
+ * Architecture change: tasks are now identified by (projectId, sourcePath)
+ * instead of absolute paths. The server resolves the project root internally.
  */
 
 import fs from "node:fs/promises"
 import path from "node:path"
 import { createHash } from "node:crypto"
 import type { Response } from "express"
-
-// ── LLM config type (mirrors frontend wiki-store.ts) ─────────────────────
-
-export interface LlmConfig {
-  provider: "openai" | "anthropic" | "google" | "ollama" | "custom" | "minimax" | "wps"
-  apiKey: string
-  model: string
-  ollamaUrl: string
-  customEndpoint: string
-  maxContextSize: number
-}
-
-interface ChatMessage {
-  role: "system" | "user" | "assistant"
-  content: string
-}
+import type { LlmConfig, ServerIngestTask } from "../types.js"
+import { getProjectRoot } from "./project-service.js"
+import { getState } from "./state-service.js"
+import { getProviderConfig } from "../lib/llm-providers.js"
+import type { ChatMessage } from "../lib/llm-providers.js"
 
 // ── Task types ────────────────────────────────────────────────────────────
 
 export type IngestTaskStatus = "pending" | "running" | "done" | "error"
-
-export interface ServerIngestTask {
-  id: string
-  projectPath: string
-  sourcePath: string
-  folderContext: string
-  status: IngestTaskStatus
-  detail: string
-  filesWritten: string[]
-  error: string | null
-  createdAt: number
-  updatedAt: number
-}
+export type { ServerIngestTask, LlmConfig }
 
 // ── In-memory stores ──────────────────────────────────────────────────────
 
@@ -62,7 +42,6 @@ function pushEvent(taskId: string, event: object) {
 export function registerSseClient(taskId: string, res: Response) {
   if (!sseClients.has(taskId)) sseClients.set(taskId, new Set())
   sseClients.get(taskId)!.add(res)
-  // Send current snapshot immediately so reconnect gets the latest state
   const task = taskStore.get(taskId)
   if (task) {
     try { res.write(`data: ${JSON.stringify({ type: "state", task })}\n\n`) } catch { /* client gone */ }
@@ -70,7 +49,10 @@ export function registerSseClient(taskId: string, res: Response) {
 }
 
 export function unregisterSseClient(taskId: string, res: Response) {
-  sseClients.get(taskId)?.delete(res)
+  const clients = sseClients.get(taskId)
+  if (!clients) return
+  clients.delete(res)
+  if (clients.size === 0) sseClients.delete(taskId)
 }
 
 function updateTask(task: ServerIngestTask, patch: Partial<ServerIngestTask>) {
@@ -91,19 +73,18 @@ export function getAllTasks(): ServerIngestTask[] {
 /**
  * Start a server-side ingest task.
  * Returns immediately with a taskId; the actual work runs asynchronously.
- * Deduplication: if a task for the same (projectPath, sourcePath) is already
+ *
+ * Deduplication: if a task for the same (projectId, sourcePath) is already
  * running/pending, return that task's id instead of creating a new one.
  */
 export function startIngestTask(
-  projectPath: string,
-  sourcePath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  sourcePath: string, // relative to project root
   folderContext = "",
 ): string {
-  // Check if an active task already exists for this file
   const existing = Array.from(taskStore.values()).find(
     (t) =>
-      t.projectPath === projectPath &&
+      t.projectId === projectId &&
       t.sourcePath === sourcePath &&
       (t.status === "running" || t.status === "pending"),
   )
@@ -111,10 +92,11 @@ export function startIngestTask(
     console.log(`[ingest-service] Reusing existing task ${existing.id} for ${sourcePath}`)
     return existing.id
   }
+
   const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const task: ServerIngestTask = {
     id,
-    projectPath,
+    projectId,
     sourcePath,
     folderContext,
     status: "pending",
@@ -126,8 +108,7 @@ export function startIngestTask(
   }
   taskStore.set(id, task)
 
-  // Fire and forget — progress is streamed via SSE
-  runIngest(task, llmConfig).catch((err) => {
+  runIngest(task).catch((err) => {
     console.error(`[ingest-service] Unhandled error for task ${id}:`, err)
     updateTask(task, { status: "error", error: String(err), detail: "Internal error" })
   })
@@ -168,7 +149,10 @@ interface CacheData { entries: Record<string, CacheEntry> }
 
 async function loadCache(projectPath: string): Promise<CacheData> {
   try {
-    const raw = await fs.readFile(path.join(projectPath, ".llm-wiki", "ingest-cache.json"), "utf-8")
+    const raw = await fs.readFile(
+      path.join(projectPath, ".llm-wiki", "ingest-cache.json"),
+      "utf-8",
+    )
     return JSON.parse(raw) as CacheData
   } catch { return { entries: {} } }
 }
@@ -181,184 +165,43 @@ async function saveCache(projectPath: string, data: CacheData): Promise<void> {
   } catch { /* non-critical */ }
 }
 
-async function checkCache(projectPath: string, fileName: string, content: string): Promise<string[] | null> {
+async function checkCache(
+  projectPath: string,
+  fileName: string,
+  content: string,
+): Promise<string[] | null> {
   const cache = await loadCache(projectPath)
   const entry = cache.entries[fileName]
   if (!entry) return null
   return entry.hash === sha256(content) ? entry.filesWritten : null
 }
 
-async function persistCache(projectPath: string, fileName: string, content: string, files: string[]): Promise<void> {
+async function persistCache(
+  projectPath: string,
+  fileName: string,
+  content: string,
+  files: string[],
+): Promise<void> {
   const cache = await loadCache(projectPath)
   cache.entries[fileName] = { hash: sha256(content), timestamp: Date.now(), filesWritten: files }
   await saveCache(projectPath, cache)
 }
 
-// ── LLM provider (mirrors frontend llm-providers.ts) ─────────────────────
-
-interface ProviderCfg {
-  url: string
-  headers: Record<string, string>
-  body: unknown
-  parseStream: (line: string) => string | null
-}
-
-function parseOpenAi(line: string): string | null {
-  if (!line.startsWith("data: ")) return null
-  const d = line.slice(6).trim()
-  if (d === "[DONE]") return null
-  try { return (JSON.parse(d) as { choices: Array<{ delta: { content?: string } }> }).choices?.[0]?.delta?.content ?? null }
-  catch { return null }
-}
-
-function parseAnthropic(line: string): string | null {
-  if (!line.startsWith("data: ")) return null
-  try {
-    const p = JSON.parse(line.slice(6).trim()) as { type: string; delta?: { type: string; text?: string } }
-    return p.type === "content_block_delta" && p.delta?.type === "text_delta" ? (p.delta.text ?? null) : null
-  } catch { return null }
-}
-
-function parseGoogle(line: string): string | null {
-  if (!line.startsWith("data: ")) return null
-  try {
-    const p = JSON.parse(line.slice(6).trim()) as { candidates: Array<{ content: { parts: Array<{ text?: string }> } }> }
-    return p.candidates?.[0]?.content?.parts?.[0]?.text ?? null
-  } catch { return null }
-}
-
-function buildProviderCfg(config: LlmConfig, messages: ChatMessage[]): ProviderCfg {
-  const { provider, apiKey, model, ollamaUrl, customEndpoint } = config
-
-  const openAiBody = () => ({ messages, stream: true, model })
-
-  switch (provider) {
-    case "openai":
-      return {
-        url: "https://api.openai.com/v1/chat/completions",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: openAiBody(),
-        parseStream: parseOpenAi,
-      }
-
-    case "anthropic": {
-      const sys = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n") || undefined
-      const conv = messages.filter((m) => m.role !== "system")
-      return {
-        url: "https://api.anthropic.com/v1/messages",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: { messages: conv, ...(sys ? { system: sys } : {}), stream: true, max_tokens: 4096, model },
-        parseStream: parseAnthropic,
-      }
-    }
-
-    case "google": {
-      const sys = messages.filter((m) => m.role === "system")
-      const conv = messages.filter((m) => m.role !== "system").map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }))
-      return {
-        url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: {
-          contents: conv,
-          ...(sys.length > 0 ? { systemInstruction: { parts: sys.map((m) => ({ text: m.content })) } } : {}),
-        },
-        parseStream: parseGoogle,
-      }
-    }
-
-    case "ollama":
-      return {
-        url: `${ollamaUrl}/v1/chat/completions`,
-        headers: { "Content-Type": "application/json" },
-        body: openAiBody(),
-        parseStream: parseOpenAi,
-      }
-
-    case "minimax":
-      return {
-        url: "https://api.minimax.io/v1/chat/completions",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: { messages, stream: true, model, temperature: 1.0 },
-        parseStream: parseOpenAi,
-      }
-
-    case "wps": {
-      // Frontend packs resolved WPS values as JSON in apiKey (see commands/ingest.ts resolveConfigForServer)
-      let wpsToken = apiKey
-      let wpsUrl = customEndpoint || "http://ai-gateway.wps.cn/api/v3"
-      let wpsModel = model || "azure/gpt-5.4"
-      let wpsUid = process.env.VITE_WPS_GATEWAY_UID ?? ""
-      let wpsProductName = process.env.VITE_WPS_GATEWAY_PRODUCT_NAME ?? ""
-
-      try {
-        const resolved = JSON.parse(apiKey) as {
-          token?: string; url?: string; model?: string; uid?: string; productName?: string
-        }
-        if (resolved.token) wpsToken = resolved.token
-        if (resolved.url) wpsUrl = resolved.url
-        if (resolved.model) wpsModel = resolved.model
-        if (resolved.uid) wpsUid = resolved.uid
-        if (resolved.productName) wpsProductName = resolved.productName
-      } catch {
-        // apiKey is not JSON — use it as plain token (legacy)
-      }
-
-      const actionId = [...crypto.getRandomValues(new Uint8Array(16))]
-        .map((b) => b.toString(16).padStart(2, "0")).join("")
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${wpsToken}`,
-        "X-Action-Id": actionId,
-      }
-      if (wpsUid) headers["Ai-Gateway-Uid"] = wpsUid
-      if (wpsProductName) headers["Ai-Gateway-Product-Name"] = wpsProductName
-
-      return {
-        url: `${wpsUrl}/chat/completions`,
-        headers,
-        body: { messages, stream: true, model: wpsModel },
-        parseStream: parseOpenAi,
-      }
-    }
-
-    case "custom":
-      return {
-        url: `${customEndpoint}/chat/completions`,
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        body: openAiBody(),
-        parseStream: parseOpenAi,
-      }
-
-    default: {
-      const x: never = provider
-      throw new Error(`Unknown provider: ${String(x)}`)
-    }
-  }
-}
+// ── LLM call ──────────────────────────────────────────────────────────────
 
 async function callLlm(
-  config: LlmConfig,
+  llmConfig: LlmConfig,
   messages: ChatMessage[],
   onToken: (t: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const pc = buildProviderCfg(config, messages)
+  const pc = getProviderConfig(llmConfig)
+  const body = pc.buildBody(messages)
 
   const response = await fetch(pc.url, {
     method: "POST",
     headers: pc.headers,
-    body: JSON.stringify(pc.body),
+    body: JSON.stringify(body),
     signal,
   })
 
@@ -437,9 +280,12 @@ async function writeBlocks(projectPath: string, text: string): Promise<string[]>
   return written
 }
 
-// ── Prompts (copied from src/lib/ingest.ts) ───────────────────────────────
+// ── Prompts ───────────────────────────────────────────────────────────────
 
-const LANGUAGE_RULE = "## Language Rule\n- ALWAYS match the language of the source document. If the source is in Chinese, write in Chinese. If in English, write in English. Wiki page titles, content, and descriptions should all be in the same language as the source material."
+const LANGUAGE_RULE =
+  "## Language Rule\n- ALWAYS match the language of the source document. " +
+  "If the source is in Chinese, write in Chinese. If in English, write in English. " +
+  "Wiki page titles, content, and descriptions should all be in the same language as the source material."
 
 function buildAnalysisPrompt(purpose: string, index: string): string {
   return [
@@ -481,14 +327,20 @@ function buildAnalysisPrompt(purpose: string, index: string): string {
     "",
     "Be thorough but concise. Focus on what's genuinely important.",
     "",
-    "If a folder context is provided, use it as a hint for categorization — the folder structure often reflects the user's organizational intent.",
+    "If a folder context is provided, use it as a hint for categorization.",
     "",
     purpose ? `## Wiki Purpose (for context)\n${purpose}` : "",
     index ? `## Current Wiki Index (for checking existing content)\n${index}` : "",
   ].filter(Boolean).join("\n")
 }
 
-function buildGenerationPrompt(schema: string, purpose: string, index: string, sourceFileName: string, overview?: string): string {
+function buildGenerationPrompt(
+  schema: string,
+  purpose: string,
+  index: string,
+  sourceFileName: string,
+  overview?: string,
+): string {
   const base = sourceFileName.replace(/\.[^.]+$/, "")
   return [
     "You are a wiki maintainer. Based on the analysis provided, generate wiki files.",
@@ -563,8 +415,22 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
 
 // ── Main ingest runner ────────────────────────────────────────────────────
 
-async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<void> {
-  const { projectPath, sourcePath, folderContext } = task
+async function runIngest(task: ServerIngestTask): Promise<void> {
+  const { projectId, sourcePath, folderContext } = task
+
+  // Resolve absolute project path and LLM config
+  const projectPath = await getProjectRoot(projectId)
+  const llmConfig = await getState("llmConfig") as LlmConfig | null
+  if (!llmConfig?.provider) {
+    updateTask(task, {
+      status: "error",
+      error: "LLM is not configured",
+      detail: "Please configure LLM in Settings",
+    })
+    return
+  }
+
+  const absSourcePath = path.join(projectPath, sourcePath)
   const fileName = path.basename(sourcePath)
   const ac = new AbortController()
   abortControllers.set(task.id, ac)
@@ -573,14 +439,13 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
     updateTask(task, { status: "running", detail: "Reading source..." })
 
     const [sourceContent, schema, purpose, index, overview] = await Promise.all([
-      readSourceForIngest(sourcePath),
+      readSourceForIngest(absSourcePath),
       tryRead(path.join(projectPath, "schema.md")),
       tryRead(path.join(projectPath, "purpose.md")),
       tryRead(path.join(projectPath, "wiki", "index.md")),
       tryRead(path.join(projectPath, "wiki", "overview.md")),
     ])
 
-    // Cache check
     const cached = await checkCache(projectPath, fileName, sourceContent)
     if (cached !== null) {
       updateTask(task, {
@@ -591,11 +456,12 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
       return
     }
 
-    const truncated = sourceContent.length > 50000
-      ? sourceContent.slice(0, 50000) + "\n\n[...truncated...]"
-      : sourceContent
+    const truncated =
+      sourceContent.length > 50000
+        ? sourceContent.slice(0, 50000) + "\n\n[...truncated...]"
+        : sourceContent
 
-    // ── Step 1: Analysis ────────────────────────────────────────────────
+    // ── Step 1: Analysis ──────────────────────────────────────────────────
     updateTask(task, { detail: "Step 1/2: Analyzing source..." })
     let analysis = ""
 
@@ -605,7 +471,10 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
         { role: "system", content: buildAnalysisPrompt(purpose, index) },
         {
           role: "user",
-          content: `Analyze this source document:\n\n**File:** ${fileName}${folderContext ? `\n**Folder context:** ${folderContext}` : ""}\n\n---\n\n${truncated}`,
+          content:
+            `Analyze this source document:\n\n**File:** ${fileName}` +
+            (folderContext ? `\n**Folder context:** ${folderContext}` : "") +
+            `\n\n---\n\n${truncated}`,
         },
       ],
       (token) => {
@@ -617,14 +486,17 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
 
     if (ac.signal.aborted) return
 
-    // ── Step 2: Generation ──────────────────────────────────────────────
+    // ── Step 2: Generation ────────────────────────────────────────────────
     updateTask(task, { detail: "Step 2/2: Generating wiki pages..." })
     let generation = ""
 
     await callLlm(
       llmConfig,
       [
-        { role: "system", content: buildGenerationPrompt(schema, purpose, index, fileName, overview) },
+        {
+          role: "system",
+          content: buildGenerationPrompt(schema, purpose, index, fileName, overview),
+        },
         {
           role: "user",
           content: [
@@ -649,11 +521,10 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
 
     if (ac.signal.aborted) return
 
-    // ── Step 3: Write files ─────────────────────────────────────────────
+    // ── Step 3: Write files ───────────────────────────────────────────────
     updateTask(task, { detail: "Writing files..." })
     const writtenPaths = await writeBlocks(projectPath, generation)
 
-    // Ensure source summary page exists
     const hasSummary = writtenPaths.some((p) => p.startsWith("wiki/sources/"))
     if (!hasSummary) {
       const date = new Date().toISOString().slice(0, 10)
@@ -680,14 +551,12 @@ async function runIngest(task: ServerIngestTask, llmConfig: LlmConfig): Promise<
       } catch { /* non-critical */ }
     }
 
-    // ── Step 4: Save cache ──────────────────────────────────────────────
     if (writtenPaths.length > 0) {
       await persistCache(projectPath, fileName, sourceContent, writtenPaths)
     }
 
-    const detail = writtenPaths.length > 0
-      ? `${writtenPaths.length} files written`
-      : "No files generated"
+    const detail =
+      writtenPaths.length > 0 ? `${writtenPaths.length} files written` : "No files generated"
 
     updateTask(task, {
       status: writtenPaths.length > 0 ? "done" : "error",

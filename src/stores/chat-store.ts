@@ -11,7 +11,7 @@ export interface Conversation {
 
 export interface MessageReference {
   title: string
-  path: string
+  relativePath: string
 }
 
 export interface DisplayMessage {

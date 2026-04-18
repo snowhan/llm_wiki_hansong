@@ -5,6 +5,11 @@ import {
   listProjects,
 } from "../services/project-service.js"
 import { browsePath } from "../services/fs-service.js"
+import {
+  projectCreateSchema,
+  projectOpenSchema,
+  projectBrowseQuerySchema,
+} from "../lib/schemas.js"
 
 const router = Router()
 
@@ -17,29 +22,29 @@ router.get("/list", async (_req, res, next) => {
 
 router.post("/create", async (req, res, next) => {
   try {
-    const { name, parentPath } = req.body as { name: string; parentPath?: string }
-    const project = await createProject(name, parentPath)
+    const parsed = projectCreateSchema.safeParse(req.body)
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return }
+    const project = await createProject(parsed.data.name, parsed.data.parentPath)
     res.json(project)
   } catch (err) { next(err) }
 })
 
 router.post("/open", async (req, res, next) => {
   try {
-    const { path: projectPath } = req.body as { path: string }
-    const project = await openProject(projectPath)
+    const parsed = projectOpenSchema.safeParse(req.body)
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return }
+    const project = await openProject(parsed.data.path)
     res.json(project)
   } catch (err) { next(err) }
 })
 
 router.get("/browse", async (req, res, next) => {
   try {
-    const dirPath = req.query.path as string
-    if (!dirPath) {
-      res.status(400).json({ error: "path query required" })
-      return
-    }
+    const parsed = projectBrowseQuerySchema.safeParse(req.query)
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return }
+    const { path: dirPath } = parsed.data
     const result = await browsePath(dirPath)
-    res.json(result)
+    res.json({ path: dirPath, ...result })
   } catch (err) { next(err) }
 })
 

@@ -20,7 +20,6 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { runStructuralLint, runSemanticLint, type LintResult } from "@/lib/lint"
 import { readFile, writeFile, deleteFile, listDirectory } from "@/commands/fs"
-import { normalizePath } from "@/lib/path-utils"
 import { keyframes } from "@mui/material/styles"
 
 const spin = keyframes`
@@ -53,15 +52,14 @@ export function LintView() {
 
   const handleRunLint = useCallback(async () => {
     if (!project || running) return
-    const pp = normalizePath(project.path)
     setRunning(true)
     setResults([])
     try {
-      const structural = await runStructuralLint(pp)
+      const structural = await runStructuralLint(project.id)
       let all = structural
 
       if (runSemantic && (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "wps")) {
-        const semantic = await runSemanticLint(pp, llmConfig)
+        const semantic = await runSemanticLint(project.id, llmConfig)
         all = [...structural, ...semantic]
       }
 
@@ -76,16 +74,15 @@ export function LintView() {
 
   async function handleOpenPage(page: string) {
     if (!project) return
-    const pp = normalizePath(project.path)
     const candidates = [
-      `${pp}/wiki/${page}`,
-      `${pp}/wiki/${page}.md`,
+      `wiki/${page}`,
+      `wiki/${page}.md`,
     ]
     setActiveView("wiki")
-    for (const path of candidates) {
+    for (const relativePath of candidates) {
       try {
-        const content = await readFile(path)
-        setSelectedFile(path)
+        const content = await readFile(project.id, relativePath)
+        setSelectedFile(relativePath)
         setFileContent(content)
         return
       } catch {
@@ -98,7 +95,6 @@ export function LintView() {
 
   async function handleFix(result: LintResult, index: number) {
     if (!project) return
-    const pp = normalizePath(project.path)
     const id = `${result.type}-${index}`
     setFixingId(id)
 
@@ -106,15 +102,14 @@ export function LintView() {
       switch (result.type) {
         case "orphan": {
           // Add a link to this page from index.md
-          const indexPath = `${pp}/wiki/index.md`
           let indexContent = ""
-          try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
+          try { indexContent = await readFile(project.id, "wiki/index.md") } catch { indexContent = "# Wiki Index\n" }
 
           const pageName = result.page.replace(".md", "").replace(/^.*\//, "")
           const entry = `- [[${pageName}]]`
           if (!indexContent.includes(entry)) {
             indexContent = indexContent.trimEnd() + "\n" + entry + "\n"
-            await writeFile(indexPath, indexContent)
+            await writeFile(project.id, "wiki/index.md", indexContent)
           }
           // Remove from results
           setResults((prev) => prev.filter((_, i) => i !== index))
@@ -122,8 +117,6 @@ export function LintView() {
         }
 
         case "broken-link": {
-          // Option: remove the broken link from the page, or send to Review for manual fix
-          const pagePath = `${pp}/wiki/${result.page}`
           useReviewStore.getState().addItem({
             type: "confirm",
             title: t("lint.fixBrokenLink", { page: result.page }),
@@ -131,7 +124,7 @@ export function LintView() {
             affectedPages: [result.page],
             options: [
               { label: t("lint.openEdit"), action: `open:${result.page}` },
-              { label: t("lint.deletePage"), action: `delete:${pagePath}` },
+              { label: t("lint.deletePage"), action: `delete:wiki/${result.page}` },
               { label: t("lint.skip"), action: "Skip" },
             ],
           })
@@ -140,7 +133,6 @@ export function LintView() {
         }
 
         case "no-outlinks": {
-          // Send to Review — user should add links manually
           useReviewStore.getState().addItem({
             type: "suggestion",
             title: t("lint.addCrossRefs", { page: result.page }),
@@ -156,7 +148,6 @@ export function LintView() {
         }
 
         default: {
-          // Semantic issues → send to Review for manual resolution
           useReviewStore.getState().addItem({
             type: "confirm",
             title: result.detail.slice(0, 80),
@@ -173,7 +164,7 @@ export function LintView() {
       }
 
       // Refresh tree
-      const tree = await listDirectory(pp)
+      const tree = await listDirectory(project.id)
       setFileTree(tree)
       bumpDataVersion()
     } catch (err) {
@@ -185,15 +176,14 @@ export function LintView() {
 
   async function handleDeleteOrphan(result: LintResult, index: number) {
     if (!project) return
-    const pp = normalizePath(project.path)
-    const pagePath = `${pp}/wiki/${result.page}`
+    const pagePath = `wiki/${result.page}`
     const confirmed = window.confirm(t("lint.deleteConfirm", { page: result.page }))
     if (!confirmed) return
 
     try {
-      await deleteFile(pagePath)
+      await deleteFile(project.id, pagePath)
       setResults((prev) => prev.filter((_, i) => i !== index))
-      const tree = await listDirectory(pp)
+      const tree = await listDirectory(project.id)
       setFileTree(tree)
       bumpDataVersion()
     } catch (err) {

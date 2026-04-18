@@ -1,0 +1,31 @@
+services:
+  llm-wiki:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: llm-wiki:latest
+    container_name: llm-wiki
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      # Required: set a strong token in your .env file
+      - ACCESS_TOKEN=${ACCESS_TOKEN}
+      # Optional: separate admin token (defaults to ACCESS_TOKEN if unset)
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      # Root directory for all wiki projects inside the container
+      - PROJECTS_ROOT=/data/projects
+      # Persistent app state (project registry, LLM config, etc.)
+      - APP_STATE_PATH=/data/state/app-state.json
+      - PORT=3001
+      - NODE_ENV=production
+    volumes:
+      # Persist project files and app state across restarts
+      - llm-wiki-projects:/data/projects
+      - llm-wiki-state:/data/state
+
+volumes:
+  llm-wiki-projects:
+    driver: local
+  llm-wiki-state:
+    driver: local

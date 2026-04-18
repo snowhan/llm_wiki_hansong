@@ -36,28 +36,25 @@ describe("KnowledgeTree", () => {
 
   it("loads pages and groups by type", async () => {
     useWikiStore.setState({
-      project: { name: "Demo", path: "/projects/demo" },
+      project: { id: "demo-uuid", name: "Demo", path: "/projects/demo" },
       fileTree: [],
     } as any)
-    vi.mocked(listDirectory).mockImplementation(async (dir: string) => {
-      if (dir.endsWith("/wiki")) {
+    vi.mocked(listDirectory).mockImplementation(async (_projectId: string, dir?: string) => {
+      if (dir === "wiki" || dir?.endsWith("/wiki")) {
         return [
           {
             name: "entities",
-            path: "/projects/demo/wiki/entities",
+            relativePath: "wiki/entities",
             is_dir: true,
             children: [
               {
                 name: "alpha.md",
-                path: "/projects/demo/wiki/entities/alpha.md",
+                relativePath: "wiki/entities/alpha.md",
                 is_dir: false,
               },
             ],
           },
         ]
-      }
-      if (dir.includes("raw/sources")) {
-        return []
       }
       return []
     })
@@ -73,29 +70,26 @@ describe("KnowledgeTree", () => {
 
   it("click page calls setSelectedFile", async () => {
     useWikiStore.setState({
-      project: { name: "Demo", path: "/projects/demo" },
+      project: { id: "demo-uuid", name: "Demo", path: "/projects/demo" },
       fileTree: [],
       selectedFile: null,
     } as any)
-    vi.mocked(listDirectory).mockImplementation(async (dir: string) => {
-      if (dir.endsWith("/wiki")) {
+    vi.mocked(listDirectory).mockImplementation(async (_projectId: string, dir?: string) => {
+      if (dir === "wiki" || dir?.endsWith("/wiki")) {
         return [
           {
             name: "concepts",
-            path: "/projects/demo/wiki/concepts",
+            relativePath: "wiki/concepts",
             is_dir: true,
             children: [
               {
                 name: "beta.md",
-                path: "/projects/demo/wiki/concepts/beta.md",
+                relativePath: "wiki/concepts/beta.md",
                 is_dir: false,
               },
             ],
           },
         ]
-      }
-      if (dir.includes("raw/sources")) {
-        return []
       }
       return []
     })
@@ -107,6 +101,6 @@ describe("KnowledgeTree", () => {
       expect(screen.getByText("Beta Page")).toBeTruthy()
     })
     fireEvent.click(screen.getByText("Beta Page"))
-    expect(useWikiStore.getState().selectedFile).toBe("/projects/demo/wiki/concepts/beta.md")
+    expect(useWikiStore.getState().selectedFile).toBe("wiki/concepts/beta.md")
   })
 })

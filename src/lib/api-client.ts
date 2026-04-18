@@ -1,9 +1,17 @@
+import { getStoredToken } from "@/lib/auth"
+
 const BASE_URL = ""
+
+function authHeaders(): Record<string, string> {
+  const token = getStoredToken()
+  if (!token) return {}
+  return { Authorization: `Bearer ${token}` }
+}
 
 export async function apiPost<T = void>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -15,7 +23,9 @@ export async function apiPost<T = void>(url: string, body?: unknown): Promise<T>
 }
 
 export async function apiGet<T>(url: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${url}`)
+  const res = await fetch(`${BASE_URL}${url}`, {
+    headers: authHeaders(),
+  })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(text || `HTTP ${res.status}`)
@@ -26,7 +36,7 @@ export async function apiGet<T>(url: string): Promise<T> {
 export async function apiPut(url: string, body?: unknown): Promise<void> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -38,7 +48,7 @@ export async function apiPut(url: string, body?: unknown): Promise<void> {
 export async function apiDelete(url: string, body?: unknown): Promise<void> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (!res.ok) {
@@ -50,6 +60,7 @@ export async function apiDelete(url: string, body?: unknown): Promise<void> {
 export async function apiUpload(url: string, formData: FormData): Promise<{ paths: string[] }> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "POST",
+    headers: authHeaders(),
     body: formData,
   })
   if (!res.ok) {
@@ -66,7 +77,7 @@ export async function apiStream(
 ): Promise<Response> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify(body),
     signal,
   })
@@ -77,6 +88,11 @@ export async function apiStream(
   return res
 }
 
-export function mediaUrl(filePath: string): string {
-  return `${BASE_URL}/api/media?path=${encodeURIComponent(filePath)}`
+/**
+ * Build a media URL for a file within a project.
+ * @param projectId - The project ID
+ * @param relativePath - The relative path within the project
+ */
+export function mediaUrl(projectId: string, relativePath: string): string {
+  return `${BASE_URL}/api/media?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(relativePath)}`
 }

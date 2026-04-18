@@ -21,7 +21,7 @@ function findWikiFileByName(nodes: FileNode[], name: string): string | null {
       if (found) return found
     } else if (!node.is_dir) {
       const stem = node.name.replace(/\.md$/i, "").toLowerCase()
-      if (stem === lower) return node.path
+      if (stem === lower) return node.relativePath
     }
   }
   return null

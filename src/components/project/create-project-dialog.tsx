@@ -15,7 +15,6 @@ import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import type { WikiProject } from "@/types/wiki"
-import { normalizePath } from "@/lib/path-utils"
 
 interface CreateProjectDialogProps {
   open: boolean
@@ -49,13 +48,12 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
     setError("")
     try {
       const project = await createProject(name.trim(), path.trim())
-      const pp = normalizePath(project.path)
 
       const template = getTemplate(selectedTemplate)
-      await writeFile(`${pp}/schema.md`, template.schema)
-      await writeFile(`${pp}/purpose.md`, template.purpose)
+      await writeFile(project.id, "schema.md", template.schema)
+      await writeFile(project.id, "purpose.md", template.purpose)
       for (const dir of template.extraDirs) {
-        await createDirectory(`${pp}/${dir}`)
+        await createDirectory(project.id, dir)
       }
 
       onCreated(project)

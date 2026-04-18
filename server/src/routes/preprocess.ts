@@ -1,23 +1,28 @@
 import { Router } from "express"
 import { preprocessFile } from "../services/preprocess-service.js"
 import type { Request, Response, NextFunction } from "express"
+import { resolveProjectPath } from "../middleware/path-sandbox.js"
+import { fsReadSchema } from "../lib/schemas.js"
 
 const router = Router()
 
 router.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { path: filePath } = req.body as { path: string }
-    if (!filePath) {
-      res.status(400).json({ error: "path is required" })
+    const parsed = fsReadSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message })
       return
     }
+    const { projectId, path: relativePath } = parsed.data
+
+    const absPath = await resolveProjectPath(projectId, relativePath)
 
     res.setHeader("Content-Type", "text/event-stream")
     res.setHeader("Cache-Control", "no-cache")
     res.setHeader("Connection", "keep-alive")
     res.flushHeaders()
 
-    await preprocessFile(filePath, (event) => {
+    await preprocessFile(absPath, (event) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`)
     })
 

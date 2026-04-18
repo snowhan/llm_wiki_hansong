@@ -22,7 +22,11 @@
 
     /* Path aliases */
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"],
+      "@shared": ["./shared/types"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }

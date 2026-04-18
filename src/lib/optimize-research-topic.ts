@@ -11,7 +11,7 @@ export interface OptimizedTopic {
  * based on the knowledge gap and the wiki's purpose/overview.
  */
 export async function optimizeResearchTopic(
-  llmConfig: LlmConfig,
+  _llmConfig: LlmConfig,
   gapTitle: string,
   gapDescription: string,
   gapType: string,
@@ -46,7 +46,6 @@ export async function optimizeResearchTopic(
   let result = ""
 
   await streamChat(
-    llmConfig,
     [{ role: "user", content: prompt }],
     {
       onToken: (token) => { result += token },

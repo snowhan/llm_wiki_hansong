@@ -2,31 +2,26 @@ import { readFile, writeFile } from "@/commands/fs"
 import { streamChat } from "./llm-client"
 import { useWikiStore, type LlmConfig } from "@/stores/wiki-store"
 import { LANGUAGE_RULE } from "./ingest"
-import { normalizePath } from "@/lib/path-utils"
 
 /**
  * Lightweight post-save enrichment: ask LLM to add [[wikilinks]] to a saved wiki page.
  * Much cheaper than full auto-ingest — no new pages created, just cross-references added.
  */
 export async function enrichWithWikilinks(
-  projectPath: string,
-  filePath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  relativePath: string,
+  _llmConfig?: LlmConfig,
 ): Promise<void> {
-  const pp = normalizePath(projectPath)
-  const fp = normalizePath(filePath)
   const [content, index] = await Promise.all([
-    readFile(fp),
-    readFile(`${pp}/wiki/index.md`).catch(() => ""),
+    readFile(projectId, relativePath),
+    readFile(projectId, "wiki/index.md").catch(() => ""),
   ])
 
   if (!content || !index) return
 
-  // Quick LLM call: just add wikilinks, don't change content
   let enriched = ""
 
   await streamChat(
-    llmConfig,
     [
       {
         role: "system",
@@ -66,7 +61,7 @@ export async function enrichWithWikilinks(
   }
 
   // Write the enriched version back
-  await writeFile(fp, enriched)
+  await writeFile(projectId, relativePath, enriched)
 
   // Refresh graph
   useWikiStore.getState().bumpDataVersion()

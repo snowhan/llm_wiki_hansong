@@ -14,7 +14,18 @@ export async function writeFileContent(filePath: string, contents: string): Prom
   await fs.writeFile(filePath, contents, "utf-8")
 }
 
-export async function listDirectoryTree(dirPath: string, depth = 0): Promise<FileNode[]> {
+/**
+ * List a directory tree, producing FileNode objects with relativePath
+ * relative to the given projectRoot.
+ *
+ * @param dirPath      Absolute path to the directory to list.
+ * @param projectRoot  Absolute path to the project root (used to compute relativePath).
+ */
+export async function listDirectoryTree(
+  dirPath: string,
+  projectRoot: string,
+  depth = 0,
+): Promise<FileNode[]> {
   if (depth > MAX_DEPTH) return []
   let entries: fss.Dirent[]
   try {
@@ -33,10 +44,12 @@ export async function listDirectoryTree(dirPath: string, depth = 0): Promise<Fil
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue
     const fullPath = path.join(dirPath, entry.name)
+    // Compute path relative to project root, using forward slashes for portability
+    const relativePath = path.relative(projectRoot, fullPath).replace(/\\/g, "/")
     const isDir = entry.isDirectory()
-    const node: FileNode = { name: entry.name, path: fullPath, is_dir: isDir }
+    const node: FileNode = { name: entry.name, relativePath, is_dir: isDir }
     if (isDir) {
-      node.children = await listDirectoryTree(fullPath, depth + 1)
+      node.children = await listDirectoryTree(fullPath, projectRoot, depth + 1)
     }
     nodes.push(node)
   }
@@ -106,7 +119,8 @@ export async function findRelatedWikiPages(
         try {
           const content = await fs.readFile(full, "utf-8")
           if (content.includes(sourceName)) {
-            results.push(full)
+            // Return relative path from project root
+            results.push(path.relative(projectPath, full).replace(/\\/g, "/"))
           }
         } catch { /* skip */ }
       }

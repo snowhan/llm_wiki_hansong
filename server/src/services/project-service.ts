@@ -1,13 +1,72 @@
 import fs from "node:fs/promises"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 import type { WikiProject } from "../types.js"
 import { config } from "../config.js"
+import { getState, setState } from "./state-service.js"
 
 const REQUIRED_DIRS = ["wiki", "raw", "raw/sources"]
 const PROJECT_MARKER = ".llm-wiki"
+const REGISTRY_KEY = "projectRegistry"
+
+// ── Project registry ──────────────────────────────────────────────────────
+
+interface RegistryEntry {
+  name: string
+  absolutePath: string
+}
+
+async function loadRegistry(): Promise<Record<string, RegistryEntry>> {
+  const raw = await getState(REGISTRY_KEY)
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, RegistryEntry>
+  }
+  return {}
+}
+
+async function saveRegistry(registry: Record<string, RegistryEntry>): Promise<void> {
+  await setState(REGISTRY_KEY, registry)
+}
+
+/**
+ * Find an existing registry entry by absolute path, or create a new one.
+ * Returns the project ID.
+ */
+async function getOrCreateId(name: string, absolutePath: string): Promise<string> {
+  const registry = await loadRegistry()
+  const normalized = path.normalize(absolutePath)
+
+  // Check if this path is already registered
+  const existing = Object.entries(registry).find(
+    ([, entry]) => path.normalize(entry.absolutePath) === normalized,
+  )
+  if (existing) {
+    // Update name in case it changed
+    if (existing[1].name !== name) {
+      registry[existing[0]] = { ...existing[1], name }
+      await saveRegistry(registry)
+    }
+    return existing[0]
+  }
+
+  // Create new entry
+  const id = randomUUID()
+  registry[id] = { name, absolutePath: normalized }
+  await saveRegistry(registry)
+  return id
+}
+
+// ── Public API ────────────────────────────────────────────────────────────
+
+export async function getProjectRoot(projectId: string): Promise<string> {
+  const registry = await loadRegistry()
+  const entry = registry[projectId]
+  if (!entry) throw new Error(`Project not found: ${projectId}`)
+  return entry.absolutePath
+}
 
 export async function createProject(name: string, parentPath?: string): Promise<WikiProject> {
-  const base = parentPath || config.projectsRoot
+  const base = parentPath ?? config.projectsRoot
   await fs.mkdir(base, { recursive: true })
   const projectPath = path.join(base, name)
   await fs.mkdir(projectPath, { recursive: true })
@@ -17,7 +76,8 @@ export async function createProject(name: string, parentPath?: string): Promise<
   }
   await fs.mkdir(path.join(projectPath, PROJECT_MARKER), { recursive: true })
 
-  return { name, path: projectPath }
+  const id = await getOrCreateId(name, projectPath)
+  return { id, name }
 }
 
 export async function openProject(projectPath: string): Promise<WikiProject> {
@@ -39,7 +99,8 @@ export async function openProject(projectPath: string): Promise<WikiProject> {
   }
 
   const name = path.basename(projectPath)
-  return { name, path: projectPath }
+  const id = await getOrCreateId(name, projectPath)
+  return { id, name }
 }
 
 export async function listProjects(): Promise<WikiProject[]> {
@@ -52,11 +113,23 @@ export async function listProjects(): Promise<WikiProject[]> {
     const full = path.join(config.projectsRoot, entry.name)
     try {
       await fs.stat(path.join(full, PROJECT_MARKER))
-      projects.push({ name: entry.name, path: full })
+      const id = await getOrCreateId(entry.name, full)
+      projects.push({ id, name: entry.name })
     } catch {
       // not a wiki project
     }
   }
 
   return projects
+}
+
+export async function deleteProjectFromRegistry(projectId: string): Promise<void> {
+  const registry = await loadRegistry()
+  delete registry[projectId]
+  await saveRegistry(registry)
+}
+
+export async function getRegistryEntries(): Promise<Array<{ id: string } & RegistryEntry>> {
+  const registry = await loadRegistry()
+  return Object.entries(registry).map(([id, entry]) => ({ id, ...entry }))
 }

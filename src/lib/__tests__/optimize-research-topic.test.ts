@@ -18,7 +18,7 @@ const config: LlmConfig = {
 }
 
 function mockStreamResponse(text: string) {
-  vi.mocked(streamChat).mockImplementation(async (_cfg, _msgs, cb) => {
+  vi.mocked(streamChat).mockImplementation(async (_msgs, cb) => {
     cb.onToken(text)
     cb.onDone()
   })

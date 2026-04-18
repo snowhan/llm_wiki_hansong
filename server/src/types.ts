@@ -1,16 +1,2 @@
-export interface WikiProject {
-  name: string
-  path: string
-}
-
-export interface FileNode {
-  name: string
-  path: string
-  is_dir: boolean
-  children?: FileNode[]
-}
-
-export interface BrowseResult {
-  dirs: string[]
-  files: string[]
-}
+// Re-export shared types as the canonical server-side wiki types
+export type { WikiProject, FileNode, BrowseResult, LlmConfig, ServerIngestTask } from "../../shared/types.js"

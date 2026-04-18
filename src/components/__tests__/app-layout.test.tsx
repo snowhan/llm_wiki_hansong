@@ -24,12 +24,20 @@ vi.mock("../layout/content-area", () => ({
   ContentArea: () => <div data-testid="content" />,
 }))
 
-vi.mock("../layout/preview-panel", () => ({
-  PreviewPanel: () => <div data-testid="preview" />,
+vi.mock("../layout/editor-area", () => ({
+  EditorArea: () => <div data-testid="editor" />,
+}))
+
+vi.mock("../layout/tab-bar", () => ({
+  TabBar: () => <div data-testid="tab-bar" />,
 }))
 
 vi.mock("../layout/research-panel", () => ({
   ResearchPanel: () => <div data-testid="research" />,
+}))
+
+vi.mock("../chat/chat-panel", () => ({
+  ChatPanel: () => <div data-testid="chat-panel" />,
 }))
 
 vi.mock("@/components/error-boundary", () => ({
@@ -47,6 +55,12 @@ beforeEach(() => {
     chatExpanded: false,
     activeView: "wiki",
     dataVersion: 0,
+    openTabs: [],
+    activeTabId: null,
+    activeTabPath: null,
+    ingestingPath: null,
+    ingestStatuses: {},
+    serverTaskIds: {},
     llmConfig: {
       provider: "openai",
       apiKey: "",
@@ -61,31 +75,33 @@ beforeEach(() => {
 })
 
 describe("AppLayout", () => {
-  it("renders main layout sections", () => {
+  it("renders core layout regions (sidebar + activity + editor)", () => {
     render(<AppLayout onSwitchProject={vi.fn()} />)
     expect(screen.getByTestId("icon-sidebar")).toBeInTheDocument()
     expect(screen.getByTestId("sidebar")).toBeInTheDocument()
     expect(screen.getByTestId("activity")).toBeInTheDocument()
-    expect(screen.getByTestId("content")).toBeInTheDocument()
+    // wiki view renders EditorArea + TabBar
+    expect(screen.getByTestId("tab-bar")).toBeInTheDocument()
+    expect(screen.getByTestId("editor")).toBeInTheDocument()
   })
 
   it("calls listDirectory when a project is set", async () => {
     render(<AppLayout onSwitchProject={vi.fn()} />)
-    useWikiStore.setState({ project: { name: "P", path: "/proj/root" } } as any)
+    useWikiStore.setState({ project: { id: "proj-uuid", name: "P" } } as any)
 
     await waitFor(() => {
-      expect(listDirectory).toHaveBeenCalledWith("/proj/root")
+      expect(listDirectory).toHaveBeenCalledWith("proj-uuid")
     })
   })
 
-  it("shows the right preview panel when a file is selected", () => {
+  it("renders ContentArea for non-wiki views", () => {
     useWikiStore.setState({
-      project: { name: "P", path: "/proj/root" },
-      selectedFile: "/proj/root/wiki/a.md",
+      project: { id: "proj-uuid", name: "P" },
+      activeView: "sources",
     } as any)
 
     render(<AppLayout onSwitchProject={vi.fn()} />)
 
-    expect(screen.getByTestId("preview")).toBeInTheDocument()
+    expect(screen.getByTestId("content")).toBeInTheDocument()
   })
 })

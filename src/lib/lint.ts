@@ -3,7 +3,7 @@ import { streamChat } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
 import type { FileNode } from "@/types/wiki"
 import { useActivityStore } from "@/stores/activity-store"
-import { getFileName, getRelativePath, normalizePath } from "@/lib/path-utils"
+import { getFileName } from "@/lib/path-utils"
 
 export interface LintResult {
   type: "orphan" | "broken-link" | "no-outlinks" | "semantic"
@@ -37,34 +37,37 @@ function extractWikilinks(content: string): string[] {
   return links
 }
 
-function relativeToSlug(relativePath: string): string {
-  // relativePath relative to wiki/ dir, e.g. "entities/foo-bar" or "queries/my-page-2024-01-01"
-  return relativePath.replace(/\.md$/, "")
+function relativeToSlug(relPath: string): string {
+  // relPath relative to wiki/ dir, e.g. "entities/foo-bar" or "queries/my-page-2024-01-01"
+  return relPath.replace(/\.md$/, "")
 }
 
-/** Build a slug → absolute path map from wiki files */
+/** Strip the "wiki/" prefix from a project-relative path to get the wiki-relative path */
+function wikiRelative(relativePath: string): string {
+  return relativePath.replace(/^wiki\//, "")
+}
+
+/** Build a slug → relativePath map from wiki files */
 function buildSlugMap(
   wikiFiles: FileNode[],
-  wikiRoot: string,
 ): Map<string, string> {
   const map = new Map<string, string>()
   for (const f of wikiFiles) {
-    // e.g. /path/to/project/wiki/entities/foo.md → entities/foo
-    const rel = getRelativePath(f.path, wikiRoot).replace(/\.md$/, "")
-    map.set(rel, f.path)
+    // e.g. "wiki/entities/foo.md" → "entities/foo"
+    const rel = wikiRelative(f.relativePath).replace(/\.md$/, "")
+    map.set(rel, f.relativePath)
     // also index by basename without extension
-    map.set(f.name.replace(/\.md$/, ""), f.path)
+    map.set(f.name.replace(/\.md$/, ""), f.relativePath)
   }
   return map
 }
 
 // ── Structural lint ───────────────────────────────────────────────────────────
 
-export async function runStructuralLint(projectPath: string): Promise<LintResult[]> {
-  const wikiRoot = `${normalizePath(projectPath)}/wiki`
+export async function runStructuralLint(projectId: string): Promise<LintResult[]> {
   let tree: FileNode[]
   try {
-    tree = await listDirectory(wikiRoot)
+    tree = await listDirectory(projectId, "wiki")
   } catch {
     return []
   }
@@ -75,18 +78,18 @@ export async function runStructuralLint(projectPath: string): Promise<LintResult
     (f) => f.name !== "index.md" && f.name !== "log.md"
   )
 
-  const slugMap = buildSlugMap(contentFiles, wikiRoot)
+  const slugMap = buildSlugMap(contentFiles)
 
   // Read all content files
-  type PageData = { path: string; slug: string; content: string; outlinks: string[] }
+  type PageData = { relativePath: string; slug: string; content: string; outlinks: string[] }
   const pages: PageData[] = []
 
   for (const f of contentFiles) {
     try {
-      const content = await readFile(f.path)
-      const slug = relativeToSlug(getRelativePath(f.path, wikiRoot))
+      const content = await readFile(projectId, f.relativePath)
+      const slug = relativeToSlug(wikiRelative(f.relativePath))
       const outlinks = extractWikilinks(content)
-      pages.push({ path: f.path, slug, content, outlinks })
+      pages.push({ relativePath: f.relativePath, slug, content, outlinks })
     } catch {
       // skip unreadable files
     }
@@ -97,7 +100,7 @@ export async function runStructuralLint(projectPath: string): Promise<LintResult
   for (const p of pages) {
     for (const link of p.outlinks) {
       const target = slugMap.has(link)
-        ? relativeToSlug(getRelativePath(slugMap.get(link)!, wikiRoot))
+        ? relativeToSlug(wikiRelative(slugMap.get(link)!))
         : link
       inboundCounts.set(target, (inboundCounts.get(target) ?? 0) + 1)
     }
@@ -106,7 +109,7 @@ export async function runStructuralLint(projectPath: string): Promise<LintResult
   const results: LintResult[] = []
 
   for (const p of pages) {
-    const shortName = getRelativePath(p.path, wikiRoot)
+    const shortName = wikiRelative(p.relativePath)
 
     // Orphan: no inbound links
     const inbound = inboundCounts.get(p.slug) ?? 0
@@ -152,10 +155,9 @@ const LINT_BLOCK_REGEX =
   /---LINT:\s*([^\n|]+?)\s*\|\s*([^\n|]+?)\s*\|\s*([^\n-]+?)\s*---\n([\s\S]*?)---END LINT---/g
 
 export async function runSemanticLint(
-  projectPath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  _llmConfig?: LlmConfig,
 ): Promise<LintResult[]> {
-  const pp = normalizePath(projectPath)
   const activity = useActivityStore.getState()
   const activityId = activity.addItem({
     type: "lint",
@@ -165,10 +167,9 @@ export async function runSemanticLint(
     filesWritten: [],
   })
 
-  const wikiRoot = `${pp}/wiki`
   let tree: FileNode[]
   try {
-    tree = await listDirectory(wikiRoot)
+    tree = await listDirectory(projectId, "wiki")
   } catch {
     activity.updateItem(activityId, { status: "error", detail: "Failed to read wiki directory." })
     return []
@@ -182,9 +183,9 @@ export async function runSemanticLint(
   const summaries: string[] = []
   for (const f of wikiFiles) {
     try {
-      const content = await readFile(f.path)
+      const content = await readFile(projectId, f.relativePath)
       const preview = content.slice(0, 500) + (content.length > 500 ? "..." : "")
-      const shortPath = getRelativePath(f.path, wikiRoot)
+      const shortPath = wikiRelative(f.relativePath)
       summaries.push(`### ${shortPath}\n${preview}`)
     } catch {
       // skip
@@ -232,7 +233,6 @@ export async function runSemanticLint(
   let hadError = false
 
   await streamChat(
-    llmConfig,
     [{ role: "user", content: prompt }],
     {
       onToken: (token) => { raw += token },

@@ -10,44 +10,11 @@ import { getFileCategory, isBinary, needsPreprocess } from "@/lib/file-types"
 import { splitFrontmatter } from "@/lib/path-utils"
 import { WikiEditor } from "@/components/editor/wiki-editor"
 import { FilePreview } from "@/components/editor/file-preview"
+import { parseFrontmatter } from "@/lib/frontmatter"
+import type { FrontmatterFields } from "@/lib/frontmatter"
 import Description from "@mui/icons-material/Description"
 import NoteAddOutlined from "@mui/icons-material/NoteAddOutlined"
 import InboxOutlined from "@mui/icons-material/InboxOutlined"
-
-// ── Frontmatter parser ──────────────────────────────────────────
-interface FrontmatterFields {
-  type?: string
-  title?: string
-  created?: string
-  updated?: string
-  tags?: string[]
-  related?: string[]
-  sources?: string[]
-  [key: string]: string | string[] | undefined
-}
-
-function parseFrontmatter(frontmatter: string): FrontmatterFields {
-  if (!frontmatter) return {}
-  const inner = frontmatter.replace(/^---\n/, "").replace(/\n---\n?$/, "")
-  const result: FrontmatterFields = {}
-  for (const line of inner.split("\n")) {
-    const colonIdx = line.indexOf(":")
-    if (colonIdx < 0) continue
-    const key = line.slice(0, colonIdx).trim()
-    const rawVal = line.slice(colonIdx + 1).trim()
-    // Array: [a, b, c]
-    const arrMatch = rawVal.match(/^\[(.+)\]$/)
-    if (arrMatch) {
-      result[key] = arrMatch[1]
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean)
-    } else {
-      result[key] = rawVal.replace(/^["']|["']$/g, "")
-    }
-  }
-  return result
-}
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   entity:     { bg: "rgba(55,53,47,0.08)",  text: "#37352F" },
@@ -118,9 +85,9 @@ function FrontmatterBadge({ fields }: { fields: FrontmatterFields }) {
 
       {tags && tags.length > 0 && (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-          {tags.map((tag) => (
+          {tags.map((tag, idx) => (
             <Chip
-              key={tag}
+              key={`${tag}-${idx}`}
               label={tag}
               size="small"
               sx={{
@@ -148,13 +115,17 @@ export function EditorArea() {
   const openTabs = useWikiStore((s) => s.openTabs)
   const fileContent = useWikiStore((s) => s.fileContent)
   const setFileContent = useWikiStore((s) => s.setFileContent)
+  const project = useWikiStore((s) => s.project)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const readGenRef = useRef(0)
 
   const activeTab = openTabs.find((t) => t.id === activeTabId)
   const isBlankTab = !!activeTab && isNewTab(activeTab.path)
 
   useEffect(() => {
-    if (!activeTabPath || isNewTab(activeTabPath)) {
+    const gen = ++readGenRef.current
+
+    if (!activeTabPath || isNewTab(activeTabPath) || !project) {
       setFileContent("")
       return
     }
@@ -166,17 +137,16 @@ export function EditorArea() {
     }
 
     if (needsPreprocess(category)) {
-      // For PDF/document files, read the markitdown-extracted cache instead of raw binary
-      readFile(activeTabPath + ".cache.txt")
-        .then(setFileContent)
-        .catch(() => setFileContent("__NO_CACHE__"))
+      readFile(project.id, activeTabPath + ".cache.txt")
+        .then((content) => { if (readGenRef.current === gen) setFileContent(content) })
+        .catch(() => { if (readGenRef.current === gen) setFileContent("__NO_CACHE__") })
       return
     }
 
-    readFile(activeTabPath)
-      .then(setFileContent)
-      .catch((err) => setFileContent(t("preview.errorLoading", { err })))
-  }, [activeTabPath, setFileContent, t])
+    readFile(project.id, activeTabPath)
+      .then((content) => { if (readGenRef.current === gen) setFileContent(content) })
+      .catch((err) => { if (readGenRef.current === gen) setFileContent(t("preview.errorLoading", { err })) })
+  }, [activeTabPath, setFileContent, t, project])
 
   const { frontmatter, body: markdownBody } = splitFrontmatter(fileContent)
   const fmFields = useMemo(() => parseFrontmatter(frontmatter), [frontmatter])
@@ -184,15 +154,15 @@ export function EditorArea() {
 
   const handleSave = useCallback(
     (markdown: string) => {
-      if (!activeTabPath || isNewTab(activeTabPath)) return
+      if (!activeTabPath || isNewTab(activeTabPath) || !project) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        writeFile(activeTabPath, frontmatter + markdown).catch((err) =>
+        writeFile(project.id, activeTabPath, frontmatter + markdown).catch((err) =>
           console.error("Failed to save:", err)
         )
       }, 1000)
     },
-    [activeTabPath, frontmatter]
+    [activeTabPath, frontmatter, project]
   )
 
   useEffect(() => {
@@ -257,7 +227,7 @@ export function EditorArea() {
     return (
       <Box sx={{ display: "flex", height: "100%", overflow: "hidden" }}>
         <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-          <FilePreview key={activeTabPath!} filePath={activeTabPath!} textContent={fileContent} />
+          <FilePreview key={activeTabPath!} projectId={project?.id ?? ""} filePath={activeTabPath!} textContent={fileContent} />
         </Box>
       </Box>
     )

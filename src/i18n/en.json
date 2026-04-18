@@ -14,6 +14,7 @@
     "lint": "Lint",
     "review": "Review",
     "settings": "Settings",
+    "admin": "Admin",
     "switchProject": "Switch Project"
   },
   "welcome": {
@@ -366,5 +367,30 @@
     "habits": "habits",
     "reflections": "reflections",
     "journal": "journal"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "accessControl": "Access Control",
+    "adminToken": "Admin Token",
+    "adminTokenPlaceholder": "Enter ADMIN_TOKEN",
+    "saveToken": "Save",
+    "tokenSaved": "Token saved. Admin access enabled.",
+    "tokenRequired": "Enter an admin token above to load data.",
+    "serverStatus": "Server Status",
+    "uptime": "Uptime",
+    "heapUsed": "Heap Used",
+    "heapTotal": "Heap Total",
+    "loading": "Loading...",
+    "refresh": "Refresh",
+    "projects": "Registered Projects",
+    "noProjects": "No projects registered.",
+    "removeFromRegistry": "Remove from registry (files not deleted)",
+    "tasks": {
+      "total": "Total",
+      "running": "Running",
+      "pending": "Pending",
+      "done": "Done",
+      "error": "Error"
+    }
   }
 }

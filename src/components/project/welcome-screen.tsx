@@ -253,7 +253,7 @@ export function WelcomeScreen({
             <Stack spacing={0.5}>
               {recentProjects.map((proj) => (
                 <ButtonBase
-                  key={proj.path}
+                  key={proj.id}
                   onClick={() => onSelectProject(proj)}
                   sx={{
                     display: "flex",
@@ -302,16 +302,16 @@ export function WelcomeScreen({
                       noWrap
                       sx={{ color: "rgba(245,243,239,0.25)", fontSize: "0.75rem", display: "block" }}
                     >
-                      {proj.path}
+                      {proj.id.slice(0, 8)}…
                     </Typography>
                   </Box>
                   <IconButton
                     data-remove-recent
                     size="small"
                     aria-label={t("common.close")}
-                    onClick={(e) => handleRemoveRecent(e, proj.path)}
+                    onClick={(e) => handleRemoveRecent(e, proj.id)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRemoveRecent(e as unknown as React.MouseEvent, proj.path)
+                      if (e.key === "Enter") handleRemoveRecent(e as unknown as React.MouseEvent, proj.id)
                     }}
                     sx={{
                       flexShrink: 0,

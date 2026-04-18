@@ -21,7 +21,6 @@ import { queueResearch } from "@/lib/deep-research"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { useWikiStore } from "@/stores/wiki-store"
 import { writeFile, readFile, listDirectory, deleteFile } from "@/commands/fs"
-import { normalizePath } from "@/lib/path-utils"
 
 type MuiIcon = React.ComponentType<SvgIconProps>
 
@@ -46,7 +45,6 @@ export function ReviewView() {
   const setFileTree = useWikiStore((s) => s.setFileTree)
 
   const handleResolve = useCallback(async (id: string, action: string) => {
-    const pp = project ? normalizePath(project.path) : ""
     if (action === "__deep_research__" && project) {
       const searchConfig = useWikiStore.getState().searchApiConfig
       if (searchConfig.provider === "none" || !searchConfig.apiKey) {
@@ -57,7 +55,7 @@ export function ReviewView() {
       if (item) {
         const llmConfig = useWikiStore.getState().llmConfig
         const topic = item.title.replace(/^(Save to Wiki|Create|Research)[:\s]*/i, "").trim() || item.description.split("\n")[0]
-        queueResearch(pp, topic, llmConfig, searchConfig, item.searchQueries)
+        queueResearch(project.id, topic, llmConfig, searchConfig, item.searchQueries)
         resolveItem(id, t("review.queuedForResearch"))
       } else {
         resolveItem(id, action)
@@ -80,28 +78,26 @@ export function ReviewView() {
         const slug = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 50)
         const date = new Date().toISOString().slice(0, 10)
         const fileName = `${slug}-${date}.md`
-        const filePath = `${pp}/wiki/queries/${fileName}`
+        const filePath = `wiki/queries/${fileName}`
 
         const frontmatter = `---\ntype: query\ntitle: "${title.replace(/"/g, '\\"')}"\ncreated: ${date}\ntags: []\n---\n\n`
-        await writeFile(filePath, frontmatter + cleanContent)
+        await writeFile(project.id, filePath, frontmatter + cleanContent)
 
-        const indexPath = `${pp}/wiki/index.md`
         let indexContent = ""
-        try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
+        try { indexContent = await readFile(project.id, "wiki/index.md") } catch { indexContent = "# Wiki Index\n" }
         const entry = `- [[queries/${slug}-${date}|${title}]]`
         if (indexContent.includes("## Queries")) {
           indexContent = indexContent.replace(/(## Queries\n)/, `$1${entry}\n`)
         } else {
           indexContent = indexContent.trimEnd() + "\n\n## Queries\n" + entry + "\n"
         }
-        await writeFile(indexPath, indexContent)
+        await writeFile(project.id, "wiki/index.md", indexContent)
 
-        const logPath = `${pp}/wiki/log.md`
         let logContent = ""
-        try { logContent = await readFile(logPath) } catch { logContent = "# Wiki Log\n" }
-        await writeFile(logPath, logContent.trimEnd() + `\n- ${date}: Saved query page \`${fileName}\`\n`)
+        try { logContent = await readFile(project.id, "wiki/log.md") } catch { logContent = "# Wiki Log\n" }
+        await writeFile(project.id, "wiki/log.md", logContent.trimEnd() + `\n- ${date}: Saved query page \`${fileName}\`\n`)
 
-        const tree = await listDirectory(pp)
+        const tree = await listDirectory(project.id)
         setFileTree(tree)
 
         resolveItem(id, t("review.savedToWiki"))
@@ -112,13 +108,13 @@ export function ReviewView() {
     } else if (action.startsWith("open:") && project) {
       const page = action.slice(5)
       const candidates = [
-        `${pp}/wiki/${page}`,
-        `${pp}/wiki/${page}.md`,
+        `wiki/${page}`,
+        `wiki/${page}.md`,
       ]
-      for (const path of candidates) {
+      for (const relativePath of candidates) {
         try {
-          const content = await readFile(path)
-          useWikiStore.getState().setSelectedFile(path)
+          const content = await readFile(project.id, relativePath)
+          useWikiStore.getState().setSelectedFile(relativePath)
           useWikiStore.getState().setFileContent(content)
           useWikiStore.getState().setActiveView("wiki")
           break
@@ -128,10 +124,10 @@ export function ReviewView() {
       }
       resolveItem(id, action)
     } else if (action.startsWith("delete:") && project) {
-      const filePath = action.slice(7)
+      const relativePath = action.slice(7)
       try {
-        await deleteFile(filePath)
-        const tree = await listDirectory(pp)
+        await deleteFile(project.id, relativePath)
+        const tree = await listDirectory(project.id)
         setFileTree(tree)
         resolveItem(id, t("review.deleted"))
       } catch (err) {
@@ -151,16 +147,16 @@ export function ReviewView() {
       if (item) {
         const llmConfig = useWikiStore.getState().llmConfig
         const topic = action.replace(/^research\s*/i, "").trim() || item.description.split("\n")[0]
-        queueResearch(pp, topic, llmConfig, searchConfig)
+        queueResearch(project.id, topic, llmConfig, searchConfig)
         resolveItem(id, t("review.queuedForDeepResearch"))
       } else {
         resolveItem(id, action)
       }
     } else if (action.startsWith("__create_page__:") && project) {
       const realAction = action.slice("__create_page__:".length)
-      await createPageFromReview(id, realAction, items, pp)
+      await createPageFromReview(id, realAction, items, project.id)
     } else if (actionLooksLikeCreate(action) && project) {
-      await createPageFromReview(id, action, items, pp)
+      await createPageFromReview(id, action, items, project.id)
     } else {
       resolveItem(id, action)
     }
@@ -360,7 +356,7 @@ async function createPageFromReview(
   id: string,
   realAction: string,
   items: ReviewItem[],
-  pp: string,
+  projectId: string,
 ) {
   const resolveItem = useReviewStore.getState().resolveItem
   const setFileTree = useWikiStore.getState().setFileTree
@@ -377,15 +373,14 @@ async function createPageFromReview(
     const pageType = detectPageType(realAction, item.type)
     const dir = pageType === "query" ? "queries" : pageType === "entity" ? "entities" : pageType === "concept" ? "concepts" : "queries"
     const fileName = `${slug}-${date}.md`
-    const filePath = `${pp}/wiki/${dir}/${fileName}`
+    const filePath = `wiki/${dir}/${fileName}`
 
     const frontmatter = `---\ntype: ${pageType}\ntitle: "${title.replace(/"/g, '\\"')}"\ncreated: ${date}\ntags: []\nrelated: []\n---\n\n`
     const body = `# ${title}\n\n${item.description}\n`
-    await writeFile(filePath, frontmatter + body)
+    await writeFile(projectId, filePath, frontmatter + body)
 
-    const indexPath = `${pp}/wiki/index.md`
     let indexContent = ""
-    try { indexContent = await readFile(indexPath) } catch { indexContent = "# Wiki Index\n" }
+    try { indexContent = await readFile(projectId, "wiki/index.md") } catch { indexContent = "# Wiki Index\n" }
     const sectionHeader = `## ${dir.charAt(0).toUpperCase() + dir.slice(1)}`
     const entry = `- [[${dir}/${slug}-${date}|${title}]]`
     if (indexContent.includes(sectionHeader)) {
@@ -393,14 +388,13 @@ async function createPageFromReview(
     } else {
       indexContent = indexContent.trimEnd() + `\n\n${sectionHeader}\n${entry}\n`
     }
-    await writeFile(indexPath, indexContent)
+    await writeFile(projectId, "wiki/index.md", indexContent)
 
-    const logPath = `${pp}/wiki/log.md`
     let logContent = ""
-    try { logContent = await readFile(logPath) } catch { logContent = "# Wiki Log\n" }
-    await writeFile(logPath, logContent.trimEnd() + `\n- ${date}: Created ${pageType} page \`${fileName}\` from review\n`)
+    try { logContent = await readFile(projectId, "wiki/log.md") } catch { logContent = "# Wiki Log\n" }
+    await writeFile(projectId, "wiki/log.md", logContent.trimEnd() + `\n- ${date}: Created ${pageType} page \`${fileName}\` from review\n`)
 
-    const tree = await listDirectory(pp)
+    const tree = await listDirectory(projectId)
     setFileTree(tree)
     useWikiStore.getState().bumpDataVersion()
 

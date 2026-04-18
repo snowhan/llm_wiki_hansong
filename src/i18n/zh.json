@@ -14,6 +14,7 @@
     "lint": "检查",
     "review": "待审阅",
     "settings": "设置",
+    "admin": "管理员",
     "switchProject": "切换项目"
   },
   "welcome": {
@@ -366,5 +367,30 @@
     "habits": "习惯",
     "reflections": "反思",
     "journal": "日记"
+  },
+  "admin": {
+    "title": "管理员面板",
+    "accessControl": "访问控制",
+    "adminToken": "管理员令牌",
+    "adminTokenPlaceholder": "输入 ADMIN_TOKEN",
+    "saveToken": "保存",
+    "tokenSaved": "令牌已保存，管理员访问已启用。",
+    "tokenRequired": "请先在上方输入管理员令牌以加载数据。",
+    "serverStatus": "服务器状态",
+    "uptime": "运行时长",
+    "heapUsed": "堆内存已用",
+    "heapTotal": "堆内存总量",
+    "loading": "加载中...",
+    "refresh": "刷新",
+    "projects": "已注册项目",
+    "noProjects": "暂无已注册项目。",
+    "removeFromRegistry": "从注册表中删除（不删除文件）",
+    "tasks": {
+      "total": "总计",
+      "running": "运行中",
+      "pending": "等待中",
+      "done": "已完成",
+      "error": "错误"
+    }
   }
 }

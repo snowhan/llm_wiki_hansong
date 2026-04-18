@@ -1,9 +1,8 @@
 import { readFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
-import { normalizePath } from "@/lib/path-utils"
 
 export interface SearchResult {
-  path: string
+  relativePath: string
   title: string
   snippet: string
   titleMatch: boolean
@@ -104,11 +103,10 @@ function buildSnippet(content: string, query: string): string {
 }
 
 export async function searchWiki(
-  projectPath: string,
+  projectId: string,
   query: string,
 ): Promise<SearchResult[]> {
   if (!query.trim()) return []
-  const pp = normalizePath(projectPath)
 
   const tokens = tokenizeQuery(query)
   // Fallback: if all tokens were filtered out, use the trimmed query as a single token
@@ -117,18 +115,18 @@ export async function searchWiki(
 
   // Search wiki pages
   try {
-    const wikiTree = await listDirectory(`${pp}/wiki`)
+    const wikiTree = await listDirectory(projectId, "wiki")
     const wikiFiles = flattenMdFiles(wikiTree)
-    await searchFiles(wikiFiles, effectiveTokens, query, results)
+    await searchFiles(projectId, wikiFiles, effectiveTokens, query, results)
   } catch {
     // no wiki directory
   }
 
   // Also search raw sources (extracted text)
   try {
-    const rawTree = await listDirectory(`${pp}/raw/sources`)
+    const rawTree = await listDirectory(projectId, "raw/sources")
     const rawFiles = flattenAllFiles(rawTree)
-    await searchFiles(rawFiles, effectiveTokens, query, results)
+    await searchFiles(projectId, rawFiles, effectiveTokens, query, results)
   } catch {
     // no raw sources
   }
@@ -141,7 +139,7 @@ export async function searchWiki(
     if (embCfg.enabled && embCfg.model) {
       const t0 = performance.now()
       const { searchByEmbedding } = await import("@/lib/embedding")
-      const vectorResults = await searchByEmbedding(pp, query, embCfg, 10)
+      const vectorResults = await searchByEmbedding(projectId, query, embCfg, 10)
       const vectorMs = Math.round(performance.now() - t0)
 
       console.log(
@@ -153,12 +151,12 @@ export async function searchWiki(
 
       let boosted = 0
       let added = 0
-      const existingPaths = new Set(results.map((r) => r.path))
+      const existingPaths = new Set(results.map((r) => r.relativePath))
 
       for (const vr of vectorResults) {
         // Check if already in results
         const existing = results.find((r) => {
-          const fileName = r.path.split("/").pop()?.replace(/\.md$/, "") ?? ""
+          const fileName = r.relativePath.split("/").pop()?.replace(/\.md$/, "") ?? ""
           return fileName === vr.id
         })
 
@@ -170,13 +168,13 @@ export async function searchWiki(
           // Try to find the file and add it
           const dirs = ["entities", "concepts", "sources", "synthesis", "comparison", "queries"]
           for (const dir of dirs) {
-            const tryPath = `${pp}/wiki/${dir}/${vr.id}.md`
+            const tryPath = `wiki/${dir}/${vr.id}.md`
             if (existingPaths.has(tryPath)) break
             try {
-              const content = await readFile(tryPath)
+              const content = await readFile(projectId, tryPath)
               const title = extractTitle(content, `${vr.id}.md`)
               results.push({
-                path: tryPath,
+                relativePath: tryPath,
                 title,
                 snippet: buildSnippet(content, query),
                 titleMatch: false,
@@ -210,6 +208,7 @@ export async function searchWiki(
 }
 
 async function searchFiles(
+  projectId: string,
   files: FileNode[],
   tokens: readonly string[],
   query: string,
@@ -218,7 +217,7 @@ async function searchFiles(
   for (const file of files) {
     let content = ""
     try {
-      content = await readFile(file.path)
+      content = await readFile(projectId, file.relativePath)
     } catch {
       continue
     }
@@ -240,7 +239,7 @@ async function searchFiles(
     const snippet = buildSnippet(content, firstMatchingToken)
 
     results.push({
-      path: file.path,
+      relativePath: file.relativePath,
       title,
       snippet,
       titleMatch: isTitleMatch,

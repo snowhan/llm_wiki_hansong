@@ -30,7 +30,7 @@ import type { DisplayMessage } from "@/stores/chat-store"
 import type { FileNode } from "@/types/wiki"
 
 import { convertLatexToUnicode } from "@/lib/latex-to-unicode"
-import { normalizePath, getFileName } from "@/lib/path-utils"
+import { getFileName } from "@/lib/path-utils"
 import { MarkdownView } from "@/components/ui/markdown-view"
 
 // Module-level cache of source file names
@@ -41,8 +41,7 @@ export function useSourceFiles() {
 
   useEffect(() => {
     if (!project) return
-    const pp = normalizePath(project.path)
-    listDirectory(`${pp}/raw/sources`)
+    listDirectory(project.id, "raw/sources")
       .then((tree) => {
         cachedSourceFiles = flattenNames(tree)
       })
@@ -83,6 +82,19 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
   const isSystem = message.role === "system"
   const isAssistant = message.role === "assistant"
   const [hovered, setHovered] = useState(false)
+
+  const timeStr = useMemo(() => {
+    if (!message.timestamp) return ""
+    const d = new Date(message.timestamp)
+    if (isNaN(d.getTime())) return ""
+    return d.toLocaleTimeString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+  }, [message.timestamp])
 
   return (
     <Stack
@@ -153,6 +165,19 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
             <MarkdownContent content={message.content} />
           )}
         </Box>
+        {timeStr && (
+          <Typography
+            variant="caption"
+            sx={{
+              fontSize: "0.625rem",
+              color: "text.disabled",
+              px: 0.5,
+              alignSelf: isUser ? "flex-end" : "flex-start",
+            }}
+          >
+            {timeStr}
+          </Typography>
+        )}
         {isAssistant && <CitedReferencesPanel content={message.content} savedReferences={message.references} />}
         {isAssistant && hovered && (
           <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap", alignItems: "center" }}>
@@ -239,7 +264,6 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
 
   const handleSave = useCallback(async () => {
     if (!project || saving) return
-    const pp = normalizePath(project.path)
     setSaving(true)
     try {
       // Generate slug from first line or first 50 chars
@@ -253,7 +277,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
         .slice(0, 50)
       const date = new Date().toISOString().slice(0, 10)
       const fileName = `${slug}-${date}.md`
-      const filePath = `${pp}/wiki/queries/${fileName}`
+      const filePath = `wiki/queries/${fileName}`
 
       // Strip hidden sources comment and thinking blocks from content
       const cleanContent = content
@@ -272,13 +296,12 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
         "",
       ].join("\n")
 
-      await writeFile(filePath, frontmatter + cleanContent)
+      await writeFile(project.id, filePath, frontmatter + cleanContent)
 
       // Update index.md — append under ## Queries section
-      const indexPath = `${pp}/wiki/index.md`
       let indexContent = ""
       try {
-        indexContent = await readFile(indexPath)
+        indexContent = await readFile(project.id, "wiki/index.md")
       } catch {
         indexContent = "# Wiki Index\n\n## Queries\n"
       }
@@ -291,21 +314,20 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       } else {
         indexContent = indexContent.trimEnd() + "\n\n## Queries\n" + entry + "\n"
       }
-      await writeFile(indexPath, indexContent)
+      await writeFile(project.id, "wiki/index.md", indexContent)
 
       // Append to log.md
-      const logPath = `${pp}/wiki/log.md`
       let logContent = ""
       try {
-        logContent = await readFile(logPath)
+        logContent = await readFile(project.id, "wiki/log.md")
       } catch {
         logContent = "# Wiki Log\n\n"
       }
       const logEntry = `- ${date}: Saved query page \`${fileName}\`\n`
-      await writeFile(logPath, logContent.trimEnd() + "\n" + logEntry)
+      await writeFile(project.id, "wiki/log.md", logContent.trimEnd() + "\n" + logEntry)
 
       // Refresh file tree and update graph
-      const tree = await listDirectory(pp)
+      const tree = await listDirectory(project.id)
       setFileTree(tree)
       useWikiStore.getState().bumpDataVersion()
 
@@ -316,7 +338,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       const llmConfig = useWikiStore.getState().llmConfig
       if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "wps") {
         const { autoIngest } = await import("@/lib/ingest")
-        autoIngest(pp, filePath, llmConfig).catch((err) =>
+        autoIngest(project.id, filePath, llmConfig).catch((err) =>
           console.error("Failed to auto-ingest saved query:", err)
         )
       }
@@ -357,7 +379,7 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
 
 interface CitedPage {
   title: string
-  path: string
+  relativePath: string
 }
 
 const REF_TYPE_CONFIG: Record<string, { Icon: SvgIconComponent; sxColor: Record<string, string> }> = {
@@ -445,32 +467,31 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
       </Button>
       <Box sx={{ px: 1, pb: 1 }}>
         {visiblePages.map((page, i) => {
-          const refType = getRefType(page.path)
+          const refType = getRefType(page.relativePath)
           const config = REF_TYPE_CONFIG[refType] ?? REF_TYPE_CONFIG.source
           const RefIcon = config.Icon
           return (
             <Button
-              key={page.path}
+              key={page.relativePath}
               type="button"
               fullWidth
               onClick={async () => {
                 if (!project) return
-                const pp = normalizePath(project.path)
                 // Try the given path first, then search all wiki subdirectories
-                const id = getFileName(page.path.replace(/^wiki\//, "").replace(/\.md$/, ""))
+                const id = getFileName(page.relativePath.replace(/^wiki\//, "").replace(/\.md$/, ""))
                 const candidates = [
-                  `${pp}/${page.path}`,
-                  `${pp}/wiki/entities/${id}.md`,
-                  `${pp}/wiki/concepts/${id}.md`,
-                  `${pp}/wiki/sources/${id}.md`,
-                  `${pp}/wiki/queries/${id}.md`,
-                  `${pp}/wiki/synthesis/${id}.md`,
-                  `${pp}/wiki/comparisons/${id}.md`,
-                  `${pp}/wiki/${id}.md`,
+                  page.relativePath,
+                  `wiki/entities/${id}.md`,
+                  `wiki/concepts/${id}.md`,
+                  `wiki/sources/${id}.md`,
+                  `wiki/queries/${id}.md`,
+                  `wiki/synthesis/${id}.md`,
+                  `wiki/comparisons/${id}.md`,
+                  `wiki/${id}.md`,
                 ]
                 for (const candidate of candidates) {
                   try {
-                    await readFile(candidate)
+                    await readFile(project.id, candidate)
                     setSelectedFile(candidate)
                     return
                   } catch {
@@ -478,9 +499,9 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
                   }
                 }
                 // Last resort: set the original path anyway
-                setSelectedFile(`${pp}/${page.path}`)
+                setSelectedFile(page.relativePath)
               }}
-              title={page.path}
+              title={page.relativePath}
               sx={{
                 display: "flex",
                 width: 1,
@@ -603,7 +624,7 @@ function extractCitedPages(text: string): CitedPage[] {
           if (!resolvedPath) resolvedPath = `wiki/${id}.md`
         }
 
-        pages.push({ title: display, path: resolvedPath })
+        pages.push({ title: display, relativePath: resolvedPath })
       }
     }
     if (pages.length > 0) return pages
@@ -685,12 +706,11 @@ function MarkdownContent({ content }: { content: string }) {
   const onWikilinkClick = useCallback(
     async (pageName: string) => {
       if (!project) return
-      const pp = normalizePath(project.path)
       const dirs = ["entities", "concepts", "sources", "synthesis", "comparisons", "queries", ""]
       for (const dir of dirs) {
-        const tryPath = dir ? `${pp}/wiki/${dir}/${pageName}.md` : `${pp}/wiki/${pageName}.md`
+        const tryPath = dir ? `wiki/${dir}/${pageName}.md` : `wiki/${pageName}.md`
         try {
-          const fc = await readFile(tryPath)
+          const fc = await readFile(project.id, tryPath)
           setSelectedFile(tryPath)
           setFileContent(fc)
           return

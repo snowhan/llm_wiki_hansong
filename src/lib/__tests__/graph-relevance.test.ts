@@ -11,7 +11,7 @@ function makeNode(overrides: Partial<RetrievalNode> & { id: string }): Retrieval
   return {
     title: overrides.id,
     type: "entity",
-    path: `/wiki/${overrides.id}.md`,
+    relativePath: `wiki/${overrides.id}.md`,
     sources: [],
     outLinks: new Set(),
     inLinks: new Set(),

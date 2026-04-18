@@ -7,30 +7,24 @@ import {
   registerSseClient,
   unregisterSseClient,
 } from "../services/ingest-service.js"
-import type { LlmConfig } from "../services/ingest-service.js"
+import { ingestStartSchema } from "../lib/schemas.js"
 
 const router = Router()
 
 /**
  * POST /api/ingest/start
- * Body: { projectPath, sourcePath, llmConfig, folderContext? }
+ * Body: { projectId, sourcePath (relative), folderContext? }
  * Returns: { taskId }
  */
 router.post("/start", (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { projectPath, sourcePath, llmConfig, folderContext } = req.body as {
-      projectPath: string
-      sourcePath: string
-      llmConfig: LlmConfig
-      folderContext?: string
-    }
-
-    if (!projectPath || !sourcePath || !llmConfig) {
-      res.status(400).json({ error: "projectPath, sourcePath and llmConfig are required" })
+    const parsed = ingestStartSchema.safeParse(req.body)
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message })
       return
     }
-
-    const taskId = startIngestTask(projectPath, sourcePath, llmConfig, folderContext ?? "")
+    const { projectId, sourcePath, folderContext } = parsed.data
+    const taskId = startIngestTask(projectId, sourcePath, folderContext ?? "")
     res.json({ taskId })
   } catch (err) {
     next(err)
@@ -39,7 +33,6 @@ router.post("/start", (req: Request, res: Response, next: NextFunction) => {
 
 /**
  * GET /api/ingest/status/:taskId
- * Returns current task state.
  */
 router.get("/status/:taskId", (req: Request, res: Response) => {
   const task = getTask(req.params["taskId"] as string)
@@ -52,7 +45,7 @@ router.get("/status/:taskId", (req: Request, res: Response) => {
 
 /**
  * GET /api/ingest/tasks
- * Returns all known tasks (used by frontend to reconnect on refresh).
+ * Returns all known tasks.
  */
 router.get("/tasks", (_req: Request, res: Response) => {
   res.json({ tasks: getAllTasks() })
@@ -79,9 +72,10 @@ router.get("/stream/:taskId", (req: Request, res: Response) => {
 
   registerSseClient(taskId, res)
 
-  // If task is already terminal, send final event and close
   if (task.status === "done" || task.status === "error") {
-    res.write(`data: ${JSON.stringify({ type: "done", task })}\n\n`)
+    const type = task.status === "done" ? "done" : "error"
+    res.write(`data: ${JSON.stringify({ type, task, message: task.error })}\n\n`)
+    unregisterSseClient(taskId, res)
     res.end()
     return
   }
@@ -92,7 +86,7 @@ router.get("/stream/:taskId", (req: Request, res: Response) => {
 
   req.on("close", () => {
     clearInterval(heartbeat)
-    unregisterSseClient(taskId as string, res)
+    unregisterSseClient(taskId, res)
   })
 })
 

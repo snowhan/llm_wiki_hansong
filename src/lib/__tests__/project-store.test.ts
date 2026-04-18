@@ -38,10 +38,17 @@ describe("getRecentProjects", () => {
   })
 
   it("returns stored projects", async () => {
-    const projects = [{ name: "P1", path: "/p1" }]
+    const projects = [{ id: "uuid-1", name: "P1", path: "/p1" }]
     storeData.set("recentProjects", projects)
     const result = await getRecentProjects()
     expect(result).toEqual(projects)
+  })
+
+  it("filters out legacy entries without id", async () => {
+    const projects = [{ name: "Legacy", path: "/legacy" }]
+    storeData.set("recentProjects", projects)
+    const result = await getRecentProjects()
+    expect(result).toEqual([])
   })
 })
 
@@ -52,62 +59,68 @@ describe("getLastProject", () => {
   })
 
   it("returns stored project", async () => {
-    const proj = { name: "Test", path: "/test" }
+    const proj = { id: "uuid-1", name: "Test", path: "/test" }
     storeData.set("lastProject", proj)
     const result = await getLastProject()
     expect(result).toEqual(proj)
+  })
+
+  it("returns null for legacy project without id", async () => {
+    storeData.set("lastProject", { name: "Legacy", path: "/test" })
+    const result = await getLastProject()
+    expect(result).toBeNull()
   })
 })
 
 describe("saveLastProject", () => {
   it("stores the project and adds to recent", async () => {
-    await saveLastProject({ name: "New", path: "/new" })
-    expect(storeData.get("lastProject")).toEqual({ name: "New", path: "/new" })
-    const recent = storeData.get("recentProjects") as Array<{ path: string }>
+    await saveLastProject({ id: "uuid-new", name: "New" })
+    expect(storeData.get("lastProject")).toEqual({ id: "uuid-new", name: "New" })
+    const recent = storeData.get("recentProjects") as Array<{ id: string }>
     expect(recent).toBeDefined()
-    expect(recent[0].path).toBe("/new")
+    expect(recent[0].id).toBe("uuid-new")
   })
 })
 
 describe("addToRecentProjects", () => {
   it("adds project to front", async () => {
-    storeData.set("recentProjects", [{ name: "Old", path: "/old" }])
-    await addToRecentProjects({ name: "New", path: "/new" })
-    const recent = storeData.get("recentProjects") as Array<{ path: string }>
-    expect(recent[0].path).toBe("/new")
+    storeData.set("recentProjects", [{ id: "uuid-old", name: "Old" }])
+    await addToRecentProjects({ id: "uuid-new", name: "New" })
+    const recent = storeData.get("recentProjects") as Array<{ id: string }>
+    expect(recent[0].id).toBe("uuid-new")
   })
 
-  it("deduplicates by path", async () => {
-    storeData.set("recentProjects", [{ name: "P", path: "/p" }])
-    await addToRecentProjects({ name: "P2", path: "/p" })
-    const recent = storeData.get("recentProjects") as Array<{ name: string; path: string }>
+  it("deduplicates by id", async () => {
+    storeData.set("recentProjects", [{ id: "uuid-p", name: "P" }])
+    await addToRecentProjects({ id: "uuid-p", name: "P-updated" })
+    const recent = storeData.get("recentProjects") as Array<{ name: string }>
     expect(recent).toHaveLength(1)
-    expect(recent[0].name).toBe("P2")
+    expect(recent[0].name).toBe("P-updated")
   })
 
   it("limits to 10 entries", async () => {
     const existing = Array.from({ length: 10 }, (_, i) => ({
+      id: `uuid-${i}`,
       name: `P${i}`,
-      path: `/p${i}`,
     }))
     storeData.set("recentProjects", existing)
-    await addToRecentProjects({ name: "New", path: "/new" })
-    const recent = storeData.get("recentProjects") as Array<{ path: string }>
+    await addToRecentProjects({ id: "uuid-new", name: "New" })
+    const recent = storeData.get("recentProjects") as Array<{ id: string }>
     expect(recent.length).toBeLessThanOrEqual(10)
-    expect(recent[0].path).toBe("/new")
+    expect(recent[0].id).toBe("uuid-new")
   })
 })
 
 describe("removeFromRecentProjects", () => {
-  it("removes project by path", async () => {
+  it("removes project by id", async () => {
     storeData.set("recentProjects", [
-      { name: "A", path: "/a" },
-      { name: "B", path: "/b" },
+      { id: "uuid-a", name: "A" },
+      { id: "uuid-b", name: "B" },
     ])
-    await removeFromRecentProjects("/a")
-    const recent = storeData.get("recentProjects") as Array<{ path: string }>
+    await removeFromRecentProjects("uuid-a")
+    const recent = storeData.get("recentProjects") as Array<{ id: string }>
     expect(recent).toHaveLength(1)
-    expect(recent[0].path).toBe("/b")
+    expect(recent[0].id).toBe("uuid-b")
   })
 })
 

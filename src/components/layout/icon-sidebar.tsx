@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import Tooltip from "@mui/material/Tooltip"
@@ -12,6 +11,7 @@ import FormatListBulleted from "@mui/icons-material/FormatListBulleted"
 import Explore from "@mui/icons-material/Explore"
 import Settings from "@mui/icons-material/Settings"
 import SwapHoriz from "@mui/icons-material/SwapHoriz"
+import AdminPanelSettings from "@mui/icons-material/AdminPanelSettings"
 import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
@@ -45,22 +45,6 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
   const toggleResearchPanel = useResearchStore((s) => s.setPanelOpen)
-
-  const [daemonStatus, setDaemonStatus] = useState<string>("starting")
-  useEffect(() => {
-    const check = async () => {
-      try {
-        const { clipServerStatus } = await import("@/commands/fs")
-        const status = await clipServerStatus()
-        setDaemonStatus(status)
-      } catch {
-        setDaemonStatus("error")
-      }
-    }
-    check()
-    const interval = setInterval(check, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   const navButtonSx = (active: boolean) => ({
     position: "relative" as const,
@@ -176,46 +160,13 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
       </Stack>
 
       <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", pb: 0.5, width: "100%" }}>
-        <Tooltip
-          title={
-            <>
-              {daemonStatus === "running" && t("iconSidebar.clipRunning")}
-              {daemonStatus === "starting" && t("iconSidebar.clipStarting")}
-              {daemonStatus === "port_conflict" && t("iconSidebar.clipPortConflict")}
-              {daemonStatus === "error" && t("iconSidebar.clipError")}
-            </>
-          }
-          placement="right"
-          enterDelay={300}
-        >
-          <IconButton size="small" sx={{ width: 24, height: 24, p: 0 }}>
-            <Box
-              sx={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                bgcolor:
-                  daemonStatus === "running"
-                    ? "#15803D"
-                    : daemonStatus === "starting"
-                      ? "#D97706"
-                      : "#B91C1C",
-                boxShadow:
-                  daemonStatus === "running"
-                    ? "0 0 8px rgba(21,128,61,0.5)"
-                    : daemonStatus === "starting"
-                      ? "0 0 8px rgba(217,119,6,0.5)"
-                      : "0 0 8px rgba(185,28,28,0.5)",
-                animation:
-                  daemonStatus === "starting" || (daemonStatus !== "running" && daemonStatus !== "port_conflict")
-                    ? "pulse 2s ease-in-out infinite"
-                    : "none",
-                "@keyframes pulse": {
-                  "0%, 100%": { opacity: 1 },
-                  "50%": { opacity: 0.35 },
-                },
-              }}
-            />
+        <Tooltip title={t("nav.admin")} placement="right" enterDelay={300}>
+          <IconButton
+            size="small"
+            onClick={() => setActiveView("admin")}
+            sx={navButtonSx(activeView === "admin")}
+          >
+            <AdminPanelSettings sx={{ fontSize: 18 }} />
           </IconButton>
         </Tooltip>
 

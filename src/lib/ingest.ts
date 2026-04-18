@@ -1,11 +1,12 @@
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { streamChat } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
+import { getFileCategory } from "@/lib/file-types"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { useActivityStore } from "@/stores/activity-store"
 import { useReviewStore, type ReviewItem } from "@/stores/review-store"
-import { getFileName, normalizePath } from "@/lib/path-utils"
+import { getFileName } from "@/lib/path-utils"
 import { checkIngestCache, saveIngestCache } from "@/lib/ingest-cache"
 import { needsPreprocess } from "@/lib/file-types"
 
@@ -38,16 +39,14 @@ function normalizeFrontmatter(content: string): string {
  * Used when importing new files.
  */
 export async function autoIngest(
-  projectPath: string,
-  sourcePath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  sourcePath: string, // relative to project root
+  _llmConfig?: LlmConfig,
   signal?: AbortSignal,
   folderContext?: string,
 ): Promise<string[]> {
-  const pp = normalizePath(projectPath)
-  const sp = normalizePath(sourcePath)
   const activity = useActivityStore.getState()
-  const fileName = getFileName(sp)
+  const fileName = getFileName(sourcePath)
   const activityId = activity.addItem({
     type: "ingest",
     title: fileName,
@@ -57,15 +56,15 @@ export async function autoIngest(
   })
 
   const [sourceContent, schema, purpose, index, overview] = await Promise.all([
-    readSourceForIngest(sp),
-    tryReadFile(`${pp}/schema.md`),
-    tryReadFile(`${pp}/purpose.md`),
-    tryReadFile(`${pp}/wiki/index.md`),
-    tryReadFile(`${pp}/wiki/overview.md`),
+    readSourceForIngest(projectId, sourcePath),
+    tryReadFile(projectId, "schema.md"),
+    tryReadFile(projectId, "purpose.md"),
+    tryReadFile(projectId, "wiki/index.md"),
+    tryReadFile(projectId, "wiki/overview.md"),
   ])
 
   // ── Cache check: skip re-ingest if source content hasn't changed ──
-  const cachedFiles = await checkIngestCache(pp, fileName, sourceContent)
+  const cachedFiles = await checkIngestCache(projectId, fileName, sourceContent)
   if (cachedFiles !== null) {
     activity.updateItem(activityId, {
       status: "done",
@@ -80,14 +79,11 @@ export async function autoIngest(
     : sourceContent
 
   // ── Step 1: Analysis ──────────────────────────────────────────
-  // LLM reads the source and produces a structured analysis:
-  // key entities, concepts, main arguments, connections to existing wiki, contradictions
   activity.updateItem(activityId, { detail: "Step 1/2: Analyzing source..." })
 
   let analysis = ""
 
   await streamChat(
-    llmConfig,
     [
       { role: "system", content: buildAnalysisPrompt(purpose, index) },
       { role: "user", content: `Analyze this source document:\n\n**File:** ${fileName}${folderContext ? `\n**Folder context:** ${folderContext}` : ""}\n\n---\n\n${truncatedContent}` },
@@ -107,13 +103,11 @@ export async function autoIngest(
   }
 
   // ── Step 2: Generation ────────────────────────────────────────
-  // LLM takes the analysis as context and produces wiki files + review items
   activity.updateItem(activityId, { detail: "Step 2/2: Generating wiki pages..." })
 
   let generation = ""
 
   await streamChat(
-    llmConfig,
     [
       { role: "system", content: buildGenerationPrompt(schema, purpose, index, fileName, overview) },
       {
@@ -147,12 +141,11 @@ export async function autoIngest(
 
   // ── Step 3: Write files ───────────────────────────────────────
   activity.updateItem(activityId, { detail: "Writing files..." })
-  const writtenPaths = await writeFileBlocks(pp, generation)
+  const writtenPaths = await writeFileBlocks(projectId, generation)
 
   // Ensure source summary page exists (LLM may not have generated it correctly)
   const sourceBaseName = fileName.replace(/\.[^.]+$/, "")
   const sourceSummaryPath = `wiki/sources/${sourceBaseName}.md`
-  const sourceSummaryFullPath = `${pp}/${sourceSummaryPath}`
   const hasSourceSummary = writtenPaths.some((p) => p.startsWith("wiki/sources/"))
 
   if (!hasSourceSummary) {
@@ -174,7 +167,7 @@ export async function autoIngest(
       "",
     ].join("\n")
     try {
-      await writeFile(sourceSummaryFullPath, fallbackContent)
+      await writeFile(projectId, sourceSummaryPath, fallbackContent)
       writtenPaths.push(sourceSummaryPath)
     } catch {
       // non-critical
@@ -183,7 +176,7 @@ export async function autoIngest(
 
   if (writtenPaths.length > 0) {
     try {
-      const tree = await listDirectory(pp)
+      const tree = await listDirectory(projectId)
       useWikiStore.getState().setFileTree(tree)
       useWikiStore.getState().bumpDataVersion()
     } catch {
@@ -192,14 +185,14 @@ export async function autoIngest(
   }
 
   // ── Step 4: Parse review items ────────────────────────────────
-  const reviewItems = parseReviewBlocks(generation, sp)
+  const reviewItems = parseReviewBlocks(generation, sourcePath)
   if (reviewItems.length > 0) {
     useReviewStore.getState().addItems(reviewItems)
   }
 
   // ── Step 5: Save to cache ───────────────────────────────────
   if (writtenPaths.length > 0) {
-    await saveIngestCache(pp, fileName, sourceContent, writtenPaths)
+    await saveIngestCache(projectId, fileName, sourceContent, writtenPaths)
   }
 
   // ── Step 6: Generate embeddings (if enabled) ───────────────
@@ -211,10 +204,10 @@ export async function autoIngest(
         const pageId = wpath.split("/").pop()?.replace(/\.md$/, "") ?? ""
         if (!pageId || ["index", "log", "overview"].includes(pageId)) continue
         try {
-          const content = await readFile(`${pp}/${wpath}`)
+          const content = await readFile(projectId, wpath)
           const titleMatch = content.match(/^---\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m)
           const title = titleMatch ? titleMatch[1].trim() : pageId
-          await embedPage(pp, pageId, title, content, embCfg)
+          await embedPage(projectId, pageId, title, content, embCfg)
         } catch {
           // non-critical
         }
@@ -237,7 +230,7 @@ export async function autoIngest(
   return writtenPaths
 }
 
-async function writeFileBlocks(projectPath: string, text: string): Promise<string[]> {
+async function writeFileBlocks(projectId: string, text: string): Promise<string[]> {
   const writtenPaths: string[] = []
   const matches = text.matchAll(FILE_BLOCK_REGEX)
 
@@ -257,18 +250,17 @@ async function writeFileBlocks(projectPath: string, text: string): Promise<strin
       continue
     }
 
-    const fullPath = `${projectPath}/${relativePath}`
     try {
       if (relativePath === "wiki/log.md" || relativePath.endsWith("/log.md")) {
-        const existing = await tryReadFile(fullPath)
+        const existing = await tryReadFile(projectId, relativePath)
         const appended = existing ? `${existing}\n\n${content.trim()}` : content.trim()
-        await writeFile(fullPath, appended)
+        await writeFile(projectId, relativePath, appended)
       } else {
-        await writeFile(fullPath, content)
+        await writeFile(projectId, relativePath, content)
       }
       writtenPaths.push(relativePath)
     } catch (err) {
-      console.error(`Failed to write ${fullPath}:`, err)
+      console.error(`Failed to write ${relativePath}:`, err)
     }
   }
 
@@ -494,9 +486,9 @@ function getStore() {
   return useChatStore.getState()
 }
 
-async function tryReadFile(path: string): Promise<string> {
+async function tryReadFile(projectId: string, relativePath: string): Promise<string> {
   try {
-    return await readFile(path)
+    return await readFile(projectId, relativePath)
   } catch {
     return ""
   }
@@ -507,37 +499,35 @@ async function tryReadFile(path: string): Promise<string> {
  * For binary/preprocess-needed files (PDF, DOCX, etc.) prefer the .cache.txt
  * extract so the LLM receives readable text instead of raw bytes.
  */
-async function readSourceForIngest(path: string): Promise<string> {
-  const ext = path.split(".").pop()?.toLowerCase() ?? ""
-  if (needsPreprocess(ext)) {
-    const cached = await tryReadFile(path + ".cache.txt")
+async function readSourceForIngest(projectId: string, relativePath: string): Promise<string> {
+  const category = getFileCategory(relativePath)
+  if (needsPreprocess(category)) {
+    const cached = await tryReadFile(projectId, relativePath + ".cache.txt")
     if (cached && !cached.startsWith("[Binary file:")) return cached
   }
-  return tryReadFile(path)
+  return tryReadFile(projectId, relativePath)
 }
 
 export async function startIngest(
-  projectPath: string,
-  sourcePath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  sourcePath: string, // relative to project root
+  _llmConfig?: LlmConfig,
   signal?: AbortSignal,
 ): Promise<void> {
-  const pp = normalizePath(projectPath)
-  const sp = normalizePath(sourcePath)
   const store = getStore()
   store.setMode("ingest")
-  store.setIngestSource(sp)
+  store.setIngestSource(sourcePath)
   store.clearMessages()
   store.setStreaming(false)
 
   const [sourceContent, schema, purpose, index] = await Promise.all([
-    readSourceForIngest(sp),
-    tryReadFile(`${pp}/wiki/schema.md`),
-    tryReadFile(`${pp}/wiki/purpose.md`),
-    tryReadFile(`${pp}/wiki/index.md`),
+    readSourceForIngest(projectId, sourcePath),
+    tryReadFile(projectId, "wiki/schema.md"),
+    tryReadFile(projectId, "wiki/purpose.md"),
+    tryReadFile(projectId, "wiki/index.md"),
   ])
 
-  const fileName = getFileName(sp)
+  const fileName = getFileName(sourcePath)
 
   const systemPrompt = [
     "You are a knowledgeable assistant helping to build a wiki from source documents.",
@@ -569,7 +559,6 @@ export async function startIngest(
   let accumulated = ""
 
   await streamChat(
-    llmConfig,
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
@@ -591,17 +580,16 @@ export async function startIngest(
 }
 
 export async function executeIngestWrites(
-  projectPath: string,
-  llmConfig: LlmConfig,
+  projectId: string,
+  _llmConfig?: LlmConfig,
   userGuidance?: string,
   signal?: AbortSignal,
 ): Promise<string[]> {
-  const pp = normalizePath(projectPath)
   const store = getStore()
 
   const [schema, index] = await Promise.all([
-    tryReadFile(`${pp}/wiki/schema.md`),
-    tryReadFile(`${pp}/wiki/index.md`),
+    tryReadFile(projectId, "wiki/schema.md"),
+    tryReadFile(projectId, "wiki/index.md"),
   ])
 
   const conversationHistory = store.messages
@@ -647,7 +635,6 @@ export async function executeIngestWrites(
     .join("\n\n")
 
   await streamChat(
-    llmConfig,
     [{ role: "system", content: systemPrompt }, ...conversationHistory],
     {
       onToken: (token) => {
@@ -678,21 +665,19 @@ export async function executeIngestWrites(
       content = normalizeFrontmatter(content)
     }
 
-    const fullPath = `${pp}/${relativePath}`
-
     try {
       if (relativePath === "wiki/log.md" || relativePath.endsWith("/log.md")) {
-        const existing = await tryReadFile(fullPath)
+        const existing = await tryReadFile(projectId, relativePath)
         const appended = existing
           ? `${existing}\n\n${content.trim()}`
           : content.trim()
-        await writeFile(fullPath, appended)
+        await writeFile(projectId, relativePath, appended)
       } else {
-        await writeFile(fullPath, content)
+        await writeFile(projectId, relativePath, content)
       }
-      writtenPaths.push(fullPath)
+      writtenPaths.push(relativePath)
     } catch (err) {
-      console.error(`Failed to write ${fullPath}:`, err)
+      console.error(`Failed to write ${relativePath}:`, err)
     }
   }
 

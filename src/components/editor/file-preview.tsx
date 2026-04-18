@@ -17,22 +17,23 @@ import { getFileName } from "@/lib/path-utils"
 const NO_CACHE = "__NO_CACHE__"
 
 interface FilePreviewProps {
+  projectId: string
   filePath: string
   textContent: string
 }
 
-export function FilePreview({ filePath, textContent }: FilePreviewProps) {
+export function FilePreview({ projectId, filePath, textContent }: FilePreviewProps) {
   const { t } = useTranslation()
   const category = getFileCategory(filePath)
   const fileName = getFileName(filePath)
 
   switch (category) {
     case "image":
-      return <ImagePreview filePath={filePath} fileName={fileName} />
+      return <ImagePreview projectId={projectId} filePath={filePath} fileName={fileName} />
     case "video":
-      return <VideoPreview filePath={filePath} fileName={fileName} />
+      return <VideoPreview projectId={projectId} filePath={filePath} fileName={fileName} />
     case "audio":
-      return <AudioPreview filePath={filePath} fileName={fileName} />
+      return <AudioPreview projectId={projectId} filePath={filePath} fileName={fileName} />
     case "pdf":
       if (textContent === NO_CACHE || !textContent) {
         return <ProcessingPlaceholder filePath={filePath} fileName={fileName} />
@@ -54,8 +55,8 @@ export function FilePreview({ filePath, textContent }: FilePreviewProps) {
   }
 }
 
-function ImagePreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = mediaUrl(filePath)
+function ImagePreview({ projectId, filePath, fileName }: { projectId: string; filePath: string; fileName: string }) {
+  const src = mediaUrl(projectId, filePath)
   return (
     <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
       <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
@@ -83,8 +84,8 @@ function ImagePreview({ filePath, fileName }: { filePath: string; fileName: stri
   )
 }
 
-function VideoPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = mediaUrl(filePath)
+function VideoPreview({ projectId, filePath, fileName }: { projectId: string; filePath: string; fileName: string }) {
+  const src = mediaUrl(projectId, filePath)
   return (
     <Box sx={{ display: "flex", height: "100%", flexDirection: "column", p: 3 }}>
       <Typography variant="caption" sx={{ mb: 2, color: "text.secondary" }}>
@@ -114,8 +115,8 @@ function VideoPreview({ filePath, fileName }: { filePath: string; fileName: stri
   )
 }
 
-function AudioPreview({ filePath, fileName }: { filePath: string; fileName: string }) {
-  const src = mediaUrl(filePath)
+function AudioPreview({ projectId, filePath, fileName }: { projectId: string; filePath: string; fileName: string }) {
+  const src = mediaUrl(projectId, filePath)
   return (
     <Box
       sx={{

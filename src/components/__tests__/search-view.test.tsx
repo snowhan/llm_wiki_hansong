@@ -11,7 +11,7 @@ vi.mock("@/lib/search", () => ({
 beforeEach(() => {
   vi.mocked(searchWiki).mockReset()
   useWikiStore.setState({
-    project: { name: "W", path: "/projects/wiki" },
+    project: { id: "wiki-uuid", name: "W", path: "/projects/wiki" },
     fileTree: [],
     selectedFile: null,
     fileContent: "",

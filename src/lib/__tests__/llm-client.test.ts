@@ -1,38 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { streamChat, type StreamCallbacks } from "../llm-client"
-import type { LlmConfig } from "@/stores/wiki-store"
-
-vi.mock("../llm-providers", () => ({
-  getProviderConfig: vi.fn(() => ({
-    url: "https://api.example.com/v1/chat/completions",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer key" },
-    buildBody: (msgs: unknown[]) => ({ model: "test", messages: msgs, stream: true }),
-    parseStream: (line: string) => {
-      if (line === "data: [DONE]") return null
-      if (line.startsWith("data: ")) {
-        try {
-          const json = JSON.parse(line.slice(6))
-          return json.choices?.[0]?.delta?.content ?? null
-        } catch {
-          return null
-        }
-      }
-      return null
-    },
-  })),
-}))
 
 const mockFetch = vi.fn()
 vi.stubGlobal("fetch", mockFetch)
 
-const config: LlmConfig = {
-  provider: "openai",
-  apiKey: "test-key",
-  model: "gpt-4",
-  ollamaUrl: "http://localhost:11434",
-  customEndpoint: "",
-  maxContextSize: 4096,
-}
+// Mock auth module so no localStorage access needed
+vi.mock("@/lib/auth", () => ({
+  getStoredToken: vi.fn(() => "test-token"),
+}))
 
 function makeSSEStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
@@ -68,7 +43,7 @@ describe("streamChat", () => {
     mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb, isDone } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(tokens).toEqual(["Hello", " world"])
     expect(isDone()).toBe(true)
   })
@@ -77,7 +52,7 @@ describe("streamChat", () => {
     mockFetch.mockResolvedValue(new Response("Bad request", { status: 400, statusText: "Bad Request" }))
 
     const { errors, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(errors).toHaveLength(1)
     expect(errors[0].message).toContain("400")
   })
@@ -88,7 +63,7 @@ describe("streamChat", () => {
     mockFetch.mockResolvedValue(resp)
 
     const { errors, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(errors).toHaveLength(1)
     expect(errors[0].message).toContain("null")
   })
@@ -100,7 +75,7 @@ describe("streamChat", () => {
     mockFetch.mockRejectedValue(err)
 
     const { cb, isDone, errors } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb, ac.signal)
+    await streamChat([{ role: "user", content: "hi" }], cb, ac.signal)
     expect(isDone()).toBe(true)
     expect(errors).toHaveLength(0)
   })
@@ -109,7 +84,7 @@ describe("streamChat", () => {
     mockFetch.mockRejectedValue(new Error("Network failure"))
 
     const { errors, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(errors).toHaveLength(1)
     expect(errors[0].message).toBe("Network failure")
   })
@@ -122,7 +97,7 @@ describe("streamChat", () => {
     mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(tokens).toEqual(["split"])
   })
 
@@ -133,7 +108,7 @@ describe("streamChat", () => {
     mockFetch.mockResolvedValue(new Response(stream, { status: 200 }))
 
     const { tokens, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(tokens).toEqual(["last"])
   })
 
@@ -141,7 +116,7 @@ describe("streamChat", () => {
     mockFetch.mockRejectedValue(new Error("Load failed"))
 
     const { errors, cb } = makeCallbacks()
-    await streamChat(config, [{ role: "user", content: "hi" }], cb)
+    await streamChat([{ role: "user", content: "hi" }], cb)
     expect(errors).toHaveLength(1)
     expect(errors[0].message).toContain("timed out")
   })

@@ -14,6 +14,7 @@ const VIEW_LABELS: Record<string, string> = {
   lint: "nav.lint",
   review: "nav.review",
   settings: "nav.settings",
+  admin: "nav.admin",
 }
 
 export function MainToolbar() {
@@ -24,15 +25,10 @@ export function MainToolbar() {
   const chatExpanded = useWikiStore((s) => s.chatExpanded)
   const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
 
-  // Build breadcrumb from activeTabPath relative to project path
+  // Build breadcrumb from activeTabPath (already relative)
   const buildBreadcrumb = (): string[] => {
     if (!activeTabPath || !project) return []
-    const projectPath = project.path.replace(/\\/g, "/")
-    const filePath = activeTabPath.replace(/\\/g, "/")
-    const relative = filePath.startsWith(projectPath)
-      ? filePath.slice(projectPath.length).replace(/^\//, "")
-      : filePath
-    return relative.split("/").filter(Boolean)
+    return activeTabPath.replace(/\\/g, "/").split("/").filter(Boolean)
   }
 
   const isWikiView = activeView === "wiki"

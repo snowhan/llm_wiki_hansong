@@ -31,10 +31,11 @@ describe("saveReviewItems", () => {
         createdAt: 123,
       },
     ]
-    await saveReviewItems("/proj", items)
+    await saveReviewItems("proj-uuid", items)
     expect(mockWriteFile).toHaveBeenCalledTimes(1)
-    const [path, data] = mockWriteFile.mock.calls[0]
-    expect(path).toContain("review.json")
+    // writeFile(projectId, relativePath, data)
+    const [_projectId, relativePath, data] = mockWriteFile.mock.calls[0]
+    expect(relativePath).toContain("review.json")
     expect(JSON.parse(data)).toEqual(items)
   })
 })
@@ -42,14 +43,14 @@ describe("saveReviewItems", () => {
 describe("loadReviewItems", () => {
   it("returns empty array when file missing", async () => {
     mockReadFile.mockRejectedValue(new Error("Not found"))
-    const result = await loadReviewItems("/proj")
+    const result = await loadReviewItems("proj-uuid")
     expect(result).toEqual([])
   })
 
   it("returns parsed items", async () => {
     const items = [{ id: "r-1", type: "suggestion", title: "T" }]
     mockReadFile.mockResolvedValue(JSON.stringify(items))
-    const result = await loadReviewItems("/proj")
+    const result = await loadReviewItems("proj-uuid")
     expect(result).toEqual(items)
   })
 })
@@ -62,19 +63,20 @@ describe("saveChatHistory", () => {
       { id: "m1", role: "user" as const, content: "hi", timestamp: 1, conversationId: "c1" },
       { id: "m2", role: "assistant" as const, content: "hello", timestamp: 2, conversationId: "c1" },
     ]
-    await saveChatHistory("/proj", convs, msgs)
+    await saveChatHistory("proj-uuid", convs, msgs)
 
     expect(mockWriteFile).toHaveBeenCalledTimes(2)
-    const paths = mockWriteFile.mock.calls.map((call) => call[0] as string)
-    expect(paths.some((p: string) => p.includes("conversations.json"))).toBe(true)
-    expect(paths.some((p: string) => p.includes("chats/c1.json"))).toBe(true)
+    // Each call: (projectId, relativePath, data)
+    const relativePaths = mockWriteFile.mock.calls.map((call) => call[1] as string)
+    expect(relativePaths.some((p: string) => p.includes("conversations.json"))).toBe(true)
+    expect(relativePaths.some((p: string) => p.includes("chats/c1.json"))).toBe(true)
   })
 })
 
 describe("loadChatHistory", () => {
   it("returns empty when no files exist", async () => {
     mockReadFile.mockRejectedValue(new Error("Not found"))
-    const result = await loadChatHistory("/proj")
+    const result = await loadChatHistory("proj-uuid")
     expect(result).toEqual({ conversations: [], messages: [] })
   })
 
@@ -82,31 +84,22 @@ describe("loadChatHistory", () => {
     const convs = [{ id: "c1", title: "Chat", createdAt: 1, updatedAt: 2 }]
     const msgs = [{ id: "m1", role: "user", content: "hi", timestamp: 1, conversationId: "c1" }]
 
-    mockReadFile.mockImplementation(async (path: string) => {
-      if (path.includes("conversations.json")) return JSON.stringify(convs)
-      if (path.includes("chats/c1.json")) return JSON.stringify(msgs)
+    mockReadFile.mockImplementation(async (_projectId: string, relativePath: string) => {
+      if (relativePath.includes("conversations.json")) return JSON.stringify(convs)
+      if (relativePath.includes("chats/c1.json")) return JSON.stringify(msgs)
       throw new Error("Not found")
     })
 
-    const result = await loadChatHistory("/proj")
+    const result = await loadChatHistory("proj-uuid")
     expect(result.conversations).toEqual(convs)
     expect(result.messages).toEqual(msgs)
   })
 
-  it("handles legacy flat array format", async () => {
-    const legacyMsgs = [
-      { id: "m1", role: "user", content: "old", timestamp: 100 },
-    ]
+  it("handles missing conversations file as empty state", async () => {
+    mockReadFile.mockRejectedValue(new Error("Not found"))
 
-    mockReadFile.mockImplementation(async (path: string) => {
-      if (path.includes("conversations.json")) throw new Error("Not found")
-      if (path.includes("chat-history.json")) return JSON.stringify(legacyMsgs)
-      throw new Error("Not found")
-    })
-
-    const result = await loadChatHistory("/proj")
-    expect(result.conversations).toHaveLength(1)
-    expect(result.conversations[0].id).toBe("default")
-    expect(result.messages[0].conversationId).toBe("default")
+    const result = await loadChatHistory("proj-uuid")
+    expect(result.conversations).toHaveLength(0)
+    expect(result.messages).toHaveLength(0)
   })
 })

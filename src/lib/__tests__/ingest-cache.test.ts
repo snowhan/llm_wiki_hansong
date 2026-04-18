@@ -17,13 +17,13 @@ beforeEach(() => {
 describe("checkIngestCache", () => {
   it("returns null when cache file does not exist", async () => {
     mockReadFile.mockRejectedValue(new Error("Not found"))
-    const result = await checkIngestCache("/proj", "file.pdf", "content")
+    const result = await checkIngestCache("proj-uuid", "file.pdf", "content")
     expect(result).toBeNull()
   })
 
   it("returns null when entry not in cache", async () => {
     mockReadFile.mockResolvedValue(JSON.stringify({ entries: {} }))
-    const result = await checkIngestCache("/proj", "file.pdf", "content")
+    const result = await checkIngestCache("proj-uuid", "file.pdf", "content")
     expect(result).toBeNull()
   })
 
@@ -47,7 +47,7 @@ describe("checkIngestCache", () => {
       }),
     )
 
-    const result = await checkIngestCache("/proj", "file.pdf", content)
+    const result = await checkIngestCache("proj-uuid", "file.pdf", content)
     expect(result).toEqual(["wiki/entities/foo.md"])
   })
 
@@ -64,7 +64,7 @@ describe("checkIngestCache", () => {
       }),
     )
 
-    const result = await checkIngestCache("/proj", "file.pdf", "new content")
+    const result = await checkIngestCache("proj-uuid", "file.pdf", "new content")
     expect(result).toBeNull()
   })
 })
@@ -74,11 +74,12 @@ describe("saveIngestCache", () => {
     mockReadFile.mockResolvedValue(JSON.stringify({ entries: {} }))
     mockWriteFile.mockResolvedValue(undefined)
 
-    await saveIngestCache("/proj", "file.pdf", "content", ["wiki/a.md"])
+    await saveIngestCache("proj-uuid", "file.pdf", "content", ["wiki/a.md"])
 
     expect(mockWriteFile).toHaveBeenCalledTimes(1)
-    const [path, data] = mockWriteFile.mock.calls[0]
-    expect(path).toContain("ingest-cache.json")
+    // writeFile(projectId, relativePath, data)
+    const [_projectId, relativePath, data] = mockWriteFile.mock.calls[0]
+    expect(relativePath).toContain("ingest-cache.json")
     const parsed = JSON.parse(data)
     expect(parsed.entries["file.pdf"]).toBeDefined()
     expect(parsed.entries["file.pdf"].filesWritten).toEqual(["wiki/a.md"])
@@ -92,9 +93,9 @@ describe("saveIngestCache", () => {
     )
     mockWriteFile.mockResolvedValue(undefined)
 
-    await saveIngestCache("/proj", "new.pdf", "content", [])
+    await saveIngestCache("proj-uuid", "new.pdf", "content", [])
 
-    const [, data] = mockWriteFile.mock.calls[0]
+    const [, , data] = mockWriteFile.mock.calls[0]
     const parsed = JSON.parse(data)
     expect(parsed.entries["old.pdf"]).toBeDefined()
     expect(parsed.entries["new.pdf"]).toBeDefined()
@@ -113,9 +114,9 @@ describe("removeFromIngestCache", () => {
     )
     mockWriteFile.mockResolvedValue(undefined)
 
-    await removeFromIngestCache("/proj", "a.pdf")
+    await removeFromIngestCache("proj-uuid", "a.pdf")
 
-    const [, data] = mockWriteFile.mock.calls[0]
+    const [, , data] = mockWriteFile.mock.calls[0]
     const parsed = JSON.parse(data)
     expect(parsed.entries["a.pdf"]).toBeUndefined()
     expect(parsed.entries["b.pdf"]).toBeDefined()
