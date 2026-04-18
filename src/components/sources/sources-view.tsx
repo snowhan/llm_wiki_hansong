@@ -47,6 +47,8 @@ export function SourcesView() {
   const [preprocessStatuses, setPreprocessStatuses] = useState<Record<string, PreprocessStatus>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  // Prevent reconnect useEffect from firing twice (React Strict Mode)
+  const reconnectRanRef = useRef(false)
 
   const setFileStatus = useCallback((path: string, status: PreprocessStatus) => {
     setPreprocessStatuses((prev) => ({ ...prev, [path]: status }))
@@ -112,6 +114,10 @@ export function SourcesView() {
   // ── Reconnect to running server tasks on mount ──────────────────────────
   useEffect(() => {
     if (!sources.length || !project) return
+    // Prevent double-firing in React Strict Mode (dev) and on each render cycle
+    if (reconnectRanRef.current) return
+    reconnectRanRef.current = true
+
     const allFiles = flattenAllFiles(sources)
 
     ;(async () => {
@@ -194,12 +200,34 @@ export function SourcesView() {
         await triggerServerIngest(file)
       }
     })()
+    return () => {
+      // Reset so the effect re-runs when sources/project changes (e.g. project switch)
+      reconnectRanRef.current = false
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, project])
 
   // ── Core: start a server-side ingest task and subscribe to its SSE ──────
   async function triggerServerIngest(node: FileNode, folderContext = "") {
     if (!project) return
+
+    // ── Deduplication guard ────────────────────────────────────────────
+    // Prevent concurrent/duplicate tasks for the same file
+    const store = useWikiStore.getState()
+    if (store.ingestStatuses[node.path] === "ingesting") {
+      console.log(`[triggerServerIngest] skip – already ingesting: ${node.name}`)
+      return
+    }
+    if (store.serverTaskIds[node.path]) {
+      console.log(`[triggerServerIngest] skip – already has serverTaskId: ${node.name}`)
+      return
+    }
+    if (store.ingestingPath && store.ingestingPath !== node.path) {
+      console.log(`[triggerServerIngest] skip – another file is already ingesting: ${node.name}`)
+      return
+    }
+    // ──────────────────────────────────────────────────────────────────
+
     const pp = normalizePath(project.path)
     const activity = useActivityStore.getState()
 

@@ -91,6 +91,8 @@ export function getAllTasks(): ServerIngestTask[] {
 /**
  * Start a server-side ingest task.
  * Returns immediately with a taskId; the actual work runs asynchronously.
+ * Deduplication: if a task for the same (projectPath, sourcePath) is already
+ * running/pending, return that task's id instead of creating a new one.
  */
 export function startIngestTask(
   projectPath: string,
@@ -98,6 +100,17 @@ export function startIngestTask(
   llmConfig: LlmConfig,
   folderContext = "",
 ): string {
+  // Check if an active task already exists for this file
+  const existing = Array.from(taskStore.values()).find(
+    (t) =>
+      t.projectPath === projectPath &&
+      t.sourcePath === sourcePath &&
+      (t.status === "running" || t.status === "pending"),
+  )
+  if (existing) {
+    console.log(`[ingest-service] Reusing existing task ${existing.id} for ${sourcePath}`)
+    return existing.id
+  }
   const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const task: ServerIngestTask = {
     id,
