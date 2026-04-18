@@ -152,19 +152,26 @@ export function SourcesView() {
               } catch { /* non-critical */ }
             }
           },
-          onError: () => {
-            useWikiStore.getState().setIngestStatus(file.path, "error")
-            useWikiStore.getState().setIngestingPath(null)
-            useWikiStore.getState().setServerTaskId(file.path, null)
-          },
+      onError: (msg) => {
+        // "Task not found" means the server was restarted — treat as interrupted
+        // so the auto-retry logic below will pick it up
+        const isGone = msg.includes("not found") || msg.includes("SSE connection error")
+        useWikiStore.getState().setIngestStatus(file.path, isGone ? "interrupted" : "error")
+        useWikiStore.getState().setIngestingPath(null)
+        useWikiStore.getState().setServerTaskId(file.path, null)
+      },
         })
       }
 
-      // 2. Auto-retry "interrupted" files that have no running server task
+      // 2. Auto-retry "interrupted" files AND "error" files whose server task is gone
       const interruptedFiles = allFiles.filter(
-        (f) =>
-          useWikiStore.getState().ingestStatuses[f.path] === "interrupted" &&
-          !runningByPath.has(f.path),
+        (f) => {
+          const status = useWikiStore.getState().ingestStatuses[f.path]
+          const hasStaleTask = !!useWikiStore.getState().serverTaskIds[f.path]
+          // Retry if interrupted, or if previously errored with a server task that no longer exists
+          return (status === "interrupted" || (status === "error" && hasStaleTask)) &&
+            !runningByPath.has(f.path)
+        },
       )
 
       for (const file of interruptedFiles) {

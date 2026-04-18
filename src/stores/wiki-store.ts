@@ -271,9 +271,12 @@ export const useWikiStore = create<WikiState>()(
     onRehydrateStorage: () => (state) => {
       if (!state) return
       // Convert any "ingesting" → "interrupted": page was refreshed mid-ingest
+      // Convert "error" → "idle": allow clean retry on next session
       const updated: Record<string, "idle" | "ingesting" | "interrupted" | "done" | "error"> = {}
       for (const [path, status] of Object.entries(state.ingestStatuses)) {
-        updated[path] = status === "ingesting" ? "interrupted" : status
+        if (status === "ingesting") updated[path] = "interrupted"
+        else if (status === "error") updated[path] = "idle"  // reset errors so user can retry
+        else updated[path] = status
       }
       state.ingestStatuses = updated
       state.ingestingPath = null
