@@ -23,6 +23,7 @@ import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { normalizePath, getFileName, getFileStem } from "@/lib/path-utils"
 import { startServerIngest, subscribeIngestSSE, getAllServerTasks } from "@/commands/ingest"
+import { useActivityStore } from "@/stores/activity-store"
 
 export type PreprocessStatus = "idle" | "processing" | "done" | "error"
 export type IngestStatus = "idle" | "ingesting" | "interrupted" | "done" | "error"
@@ -132,18 +133,33 @@ export function SourcesView() {
         useWikiStore.getState().setIngestStatus(file.path, "ingesting")
         useWikiStore.getState().setIngestingPath(file.path)
 
+        // Create activity item for the reconnected task
+        const actId = useActivityStore.getState().addItem({
+          type: "ingest",
+          title: getFileName(file.path),
+          status: "running",
+          detail: "Reconnecting...",
+          filesWritten: [],
+        })
+
         subscribeIngestSSE(liveTaskId, {
           onUpdate: (task) => {
             useWikiStore.getState().setIngestStatus(
               file.path,
               task.status === "running" ? "ingesting" : task.status === "done" ? "done" : task.status === "error" ? "error" : "ingesting",
             )
+            useActivityStore.getState().updateItem(actId, { detail: task.detail })
           },
           onDone: async (task) => {
             const pp = normalizePath(project.path)
             useWikiStore.getState().setIngestStatus(file.path, task.filesWritten.length > 0 ? "done" : "error")
             useWikiStore.getState().setIngestingPath(null)
             useWikiStore.getState().setServerTaskId(file.path, null)
+            useActivityStore.getState().updateItem(actId, {
+              status: task.filesWritten.length > 0 ? "done" : "error",
+              detail: task.filesWritten.length > 0 ? `${task.filesWritten.length} files written` : (task.error ?? "No files generated"),
+              filesWritten: task.filesWritten,
+            })
             if (task.filesWritten.length > 0) {
               try {
                 const tree = await listDirectory(pp)
@@ -152,14 +168,13 @@ export function SourcesView() {
               } catch { /* non-critical */ }
             }
           },
-      onError: (msg) => {
-        // "Task not found" means the server was restarted — treat as interrupted
-        // so the auto-retry logic below will pick it up
-        const isGone = msg.includes("not found") || msg.includes("SSE connection error")
-        useWikiStore.getState().setIngestStatus(file.path, isGone ? "interrupted" : "error")
-        useWikiStore.getState().setIngestingPath(null)
-        useWikiStore.getState().setServerTaskId(file.path, null)
-      },
+          onError: (msg) => {
+            const isGone = msg.includes("not found") || msg.includes("SSE connection error")
+            useWikiStore.getState().setIngestStatus(file.path, isGone ? "interrupted" : "error")
+            useWikiStore.getState().setIngestingPath(null)
+            useWikiStore.getState().setServerTaskId(file.path, null)
+            useActivityStore.getState().updateItem(actId, { status: "error", detail: msg })
+          },
         })
       }
 
@@ -186,9 +201,19 @@ export function SourcesView() {
   async function triggerServerIngest(node: FileNode, folderContext = "") {
     if (!project) return
     const pp = normalizePath(project.path)
+    const activity = useActivityStore.getState()
 
     useWikiStore.getState().setIngestingPath(node.path)
     useWikiStore.getState().setIngestStatus(node.path, "ingesting")
+
+    // Create activity item so ActivityPanel shows progress
+    const activityId = activity.addItem({
+      type: "ingest",
+      title: node.name,
+      status: "running",
+      detail: "Starting...",
+      filesWritten: [],
+    })
 
     let taskId: string
     try {
@@ -202,6 +227,10 @@ export function SourcesView() {
       console.error("[SourcesView] Failed to start server ingest:", err)
       useWikiStore.getState().setIngestStatus(node.path, "error")
       useWikiStore.getState().setIngestingPath(null)
+      activity.updateItem(activityId, {
+        status: "error",
+        detail: `Failed to start: ${err instanceof Error ? err.message : String(err)}`,
+      })
       return
     }
 
@@ -214,11 +243,19 @@ export function SourcesView() {
           node.path,
           task.status === "running" ? "ingesting" : task.status === "done" ? "done" : task.status === "error" ? "error" : "ingesting",
         )
+        activity.updateItem(activityId, { detail: task.detail })
       },
       onDone: async (task) => {
         useWikiStore.getState().setIngestStatus(node.path, task.filesWritten.length > 0 ? "done" : "error")
         useWikiStore.getState().setIngestingPath(null)
         useWikiStore.getState().setServerTaskId(node.path, null)
+        activity.updateItem(activityId, {
+          status: task.filesWritten.length > 0 ? "done" : "error",
+          detail: task.filesWritten.length > 0
+            ? `${task.filesWritten.length} files written`
+            : (task.error ?? "No files generated"),
+          filesWritten: task.filesWritten,
+        })
         if (task.filesWritten.length > 0) {
           try {
             const tree = await listDirectory(pp)
@@ -227,10 +264,12 @@ export function SourcesView() {
           } catch { /* non-critical */ }
         }
       },
-      onError: () => {
-        useWikiStore.getState().setIngestStatus(node.path, "error")
+      onError: (msg) => {
+        const isGone = msg.includes("not found") || msg.includes("SSE connection error")
+        useWikiStore.getState().setIngestStatus(node.path, isGone ? "interrupted" : "error")
         useWikiStore.getState().setIngestingPath(null)
         useWikiStore.getState().setServerTaskId(node.path, null)
+        activity.updateItem(activityId, { status: "error", detail: msg })
       },
     })
   }

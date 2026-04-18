@@ -277,15 +277,37 @@ function buildProviderCfg(config: LlmConfig, messages: ChatMessage[]): ProviderC
       }
 
     case "wps": {
-      const wpsUrl = process.env.VITE_WPS_GATEWAY_URL ?? "http://ai-gateway.wps.cn/api/v3"
-      const wpsToken = (process.env.VITE_WPS_GATEWAY_TOKEN ?? apiKey) || apiKey
-      const wpsModel = model || (process.env.VITE_WPS_GATEWAY_MODEL ?? "azure/gpt-5.4")
+      // Frontend packs resolved WPS values as JSON in apiKey (see commands/ingest.ts resolveConfigForServer)
+      let wpsToken = apiKey
+      let wpsUrl = customEndpoint || "http://ai-gateway.wps.cn/api/v3"
+      let wpsModel = model || "azure/gpt-5.4"
+      let wpsUid = process.env.VITE_WPS_GATEWAY_UID ?? ""
+      let wpsProductName = process.env.VITE_WPS_GATEWAY_PRODUCT_NAME ?? ""
+
+      try {
+        const resolved = JSON.parse(apiKey) as {
+          token?: string; url?: string; model?: string; uid?: string; productName?: string
+        }
+        if (resolved.token) wpsToken = resolved.token
+        if (resolved.url) wpsUrl = resolved.url
+        if (resolved.model) wpsModel = resolved.model
+        if (resolved.uid) wpsUid = resolved.uid
+        if (resolved.productName) wpsProductName = resolved.productName
+      } catch {
+        // apiKey is not JSON — use it as plain token (legacy)
+      }
+
+      const actionId = [...crypto.getRandomValues(new Uint8Array(16))]
+        .map((b) => b.toString(16).padStart(2, "0")).join("")
+
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${wpsToken}`,
+        "X-Action-Id": actionId,
       }
-      if (process.env.VITE_WPS_GATEWAY_UID) headers["Ai-Gateway-Uid"] = process.env.VITE_WPS_GATEWAY_UID
-      if (process.env.VITE_WPS_GATEWAY_PRODUCT_NAME) headers["Ai-Gateway-Product-Name"] = process.env.VITE_WPS_GATEWAY_PRODUCT_NAME
+      if (wpsUid) headers["Ai-Gateway-Uid"] = wpsUid
+      if (wpsProductName) headers["Ai-Gateway-Product-Name"] = wpsProductName
+
       return {
         url: `${wpsUrl}/chat/completions`,
         headers,

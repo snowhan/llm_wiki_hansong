@@ -25,6 +25,37 @@ export interface SseCallbacks {
 }
 
 /**
+ * Resolve provider-specific env vars that are only available on the frontend
+ * (import.meta.env) before sending the config to the server.
+ * The server has no access to Vite env vars, so we pre-compute them here.
+ */
+function resolveConfigForServer(config: LlmConfig): LlmConfig {
+  if (config.provider !== "wps") return config
+
+  // WPS uses several VITE_ env vars that only Vite can expose.
+  // Pack them into standard LlmConfig fields before sending to the server.
+  const resolvedApiKey = import.meta.env.VITE_WPS_GATEWAY_TOKEN || config.apiKey || ""
+  const resolvedUrl = import.meta.env.VITE_WPS_GATEWAY_URL || "http://ai-gateway.wps.cn/api/v3"
+  const resolvedModel = config.model || import.meta.env.VITE_WPS_GATEWAY_MODEL || "azure/gpt-5.4"
+  // We also need UID and product name — pack them into a JSON string in apiKey
+  // by using a special "wps-resolved" scheme so the server knows to parse them.
+  const extra = {
+    token: resolvedApiKey,
+    url: resolvedUrl,
+    model: resolvedModel,
+    uid: import.meta.env.VITE_WPS_GATEWAY_UID || "",
+    productName: import.meta.env.VITE_WPS_GATEWAY_PRODUCT_NAME || "",
+  }
+  return {
+    ...config,
+    // Store resolved values in apiKey as JSON so the server can unpack them
+    apiKey: JSON.stringify(extra),
+    customEndpoint: resolvedUrl,
+    model: resolvedModel,
+  }
+}
+
+/**
  * Start a server-side ingest task.
  * Returns the taskId that can be used to subscribe to SSE progress.
  */
@@ -37,7 +68,10 @@ export async function startServerIngest(params: {
   const res = await fetch("/api/ingest/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify({
+      ...params,
+      llmConfig: resolveConfigForServer(params.llmConfig),
+    }),
   })
   if (!res.ok) {
     const err = await res.text().catch(() => res.statusText)
