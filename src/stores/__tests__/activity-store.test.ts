@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest"
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest"
 import { useActivityStore } from "../activity-store"
 
 beforeEach(() => {
   useActivityStore.setState({ items: [] })
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 const sampleItem = {
@@ -42,6 +46,21 @@ describe("useActivityStore", () => {
       )
       const unique = new Set(ids)
       expect(unique.size).toBe(5)
+    })
+
+    it("retries ID generation when timestamp/random collide", () => {
+      vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000)
+      const randomSpy = vi.spyOn(Math, "random")
+      randomSpy
+        .mockReturnValueOnce(0.123456)
+        .mockReturnValueOnce(0.123456)
+        .mockReturnValueOnce(0.654321)
+
+      const id1 = useActivityStore.getState().addItem(sampleItem)
+      const id2 = useActivityStore.getState().addItem(sampleItem)
+
+      expect(id1).not.toBe(id2)
+      expect(new Set(useActivityStore.getState().items.map((i) => i.id)).size).toBe(2)
     })
   })
 

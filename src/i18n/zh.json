@@ -123,6 +123,7 @@
     "orphan": "孤立页面",
     "brokenLink": "失效链接",
     "noOutlinks": "无出链",
+    "typeMismatch": "类型不一致",
     "semanticIssue": "语义问题",
     "contradiction": "内容矛盾",
     "stale": "内容过时",

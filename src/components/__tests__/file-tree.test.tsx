@@ -61,6 +61,36 @@ describe("FileTree", () => {
     expect(useWikiStore.getState().selectedFile).toBe("a.md")
   })
 
+  it("uses activeTabPath (not stale selectedFile) for selected marker", () => {
+    useWikiStore.setState({
+      project: { id: "p-uuid", name: "P", path: "/p" },
+      fileTree: [{ name: "a.md", relativePath: "a.md", is_dir: false }],
+      selectedFile: "stale.md",
+      activeTabPath: "a.md",
+    } as any)
+    render(<FileTree />)
+    const btn = screen.getByText("a.md").closest("button")
+    expect(btn?.getAttribute("aria-current")).toBe("page")
+  })
+
+  it("replay state: with two files, only activeTabPath is selected", () => {
+    useWikiStore.setState({
+      project: { id: "p-uuid", name: "P", path: "/p" },
+      fileTree: [
+        { name: "old.md", relativePath: "old.md", is_dir: false },
+        { name: "new.md", relativePath: "new.md", is_dir: false },
+      ],
+      selectedFile: "old.md",
+      activeTabPath: "new.md",
+    } as any)
+    render(<FileTree />)
+
+    const oldBtn = screen.getByText("old.md").closest("button")
+    const newBtn = screen.getByText("new.md").closest("button")
+    expect(oldBtn?.getAttribute("aria-current")).toBeNull()
+    expect(newBtn?.getAttribute("aria-current")).toBe("page")
+  })
+
   it("toggles folder expand/collapse for children", () => {
     useWikiStore.setState({
       project: { id: "p-uuid", name: "P", path: "/p" },

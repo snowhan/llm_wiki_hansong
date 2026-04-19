@@ -23,6 +23,7 @@ describe("ActivityPanel", () => {
         {
           id: "x",
           type: "ingest",
+          projectId: "proj-uuid",
           title: "Ingesting report.pdf",
           status: "running",
           detail: "Analyzing...",
@@ -43,6 +44,7 @@ describe("ActivityPanel", () => {
         {
           id: "d1",
           type: "ingest",
+          projectId: "proj-uuid",
           title: "Done task",
           status: "done",
           detail: "Completed",
@@ -65,6 +67,7 @@ describe("ActivityPanel", () => {
         {
           id: "d1",
           type: "ingest",
+          projectId: "proj-uuid",
           title: "Done task",
           status: "done",
           detail: "ok",
@@ -86,5 +89,24 @@ describe("ActivityPanel", () => {
 
     clearDoneSpy.mockRestore()
     expect(buttons.length).toBeGreaterThan(0)
+  })
+
+  it("hides activities from other projects", () => {
+    useActivityStore.setState({
+      items: [
+        {
+          id: "other-1",
+          type: "ingest",
+          projectId: "other-proj",
+          title: "Other project task",
+          status: "running",
+          detail: "Analyzing...",
+          filesWritten: [],
+          createdAt: Date.now(),
+        },
+      ],
+    } as any)
+    const { container } = render(<ActivityPanel />)
+    expect(container.firstChild).toBeNull()
   })
 })

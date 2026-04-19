@@ -81,24 +81,16 @@ describe("ingest", () => {
   })
 
   it("autoIngest calls streamChat for analysis and generation when no cache", async () => {
-    vi.resetModules()
-
-    vi.mock("../llm-client", () => ({
-      streamChat: vi.fn()
-        .mockImplementationOnce(async (_c: any, _m: any, cb: any) => {
-          cb.onToken("Analysis: key entities found.")
-          cb.onDone()
-        })
-        .mockImplementationOnce(async (_c: any, _m: any, cb: any) => {
-          cb.onToken("---FILE: wiki/sources/test.md---\n---\ntype: source\ntitle: Test\nsources: [test.md]\n---\n# Test\nContent\n---END FILE---")
-          cb.onDone()
-        }),
-    }))
-
-    vi.mock("../ingest-cache", () => ({
-      checkIngestCache: vi.fn().mockResolvedValue(null),
-      saveIngestCache: vi.fn().mockResolvedValue(undefined),
-    }))
+    vi.mocked(checkIngestCache).mockResolvedValue(null)
+    vi.mocked(streamChat)
+      .mockImplementationOnce(async (_messages: any, cb: any) => {
+        cb.onToken("Analysis: key entities found.")
+        cb.onDone()
+      })
+      .mockImplementationOnce(async (_messages: any, cb: any) => {
+        cb.onToken("---FILE: wiki/sources/test.md---\n---\ntype: source\ntitle: Test\nsources: [test.md]\n---\n# Test\nContent\n---END FILE---")
+        cb.onDone()
+      })
 
     vi.mocked(readFile).mockImplementation(async (path: string) => {
       if (path.includes("index.md")) return "# Index"
@@ -110,8 +102,8 @@ describe("ingest", () => {
       return ""
     })
 
-    const mod = await import("../ingest")
-    const result = await mod.autoIngest("/test", "/test/raw/sources/test.md", {
+    const { autoIngest } = await import("../ingest")
+    const result = await autoIngest("/test", "/test/raw/sources/test.md", {
       provider: "openai",
       apiKey: "key",
       model: "m",

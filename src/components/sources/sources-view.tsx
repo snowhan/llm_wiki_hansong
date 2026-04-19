@@ -28,7 +28,8 @@ import type { PreprocessStage } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { getFileName, getFileStem } from "@/lib/path-utils"
-import { startServerIngest, subscribeIngestSSE, getAllServerTasks } from "@/commands/ingest"
+import { startServerIngest, subscribeIngestSSE, getAllServerTasks, getServerIngestStatus } from "@/commands/ingest"
+import type { SseCallbacks } from "@/commands/ingest"
 import { useActivityStore } from "@/stores/activity-store"
 
 export type PreprocessStatus = "idle" | "processing" | "done" | "error"
@@ -39,6 +40,7 @@ export type IngestStatus = "idle" | "ingesting" | "interrupted" | "done" | "erro
 // without being tied to React component lifecycle.
 interface SseEntry { taskId: string; dispose: () => void }
 const _activeSse = new Map<string, SseEntry>()
+const MAX_SSE_RECONNECT_ATTEMPTS = 3
 
 function sseKey(projectId: string, relativePath: string) {
   return `${projectId}:${relativePath}`
@@ -69,6 +71,14 @@ function clearAllSseForProject(projectId: string) {
       _activeSse.delete(key)
     }
   }
+}
+
+// Test helper: reset module-level SSE registry between test cases to avoid cross-test leakage.
+export function __resetSourcesViewTestState() {
+  for (const [, entry] of _activeSse) {
+    try { entry.dispose() } catch { /* ignore */ }
+  }
+  _activeSse.clear()
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -111,7 +121,8 @@ export function SourcesView() {
     loadSources()
   }, [loadSources])
 
-  // Check cache existence and auto-trigger preprocessing for new files
+  // Check cache existence only — do NOT auto-trigger preprocessing.
+  // Text extraction is initiated manually by the user (via the generate button).
   useEffect(() => {
     if (!sources.length || !project) return
     const allFiles = flattenAllFiles(sources)
@@ -119,11 +130,8 @@ export function SourcesView() {
       readFile(project.id, file.relativePath + ".cache.txt")
         .then(() => setFileStatus(file.relativePath, "done"))
         .catch(() => {
-          setFileStatus(file.relativePath, "processing")
-          preprocessFile(project.id, file.relativePath, (stage) => {
-            if (stage === "done" || stage === "cached") setFileStatus(file.relativePath, "done")
-            else if (stage === "error") setFileStatus(file.relativePath, "error")
-          }).catch(() => setFileStatus(file.relativePath, "error"))
+          const current = preprocessStatuses[file.relativePath]
+          if (current !== "processing") setFileStatus(file.relativePath, "idle")
         })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,7 +147,9 @@ export function SourcesView() {
         .then(() => setIngestStatus(file.relativePath, "done"))
         .catch(() => {
           const current = useWikiStore.getState().ingestStatuses[file.relativePath]
-          if (current !== "interrupted") setIngestStatus(file.relativePath, "idle")
+          if (current !== "interrupted" && current !== "done" && current !== "ingesting") {
+            setIngestStatus(file.relativePath, "idle")
+          }
         })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,12 +176,12 @@ export function SourcesView() {
     const allFiles = flattenAllFiles(sources)
 
     ;(async () => {
-      const runningServerTasks = await getAllServerTasks()
+      const allServerTasks = await getAllServerTasks()
       if (cancelled) return
 
       // Only look at tasks that are confirmed running/pending on the server
       const runningByRelPath = new Map(
-        runningServerTasks
+        allServerTasks
           .filter((t) => t.status === "running" || t.status === "pending")
           .map((t) => [t.sourcePath, t.id]),
       )
@@ -196,15 +206,8 @@ export function SourcesView() {
         useWikiStore.getState().setIngestingPath(file.relativePath)
         useWikiStore.getState().setServerTaskId(file.relativePath, serverTaskId)
 
-        const actId = useActivityStore.getState().addItem({
-          type: "ingest",
-          title: getFileName(file.relativePath),
-          status: "running",
-          detail: "Reconnecting...",
-          filesWritten: [],
-        })
-
-        const disposeFunc = subscribeIngestSSE(serverTaskId, {
+        let reconnectAttempts = 0
+        const reconnectCallbacks: SseCallbacks = {
           onUpdate: (task) => {
             useWikiStore.getState().setIngestStatus(
               file.relativePath,
@@ -213,7 +216,6 @@ export function SourcesView() {
                 : task.status === "error" ? "error"
                 : "ingesting",
             )
-            useActivityStore.getState().updateItem(actId, { detail: task.detail })
           },
           onDone: async (task) => {
             clearSse(currentProjectId, file.relativePath)
@@ -223,13 +225,6 @@ export function SourcesView() {
             )
             useWikiStore.getState().setIngestingPath(null)
             useWikiStore.getState().setServerTaskId(file.relativePath, null)
-            useActivityStore.getState().updateItem(actId, {
-              status: task.filesWritten.length > 0 ? "done" : "error",
-              detail: task.filesWritten.length > 0
-                ? `${task.filesWritten.length} files written`
-                : (task.error ?? "No files generated"),
-              filesWritten: task.filesWritten,
-            })
             if (task.filesWritten.length > 0) {
               try {
                 const tree = await listDirectory(currentProjectId)
@@ -238,44 +233,68 @@ export function SourcesView() {
               } catch { /* non-critical */ }
             }
           },
-          onError: (msg) => {
+          onError: (_msg) => {
             clearSse(currentProjectId, file.relativePath)
             useWikiStore.getState().setIngestStatus(file.relativePath, "interrupted")
             useWikiStore.getState().setIngestingPath(null)
             useWikiStore.getState().setServerTaskId(file.relativePath, null)
-            const displayMsg = msg === "SSE connection error" ? "连接中断，可手动重新生成" : msg
-            useActivityStore.getState().updateItem(actId, { status: "error", detail: displayMsg })
           },
-        })
+          onConnectionLost: async () => {
+            clearSse(currentProjectId, file.relativePath)
+            useWikiStore.getState().setIngestingPath(null)
+            useWikiStore.getState().setServerTaskId(file.relativePath, null)
+
+            const serverTask = await getServerIngestStatus(serverTaskId).catch(() => null)
+
+            if (serverTask?.status === "done") {
+              useWikiStore.getState().setIngestStatus(
+                file.relativePath,
+                serverTask.filesWritten.length > 0 ? "done" : "error",
+              )
+              if (serverTask.filesWritten.length > 0) {
+                try {
+                  const tree = await listDirectory(currentProjectId)
+                  useWikiStore.getState().setFileTree(tree)
+                  useWikiStore.getState().bumpDataVersion()
+                } catch { /* non-critical */ }
+              }
+              return
+            }
+
+            if (serverTask?.status === "error") {
+              useWikiStore.getState().setIngestStatus(file.relativePath, "error")
+              return
+            }
+
+            if (
+              (serverTask?.status === "running" || serverTask?.status === "pending") &&
+              reconnectAttempts < MAX_SSE_RECONNECT_ATTEMPTS
+            ) {
+              reconnectAttempts += 1
+              useWikiStore.getState().setIngestStatus(file.relativePath, "ingesting")
+              useWikiStore.getState().setIngestingPath(file.relativePath)
+              useWikiStore.getState().setServerTaskId(file.relativePath, serverTaskId)
+              const disposeFunc = subscribeIngestSSE(serverTaskId, reconnectCallbacks)
+              registerSse(currentProjectId, file.relativePath, serverTaskId, disposeFunc)
+              return
+            }
+
+            useWikiStore.getState().setIngestStatus(file.relativePath, "interrupted")
+          },
+        }
+
+        const disposeFunc = subscribeIngestSSE(serverTaskId, reconnectCallbacks)
 
         registerSse(currentProjectId, file.relativePath, serverTaskId, disposeFunc)
       }
 
-      // Auto-retry files that were interrupted (and not currently running/reconnecting)
-      // Only retry if the wiki output file does NOT already exist.
-      if (!cancelled) {
-        const interruptedFiles = allFiles.filter((f) => {
-          const status = useWikiStore.getState().ingestStatuses[f.relativePath]
-          return (
-            status === "interrupted" &&
-            !runningByRelPath.has(f.relativePath) &&
-            !hasSseConnection(currentProjectId, f.relativePath)
-          )
-        })
-
-        for (const file of interruptedFiles) {
-          if (cancelled) break
-          // Skip retry if the wiki output already exists — just mark as done
-          const stem = getFileStem(file.name)
-          try {
-            await readFile(currentProjectId, `wiki/sources/${stem}.md`)
-            useWikiStore.getState().setIngestStatus(file.relativePath, "done")
-          } catch {
-            // Wiki doesn't exist yet — retry generation
-            await triggerServerIngest(file)
-          }
-        }
-      }
+      // NOTE: Intentionally no auto-retry here.
+      // Auto-retrying interrupted files on every component mount caused a new task
+      // to be created each time the user navigated to the Sources tab, because
+      // reconnectRanRef resets on unmount/remount. Interrupted files are left for
+      // the user to manually regenerate via the "重新生成" button.
+      // (Files whose wiki page already exists are handled by the wiki-check effect
+      //  above, which sets their status to "done" automatically.)
     })()
 
     return () => {
@@ -287,8 +306,50 @@ export function SourcesView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, project])
 
+  // Reconcile stale running activity items with the file-level ingest status shown in Sources.
+  // This keeps the left activity panel consistent with the right status dots when terminal
+  // states are reached via reconnect/recovery flows.
+  useEffect(() => {
+    if (!project || !sources.length) return
+
+    const fileNamesByPath = new Map(
+      flattenAllFiles(sources).map((file) => [file.relativePath, file.name]),
+    )
+    const activity = useActivityStore.getState()
+
+    for (const [relativePath, ingestStatus] of Object.entries(ingestStatuses)) {
+      if (!["done", "error", "interrupted"].includes(ingestStatus)) continue
+      if (serverTaskIds[relativePath]) continue
+
+      const fileName = fileNamesByPath.get(relativePath)
+      if (!fileName) continue
+
+      const staleItems = activity.items.filter((item) => {
+        if (item.type !== "ingest" || item.status !== "running") return false
+        if (item.projectId !== project.id) return false
+        if (item.sourcePath) return item.sourcePath === relativePath
+        // Backward compatibility: old persisted items might not have sourcePath.
+        return item.title === fileName
+      })
+      if (staleItems.length === 0) continue
+
+      for (const staleItem of staleItems) {
+        if (ingestStatus === "done") {
+          activity.updateItem(staleItem.id, { status: "done" })
+        } else if (ingestStatus === "error") {
+          activity.updateItem(staleItem.id, { status: "error" })
+        } else {
+          activity.updateItem(staleItem.id, {
+            status: "error",
+            detail: "连接中断，可手动重新生成",
+          })
+        }
+      }
+    }
+  }, [ingestStatuses, project, serverTaskIds, sources])
+
   // ── Core: start a server-side ingest task ─────────────────────────────────
-  async function triggerServerIngest(node: FileNode, folderContext = "") {
+  async function triggerServerIngest(node: FileNode, folderContext = "", force = false) {
     if (!project) return
 
     const store = useWikiStore.getState()
@@ -304,6 +365,14 @@ export function SourcesView() {
       console.log(`[ingest] skip – live SSE connection exists: ${node.name}`)
       return
     }
+    // Guard: stored server task ID (persists across page refresh via wiki store).
+    // If the reconnect effect confirmed a task is still running on the server,
+    // or a task was started in this session and not yet finished, skip to avoid
+    // creating duplicate activity items and duplicate server tasks.
+    if (store.serverTaskIds[node.relativePath]) {
+      console.log(`[ingest] skip – server task already running: ${node.name}`)
+      return
+    }
 
     const projectId = project.id
     const activity = useActivityStore.getState()
@@ -312,6 +381,8 @@ export function SourcesView() {
 
     const activityId = activity.addItem({
       type: "ingest",
+      projectId,
+      sourcePath: node.relativePath,
       title: node.name,
       status: "running",
       detail: "Starting...",
@@ -324,6 +395,7 @@ export function SourcesView() {
         projectId,
         sourcePath: node.relativePath,
         folderContext,
+        force,
       })
     } catch (err) {
       console.error("[SourcesView] Failed to start server ingest:", err)
@@ -346,7 +418,9 @@ export function SourcesView() {
 
     useWikiStore.getState().setServerTaskId(node.relativePath, taskId)
 
-    const disposeFunc = subscribeIngestSSE(taskId, {
+    // Named callbacks object so onConnectionLost can re-subscribe with the same handlers.
+    let reconnectAttempts = 0
+    const callbacks: SseCallbacks = {
       onUpdate: (task) => {
         useWikiStore.getState().setIngestStatus(
           node.relativePath,
@@ -355,7 +429,21 @@ export function SourcesView() {
             : task.status === "error" ? "error"
             : "ingesting",
         )
-        activity.updateItem(activityId, { detail: task.detail })
+        // For terminal states arriving via type:"state" (reconnect to already-finished
+        // task), mirror the full update so the activity icon reflects the real status.
+        if (task.status === "done" || task.status === "error") {
+          activity.updateItem(activityId, {
+            status: task.status === "done"
+              ? (task.filesWritten.length > 0 ? "done" : "error")
+              : "error",
+            detail: task.filesWritten.length > 0
+              ? `${task.filesWritten.length} files written`
+              : (task.error ?? task.detail ?? "No files generated"),
+            filesWritten: task.filesWritten,
+          })
+        } else {
+          activity.updateItem(activityId, { detail: task.detail })
+        }
       },
       onDone: async (task) => {
         clearSse(projectId, node.relativePath)
@@ -389,8 +477,68 @@ export function SourcesView() {
         const displayMsg = msg === "SSE connection error" ? "连接中断，可手动重新生成" : msg
         activity.updateItem(activityId, { status: "error", detail: displayMsg })
       },
-    })
+      onConnectionLost: async () => {
+        clearSse(projectId, node.relativePath)
+        useWikiStore.getState().setIngestingPath(null)
+        useWikiStore.getState().setServerTaskId(node.relativePath, null)
 
+        // Query server before declaring failure.
+        const serverTask = await getServerIngestStatus(taskId).catch(() => null)
+
+        if (serverTask?.status === "done") {
+          const currentProject = useWikiStore.getState().project
+          useWikiStore.getState().setIngestStatus(
+            node.relativePath,
+            serverTask.filesWritten.length > 0 ? "done" : "error",
+          )
+          activity.updateItem(activityId, {
+            status: serverTask.filesWritten.length > 0 ? "done" : "error",
+            detail: serverTask.filesWritten.length > 0
+              ? `${serverTask.filesWritten.length} files written`
+              : (serverTask.error ?? "No files generated"),
+            filesWritten: serverTask.filesWritten,
+          })
+          if (serverTask.filesWritten.length > 0 && currentProject) {
+            try {
+              const tree = await listDirectory(currentProject.id)
+              setFileTree(tree)
+              useWikiStore.getState().bumpDataVersion()
+            } catch { /* non-critical */ }
+          }
+          return
+        }
+
+        if (serverTask?.status === "error") {
+          useWikiStore.getState().setIngestStatus(node.relativePath, "error")
+          activity.updateItem(activityId, {
+            status: "error",
+            detail: serverTask.error ?? serverTask.detail ?? "任务失败",
+          })
+          return
+        }
+
+        // Task still running/pending — reconnect once.
+        if (
+          (serverTask?.status === "running" || serverTask?.status === "pending") &&
+          reconnectAttempts < MAX_SSE_RECONNECT_ATTEMPTS
+        ) {
+          reconnectAttempts += 1
+          useWikiStore.getState().setIngestStatus(node.relativePath, "ingesting")
+          useWikiStore.getState().setIngestingPath(node.relativePath)
+          useWikiStore.getState().setServerTaskId(node.relativePath, taskId)
+          activity.updateItem(activityId, { detail: serverTask.detail })
+          const disposeFunc = subscribeIngestSSE(taskId, callbacks)
+          registerSse(projectId, node.relativePath, taskId, disposeFunc)
+          return
+        }
+
+        // Task not found on server or already reconnected once — truly interrupted.
+        useWikiStore.getState().setIngestStatus(node.relativePath, "interrupted")
+        activity.updateItem(activityId, { status: "error", detail: "连接中断，可手动重新生成" })
+      },
+    }
+
+    const disposeFunc = subscribeIngestSSE(taskId, callbacks)
     registerSse(projectId, node.relativePath, taskId, disposeFunc)
   }
 
@@ -404,32 +552,8 @@ export function SourcesView() {
         formData.append("files", file)
       }
 
-      const { paths: importedRelPaths } = await uploadFiles(
-        project.id,
-        "raw/sources",
-        formData,
-      )
-
-      for (const relPath of importedRelPaths) {
-        setFileStatus(relPath, "processing")
-        preprocessFile(project.id, relPath, (stage: PreprocessStage) => {
-          if (stage === "done" || stage === "cached") setFileStatus(relPath, "done")
-          else if (stage === "error") setFileStatus(relPath, "error")
-        }).catch(() => setFileStatus(relPath, "error"))
-      }
-
+      await uploadFiles(project.id, "raw/sources", formData)
       await loadSources()
-
-      for (const relPath of importedRelPaths) {
-        const node: FileNode = {
-          name: getFileName(relPath),
-          relativePath: relPath,
-          is_dir: false,
-        }
-        triggerServerIngest(node).catch((err) =>
-          console.error("Failed to start server ingest:", err)
-        )
-      }
     } catch (err) {
       console.error("Failed to import files:", err)
     } finally {
@@ -455,39 +579,8 @@ export function SourcesView() {
         formData.append("files", file, pathWithinFolder)
       }
 
-      const { paths: copiedRelPaths } = await uploadFiles(project.id, destDir, formData)
-
-      for (const relPath of copiedRelPaths) {
-        setFileStatus(relPath, "processing")
-        preprocessFile(project.id, relPath, (stage: PreprocessStage) => {
-          if (stage === "done" || stage === "cached") setFileStatus(relPath, "done")
-          else if (stage === "error") setFileStatus(relPath, "error")
-        }).catch(() => setFileStatus(relPath, "error"))
-      }
-
+      await uploadFiles(project.id, destDir, formData)
       await loadSources()
-
-      const ingestablePaths = copiedRelPaths.filter((rp) => {
-        const ext = rp.split(".").pop()?.toLowerCase() ?? ""
-        return ["md", "mdx", "txt", "pdf", "docx", "pptx", "xlsx", "xls",
-                "csv", "json", "html", "htm", "rtf", "xml", "yaml", "yml"].includes(ext)
-      })
-
-      for (const relPath of ingestablePaths) {
-        const parts = relPath.replace(`${destDir}/`, "").split("/")
-        parts.pop()
-        const context = parts.length > 0
-          ? `${folderName} > ${parts.join(" > ")}`
-          : folderName
-        const node: FileNode = {
-          name: getFileName(relPath),
-          relativePath: relPath,
-          is_dir: false,
-        }
-        triggerServerIngest(node, context).catch((err) =>
-          console.error("Failed to start server ingest:", err)
-        )
-      }
     } catch (err) {
       console.error("Failed to import folder:", err)
     } finally {
@@ -622,7 +715,23 @@ export function SourcesView() {
     const status = ingestStatuses[node.relativePath]
     const hasLiveTask = !!serverTaskIds[node.relativePath]
     if (status === "ingesting" || hasLiveTask) return
-    await triggerServerIngest(node)
+
+    // If text hasn't been extracted yet, run preprocessing first
+    const ppStatus = preprocessStatuses[node.relativePath]
+    if (ppStatus !== "done") {
+      setFileStatus(node.relativePath, "processing")
+      try {
+        await preprocessFile(project.id, node.relativePath, (stage: PreprocessStage) => {
+          if (stage === "done" || stage === "cached") setFileStatus(node.relativePath, "done")
+          else if (stage === "error") setFileStatus(node.relativePath, "error")
+        })
+      } catch {
+        setFileStatus(node.relativePath, "error")
+        return
+      }
+    }
+
+    await triggerServerIngest(node, "", true)
   }
 
   async function handleBatchIngest() {
@@ -632,7 +741,23 @@ export function SourcesView() {
       const status = useWikiStore.getState().ingestStatuses[file.relativePath]
       const hasLiveTask = !!useWikiStore.getState().serverTaskIds[file.relativePath]
       if (status === "ingesting" || hasLiveTask) continue
-      await triggerServerIngest(file)
+
+      // Preprocess first if text hasn't been extracted yet
+      const ppStatus = preprocessStatuses[file.relativePath]
+      if (ppStatus !== "done") {
+        setFileStatus(file.relativePath, "processing")
+        try {
+          await preprocessFile(project.id, file.relativePath, (stage: PreprocessStage) => {
+            if (stage === "done" || stage === "cached") setFileStatus(file.relativePath, "done")
+            else if (stage === "error") setFileStatus(file.relativePath, "error")
+          })
+        } catch {
+          setFileStatus(file.relativePath, "error")
+          continue
+        }
+      }
+
+      await triggerServerIngest(file, "", true)
       await new Promise<void>((resolve) => setTimeout(resolve, 200))
     }
   }
@@ -1077,7 +1202,7 @@ function SourceTree({
             </Stack>
 
             <Tooltip
-              title={isIngesting ? "正在生成中，请稍候…" : "重新生成 Wiki"}
+              title={isIngesting ? "正在生成中，请稍候…" : "提取文本并生成 Wiki"}
               enterDelay={isIngesting ? 0 : 600}
               placement="top"
             >

@@ -6,8 +6,10 @@ import {
   getAllTasks,
   registerSseClient,
   unregisterSseClient,
+  rebuildWikiIndex,
 } from "../services/ingest-service.js"
 import { ingestStartSchema } from "../lib/schemas.js"
+import { getProjectRoot } from "../services/project-service.js"
 
 const router = Router()
 
@@ -23,8 +25,8 @@ router.post("/start", (req: Request, res: Response, next: NextFunction) => {
       res.status(400).json({ error: parsed.error.issues[0]?.message })
       return
     }
-    const { projectId, sourcePath, folderContext } = parsed.data
-    const taskId = startIngestTask(projectId, sourcePath, folderContext ?? "")
+    const { projectId, sourcePath, folderContext, force } = parsed.data
+    const taskId = startIngestTask(projectId, sourcePath, folderContext ?? "", force ?? false)
     res.json({ taskId })
   } catch (err) {
     next(err)
@@ -88,6 +90,27 @@ router.get("/stream/:taskId", (req: Request, res: Response) => {
     clearInterval(heartbeat)
     unregisterSseClient(taskId, res)
   })
+})
+
+/**
+ * POST /api/ingest/rebuild-index
+ * Body: { projectId }
+ * Triggers a programmatic rebuild of wiki/index.md from frontmatter scanning.
+ * Used by the client-side chat ingest path after writing wiki files.
+ */
+router.post("/rebuild-index", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = req.body?.projectId as string | undefined
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required" })
+      return
+    }
+    const projectPath = await getProjectRoot(projectId)
+    await rebuildWikiIndex(projectPath)
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
 })
 
 export default router

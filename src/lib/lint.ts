@@ -6,7 +6,7 @@ import { useActivityStore } from "@/stores/activity-store"
 import { getFileName } from "@/lib/path-utils"
 
 export interface LintResult {
-  type: "orphan" | "broken-link" | "no-outlinks" | "semantic"
+  type: "orphan" | "broken-link" | "no-outlinks" | "type-mismatch" | "title-mismatch" | "content-mismatch" | "semantic"
   severity: "warning" | "info"
   page: string
   detail: string
@@ -40,6 +40,54 @@ function extractWikilinks(content: string): string[] {
 function relativeToSlug(relPath: string): string {
   // relPath relative to wiki/ dir, e.g. "entities/foo-bar" or "queries/my-page-2024-01-01"
   return relPath.replace(/\.md$/, "")
+}
+
+function inferExpectedType(relativePath: string): string | null {
+  if (relativePath === "wiki/overview.md") return "overview"
+  if (relativePath.includes("/entities/")) return "entity"
+  if (relativePath.includes("/concepts/")) return "concept"
+  if (relativePath.includes("/sources/")) return "source"
+  if (relativePath.includes("/queries/")) return "query"
+  if (relativePath.includes("/comparisons/")) return "comparison"
+  if (relativePath.includes("/synthesis/")) return "synthesis"
+  return null
+}
+
+function parseFrontmatterType(content: string): string | null {
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!fmMatch) return null
+  const typeMatch = fmMatch[1].match(/^type:\s*(.+)$/m)
+  if (!typeMatch) return null
+  return typeMatch[1].trim().replace(/^["']|["']$/g, "").toLowerCase()
+}
+
+function parseFrontmatterTitle(content: string): string | null {
+  const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!fmMatch) return null
+  const titleMatch = fmMatch[1].match(/^title:\s*(.+)$/m)
+  if (!titleMatch) return null
+  return titleMatch[1].trim().replace(/^["']|["']$/g, "")
+}
+
+function inferBodyTopic(content: string): string | null {
+  const body = content.replace(/^---\n[\s\S]*?\n---\n?/, "")
+  const excerpt = body.split(/\r?\n/).slice(0, 80).join("\n")
+
+  const linked = excerpt.match(/\[\[([^\]]+)\]\](?:是|通常|指|为)/)
+  if (linked) return linked[1].trim()
+
+  const definition = excerpt.match(/([^\n，。；：:\[\]]{2,30})(?:是指|通常指|指)/)
+  if (definition) return definition[1].trim()
+
+  const heading = excerpt.match(/^#\s+(.+)$/m)?.[1]?.trim()
+  if (heading && !["定义", "概要", "简介", "说明", "解读"].includes(heading)) {
+    return heading
+  }
+
+  const sentence = excerpt.match(/([^\n，。；：:\[\]]{2,30})是/)
+  if (sentence) return sentence[1].trim()
+
+  return null
 }
 
 /** Strip the "wiki/" prefix from a project-relative path to get the wiki-relative path */
@@ -81,7 +129,14 @@ export async function runStructuralLint(projectId: string): Promise<LintResult[]
   const slugMap = buildSlugMap(contentFiles)
 
   // Read all content files
-  type PageData = { relativePath: string; slug: string; content: string; outlinks: string[] }
+  type PageData = {
+    relativePath: string
+    slug: string
+    content: string
+    outlinks: string[]
+    declaredType: string | null
+    expectedType: string | null
+  }
   const pages: PageData[] = []
 
   for (const f of contentFiles) {
@@ -89,7 +144,14 @@ export async function runStructuralLint(projectId: string): Promise<LintResult[]
       const content = await readFile(projectId, f.relativePath)
       const slug = relativeToSlug(wikiRelative(f.relativePath))
       const outlinks = extractWikilinks(content)
-      pages.push({ relativePath: f.relativePath, slug, content, outlinks })
+      pages.push({
+        relativePath: f.relativePath,
+        slug,
+        content,
+        outlinks,
+        declaredType: parseFrontmatterType(content),
+        expectedType: inferExpectedType(f.relativePath),
+      })
     } catch {
       // skip unreadable files
     }
@@ -144,6 +206,43 @@ export async function runStructuralLint(projectId: string): Promise<LintResult[]
         })
       }
     }
+
+    // Frontmatter/path type mismatch
+    if (p.expectedType && p.declaredType && p.expectedType !== p.declaredType) {
+      results.push({
+        type: "type-mismatch",
+        severity: "warning",
+        page: shortName,
+        detail: `Frontmatter type "${p.declaredType}" mismatches path-derived type "${p.expectedType}".`,
+      })
+    }
+
+    const fileTitle = getFileName(p.relativePath).replace(/\.md$/, "")
+    const declaredTitle = parseFrontmatterTitle(p.content)
+    if (declaredTitle && declaredTitle !== fileTitle) {
+      results.push({
+        type: "title-mismatch",
+        severity: "warning",
+        page: shortName,
+        detail: `Frontmatter title "${declaredTitle}" mismatches filename "${fileTitle}".`,
+      })
+    }
+
+    if (p.relativePath.startsWith("wiki/sources/")) {
+      const inferredTopic = inferBodyTopic(p.content)
+      const bodyWithoutFirstHeading = p.content
+        .replace(/^---\n[\s\S]*?\n---\n?/, "")
+        .replace(/^#\s+.*\r?\n?/, "")
+      const mentionsFileTitle = bodyWithoutFirstHeading.includes(fileTitle)
+      if (inferredTopic && inferredTopic !== fileTitle && !mentionsFileTitle) {
+        results.push({
+          type: "content-mismatch",
+          severity: "warning",
+          page: shortName,
+          detail: `Body likely describes "${inferredTopic}" but filename/title is "${fileTitle}".`,
+        })
+      }
+    }
   }
 
   return results
@@ -161,6 +260,7 @@ export async function runSemanticLint(
   const activity = useActivityStore.getState()
   const activityId = activity.addItem({
     type: "lint",
+    projectId,
     title: "Semantic wiki lint",
     status: "running",
     detail: "Reading wiki pages...",

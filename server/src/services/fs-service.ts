@@ -85,7 +85,13 @@ export async function copyDirectory(source: string, destination: string): Promis
 }
 
 export async function deleteFileOrDir(filePath: string): Promise<void> {
-  const stat = await fs.stat(filePath)
+  let stat: Awaited<ReturnType<typeof fs.stat>>
+  try {
+    stat = await fs.stat(filePath)
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return
+    throw err
+  }
   if (stat.isDirectory()) {
     await fs.rm(filePath, { recursive: true, force: true })
   } else {

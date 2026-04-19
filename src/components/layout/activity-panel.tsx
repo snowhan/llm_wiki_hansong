@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
@@ -59,11 +59,17 @@ function parseStep(detail: string): { step: number; total: number; label: string
 }
 
 export function ActivityPanel() {
-  const items = useActivityStore((s) => s.items)
+  const allItems = useActivityStore((s) => s.items)
   const clearDone = useActivityStore((s) => s.clearDone)
   const clearErrors = useActivityStore((s) => s.clearErrors)
+  const currentProjectId = useWikiStore((s) => s.project?.id ?? null)
   const [expanded, setExpanded] = useState(false)
   const prevRunningRef = useRef(0)
+
+  const items = useMemo(
+    () => (currentProjectId ? allItems.filter((i) => i.projectId === currentProjectId) : []),
+    [allItems, currentProjectId],
+  )
 
   const runningItems = items.filter((i) => i.status === "running")
   const runningCount = runningItems.length
@@ -244,6 +250,17 @@ function ActivityRow({ item }: { item: ActivityItem }) {
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const stepInfo = item.status === "running" ? parseStep(item.detail) : null
 
+  const timeStr = useMemo(() => {
+    if (!item.createdAt) return ""
+    return new Date(item.createdAt).toLocaleTimeString("zh-CN", {
+      timeZone: "Asia/Shanghai",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+  }, [item.createdAt])
+
   function handleFileClick(relativePath: string) {
     navigateInCurrentTab(relativePath)
     setActiveView("wiki")
@@ -270,10 +287,17 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         </Box>
 
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          {/* Title */}
-          <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.7rem", display: "block", color: isRunning ? "#5b21b6" : "text.primary", lineHeight: 1.4 }}>
-            {item.title}
-          </Typography>
+          {/* Title + time */}
+          <Stack direction="row" sx={{ alignItems: "baseline", gap: 0.75 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, fontSize: "0.7rem", display: "block", color: isRunning ? "#5b21b6" : "text.primary", lineHeight: 1.4 }}>
+              {item.title}
+            </Typography>
+            {timeStr && (
+              <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "text.disabled", flexShrink: 0 }}>
+                {timeStr}
+              </Typography>
+            )}
+          </Stack>
 
           {/* Step detail */}
           <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", display: "block", lineHeight: 1.3, mt: 0.1 }}>

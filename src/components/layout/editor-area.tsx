@@ -26,6 +26,69 @@ const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
   overview:   { bg: "rgba(217,119,6,0.08)", text: "#92400E" },
 }
 
+function setOrInsertFrontmatterField(frontmatter: string, key: string, value: string): string {
+  const line = `${key}: ${value}`
+  const re = new RegExp(`^${key}:\\s*.*$`, "m")
+  if (re.test(frontmatter)) return frontmatter.replace(re, line)
+  return `${frontmatter}\n${line}`.trim()
+}
+
+function inferCanonicalTypeFromPath(relativePath: string): string | null {
+  if (relativePath === "wiki/overview.md") return "overview"
+  if (relativePath.includes("/entities/")) return "entity"
+  if (relativePath.includes("/concepts/")) return "concept"
+  if (/^wiki\/sources\/[^/]+\.md$/.test(relativePath)) return "source"
+  return null
+}
+
+function inferCanonicalTitleFromPath(relativePath: string): string | null {
+  if (relativePath === "wiki/overview.md") return "Wiki 总览"
+  const m = relativePath.match(/^wiki\/sources\/.+\/(entities|concepts)\/([^/]+)\.md$/)
+  if (m) return m[2].replace(/-/g, " ").trim()
+  const sourceSummary = relativePath.match(/^wiki\/sources\/([^/]+)\.md$/)
+  if (sourceSummary) return sourceSummary[1].replace(/-/g, " ").trim()
+  return null
+}
+
+function buildOverviewScaffold(): string {
+  const date = new Date().toISOString().slice(0, 10)
+  return [
+    "---",
+    "type: overview",
+    "title: Wiki 总览",
+    `created: ${date}`,
+    `updated: ${date}`,
+    "tags: []",
+    "related: []",
+    "---",
+    "",
+    "# Wiki 总览",
+    "",
+    "## 知识范围",
+    "- 请在此总结当前 Wiki 覆盖的主题、实体和关键结论。",
+    "",
+    "## 最近变化",
+    "- 暂无记录",
+    "",
+  ].join("\n")
+}
+
+function normalizeWikiContentByPath(relativePath: string, content: string): string {
+  if (relativePath === "wiki/overview.md" && !content.trim()) {
+    return buildOverviewScaffold()
+  }
+  const m = content.match(/^(---\n)([\s\S]*?)(\n---\n?)([\s\S]*)$/)
+  if (!m) return content
+  const expectedType = inferCanonicalTypeFromPath(relativePath)
+  const expectedTitle = inferCanonicalTitleFromPath(relativePath)
+  if (!expectedType && !expectedTitle) return content
+
+  let fm = m[2]
+  if (expectedType) fm = setOrInsertFrontmatterField(fm, "type", expectedType)
+  if (expectedTitle) fm = setOrInsertFrontmatterField(fm, "title", expectedTitle)
+  return `---\n${fm}\n---\n${m[4]}`
+}
+
 // ── FrontmatterBadge component ──────────────────────────────────
 function FrontmatterBadge({ fields }: { fields: FrontmatterFields }) {
   const { type, created, updated, tags } = fields
@@ -144,7 +207,16 @@ export function EditorArea() {
     }
 
     readFile(project.id, activeTabPath)
-      .then((content) => { if (readGenRef.current === gen) setFileContent(content) })
+      .then((content) => {
+        if (readGenRef.current !== gen) return
+        const normalized = normalizeWikiContentByPath(activeTabPath, content)
+        setFileContent(normalized)
+        if (normalized !== content) {
+          writeFile(project.id, activeTabPath, normalized).catch((err) =>
+            console.error("Failed to auto-normalize wiki file:", err),
+          )
+        }
+      })
       .catch((err) => { if (readGenRef.current === gen) setFileContent(t("preview.errorLoading", { err })) })
   }, [activeTabPath, setFileContent, t, project])
 

@@ -14,7 +14,19 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:ci": "vitest run --coverage --reporter=verbose"
+    "test:ci": "vitest run --coverage --reporter=verbose",
+    "test:status-sync": "vitest run src/components/sources/__tests__/sources-view-status-sync.test.tsx src/components/sources/__tests__/sources-view-server-truth.test.tsx src/components/sources/__tests__/sources-view-ui-replay.test.tsx src/components/__tests__/activity-panel.test.tsx src/stores/__tests__/activity-store.test.ts src/commands/__tests__/ingest-sse-full.test.ts",
+    "test:source-alignment": "vitest run src/components/__tests__/knowledge-tree.test.tsx src/components/__tests__/file-tree.test.tsx src/components/sources/__tests__/sources-view-status-sync.test.tsx src/components/sources/__tests__/sources-view-server-truth.test.tsx src/components/sources/__tests__/sources-view-ui-replay.test.tsx src/lib/__tests__/lint.test.ts --reporter=verbose",
+    "test:ingest-regression": "vitest run src/lib/__tests__/ingest-full.test.ts src/commands/__tests__/ingest-sse-full.test.ts src/components/sources/__tests__/ingest-guards-full.test.ts src/components/sources/__tests__/sources-view-status-sync.test.tsx src/components/sources/__tests__/sources-view-server-truth.test.tsx src/stores/__tests__/activity-store-reload.test.ts && npm --prefix server test -- src/services/__tests__/ingest-service.test.ts src/services/__tests__/ingest-service-dedup.test.ts src/services/__tests__/ingest-service-title-sync.test.ts",
+    "test:matrix": "bash scripts/test-matrix.sh",
+    "test:soak": "bash scripts/test-soak.sh",
+    "test:chaos": "bash scripts/test-chaos.sh",
+    "test:parallel": "bash scripts/test-parallel.sh",
+    "test:flake": "bash scripts/test-flake.sh",
+    "test:hygiene": "bash scripts/test-hygiene.sh",
+    "test:regression": "bash scripts/test-regression.sh",
+    "test:title-sync": "bash scripts/test-title-sync.sh",
+    "test:mapping-overview": "bash scripts/test-mapping-overview.sh"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

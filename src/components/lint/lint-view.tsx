@@ -31,6 +31,7 @@ const typeConfig: Record<string, { icon: SvgIconComponent; labelKey: string }> =
   orphan: { icon: LinkOffIcon, labelKey: "lint.orphan" },
   "broken-link": { icon: LinkOffIcon, labelKey: "lint.brokenLink" },
   "no-outlinks": { icon: OpenInNewIcon, labelKey: "lint.noOutlinks" },
+  "type-mismatch": { icon: WarningAmberIcon, labelKey: "lint.typeMismatch" },
   semantic: { icon: PsychologyIcon, labelKey: "lint.semanticIssue" },
 }
 

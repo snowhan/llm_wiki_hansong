@@ -12,11 +12,11 @@ import { useTranslation } from "react-i18next"
 function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(depth < 1)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
+  const activeTabPath = useWikiStore((s) => s.activeTabPath)
   const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
 
-  const isSelected = selectedFile === node.relativePath
+  const isSelected = activeTabPath === node.relativePath
   const paddingLeft = 12 + depth * 16
 
   // Hide internal cache sidecar files
@@ -66,6 +66,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     <Box
       component="button"
       type="button"
+      aria-current={isSelected ? "page" : undefined}
       onClick={() => { navigateInCurrentTab(node.relativePath); setActiveView("wiki") }}
       sx={{
         display: "flex",

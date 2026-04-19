@@ -80,6 +80,53 @@ describe("runStructuralLint", () => {
     expect(results.filter((r) => r.type === "orphan")).toHaveLength(0)
     expect(results.filter((r) => r.type === "broken-link")).toHaveLength(0)
   })
+
+  it("detects frontmatter/path type mismatch (overview wrongly marked source)", async () => {
+    vi.mocked(listDirectory).mockResolvedValue(makeTree([
+      { name: "overview.md", relativePath: "wiki/overview.md" },
+    ]))
+    vi.mocked(readFile).mockResolvedValue("---\ntype: source\ntitle: Wrong\n---\nBody")
+
+    const results = await runStructuralLint("proj-uuid")
+    const mismatch = results.find((r) => r.type === "type-mismatch")
+    expect(mismatch).toBeTruthy()
+    expect(mismatch?.severity).toBe("warning")
+    expect(mismatch?.detail).toContain("path-derived type \"overview\"")
+  })
+
+  it("does not report mismatch when path and frontmatter type agree", async () => {
+    vi.mocked(listDirectory).mockResolvedValue(makeTree([
+      { name: "a.md", relativePath: "wiki/sources/a.md" },
+    ]))
+    vi.mocked(readFile).mockResolvedValue("---\ntype: source\ntitle: A\n---\nSee [[a]]")
+
+    const results = await runStructuralLint("proj-uuid")
+    expect(results.some((r) => r.type === "type-mismatch")).toBe(false)
+  })
+
+  it("detects frontmatter title/filename mismatch", async () => {
+    vi.mocked(listDirectory).mockResolvedValue(makeTree([
+      { name: "乙肝表面抗体阳性.md", relativePath: "wiki/sources/2024体检报告/concepts/乙肝表面抗体阳性.md" },
+    ]))
+    vi.mocked(readFile).mockResolvedValue(
+      "---\ntype: concept\ntitle: 双肾结石\n---\n# 乙肝表面抗体阳性\n\n内容"
+    )
+
+    const results = await runStructuralLint("proj-uuid")
+    expect(results.some((r) => r.type === "title-mismatch")).toBe(true)
+  })
+
+  it("detects source-page content/topic mismatch", async () => {
+    vi.mocked(listDirectory).mockResolvedValue(makeTree([
+      { name: "乙肝表面抗体阳性.md", relativePath: "wiki/sources/2024体检报告/concepts/乙肝表面抗体阳性.md" },
+    ]))
+    vi.mocked(readFile).mockResolvedValue(
+      "---\ntype: concept\ntitle: 乙肝表面抗体阳性\n---\n# 乙肝表面抗体阳性\n\n双肾结石指双侧肾脏内存在结石。"
+    )
+
+    const results = await runStructuralLint("proj-uuid")
+    expect(results.some((r) => r.type === "content-mismatch")).toBe(true)
+  })
 })
 
 describe("runSemanticLint", () => {

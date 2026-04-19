@@ -80,6 +80,7 @@ export const ingestStartSchema = z.object({
   projectId: projectIdSchema,
   sourcePath: z.string().min(1, "sourcePath is required"),
   folderContext: z.string().optional(),
+  force: z.boolean().optional(),
 })
 
 // ── /api/state ─────────────────────────────────────────────────────────────────

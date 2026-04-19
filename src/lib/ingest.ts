@@ -10,7 +10,41 @@ import { getFileName } from "@/lib/path-utils"
 import { checkIngestCache, saveIngestCache } from "@/lib/ingest-cache"
 import { needsPreprocess } from "@/lib/file-types"
 
-const FILE_BLOCK_REGEX = /---FILE:\s*([^\n-]+?)\s*---\n([\s\S]*?)---END FILE---/g
+/**
+ * Parse FILE blocks from LLM output.
+ *
+ * A line-based parser that treats a new ---FILE: header as an implicit
+ * terminator for any open block. This prevents missing ---END FILE---
+ * markers from causing content bleed between files.
+ */
+function parseFileBlocks(text: string): Array<{ path: string; content: string }> {
+  const results: Array<{ path: string; content: string }> = []
+  const lines = text.split("\n")
+  let currentPath: string | null = null
+  const currentLines: string[] = []
+
+  const flush = () => {
+    if (currentPath !== null) {
+      results.push({ path: currentPath, content: currentLines.join("\n") })
+      currentLines.length = 0
+      currentPath = null
+    }
+  }
+
+  for (const line of lines) {
+    const startMatch = line.match(/^---FILE:\s*(.+?)\s*---$/)
+    if (startMatch) {
+      flush()
+      currentPath = startMatch[1]
+    } else if (line === "---END FILE---") {
+      flush()
+    } else if (currentPath !== null) {
+      currentLines.push(line)
+    }
+  }
+  flush()
+  return results
+}
 
 export const LANGUAGE_RULE = "## Language Rule\n- ALWAYS match the language of the source document. If the source is in Chinese, write in Chinese. If in English, write in English. Wiki page titles, content, and descriptions should all be in the same language as the source material."
 
@@ -49,6 +83,8 @@ export async function autoIngest(
   const fileName = getFileName(sourcePath)
   const activityId = activity.addItem({
     type: "ingest",
+    projectId,
+    sourcePath,
     title: fileName,
     status: "running",
     detail: "Reading source...",
@@ -79,7 +115,7 @@ export async function autoIngest(
     : sourceContent
 
   // ── Step 1: Analysis ──────────────────────────────────────────
-  activity.updateItem(activityId, { detail: "Step 1/2: Analyzing source..." })
+  activity.updateItem(activityId, { detail: "Step 1: Analyzing source..." })
 
   let analysis = ""
 
@@ -101,6 +137,9 @@ export async function autoIngest(
   if (useActivityStore.getState().items.find((i) => i.id === activityId)?.status === "error") {
     return []
   }
+
+  // ── Parse file plan ───────────────────────────────────────────
+  const base = fileName.replace(/\.[^.]+$/, "")
 
   // ── Step 2: Generation ────────────────────────────────────────
   activity.updateItem(activityId, { detail: "Step 2/2: Generating wiki pages..." })
@@ -143,17 +182,13 @@ export async function autoIngest(
   activity.updateItem(activityId, { detail: "Writing files..." })
   const writtenPaths = await writeFileBlocks(projectId, generation)
 
-  // Ensure source summary page exists (LLM may not have generated it correctly)
-  const sourceBaseName = fileName.replace(/\.[^.]+$/, "")
-  const sourceSummaryPath = `wiki/sources/${sourceBaseName}.md`
-  const hasSourceSummary = writtenPaths.some((p) => p.startsWith("wiki/sources/"))
-
-  if (!hasSourceSummary) {
+  const sourceSummaryPath = `wiki/sources/${base}.md`
+  if (!writtenPaths.includes(sourceSummaryPath)) {
     const date = new Date().toISOString().slice(0, 10)
     const fallbackContent = [
       "---",
       `type: source`,
-      `title: "Source: ${fileName}"`,
+      `title: "${base}"`,
       `created: ${date}`,
       `updated: ${date}`,
       `sources: ["${fileName}"]`,
@@ -182,6 +217,12 @@ export async function autoIngest(
     } catch {
       // ignore
     }
+    // Trigger server-side index rebuild (non-blocking, best-effort)
+    fetch("/api/ingest/rebuild-index", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId }),
+    }).catch(() => { /* non-critical */ })
   }
 
   // ── Step 4: Parse review items ────────────────────────────────
@@ -232,11 +273,9 @@ export async function autoIngest(
 
 async function writeFileBlocks(projectId: string, text: string): Promise<string[]> {
   const writtenPaths: string[] = []
-  const matches = text.matchAll(FILE_BLOCK_REGEX)
 
-  for (const match of matches) {
-    const relativePath = match[1].trim()
-    let content = match[2]
+  for (const { path: relativePath, content: rawContent } of parseFileBlocks(text)) {
+    let content = rawContent
     if (!relativePath) continue
 
     // Normalize frontmatter format for markdown wiki pages
@@ -404,13 +443,14 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "Output each wiki file in this exact format:",
     "",
     "---FILE: wiki/sources/filename.md---",
+    `(or: ---FILE: wiki/sources/${sourceBaseName}/entities/entity-name.md---)`,
     "(complete file content with YAML frontmatter)",
     "---END FILE---",
     "",
     "Generate:",
     `1. A source summary page at **wiki/sources/${sourceBaseName}.md** (MUST use this exact path)`,
-    "2. Entity pages in wiki/entities/ for key entities identified in the analysis",
-    "3. Concept pages in wiki/concepts/ for key concepts identified in the analysis",
+    `2. Entity pages in **wiki/sources/${sourceBaseName}/entities/** for key entities identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${sourceBaseName}/entities/entity-name.md)`,
+    `3. Concept pages in **wiki/sources/${sourceBaseName}/concepts/** for key concepts identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${sourceBaseName}/concepts/concept-name.md)`,
     "4. An updated wiki/index.md — add new entries to existing categories, preserve all existing entries",
     "5. A log entry for wiki/log.md (just the new entry to append, format: ## [YYYY-MM-DD] ingest | Title)",
     "6. An updated wiki/overview.md — a high-level summary of what the entire wiki covers, updated to reflect the newly ingested source. This should be a comprehensive 2-5 paragraph overview of ALL topics in the wiki, not just the new source.",
@@ -434,9 +474,28 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "",
     "Other rules:",
     "- Use [[wikilink]] syntax for cross-references between pages",
-    "- Use kebab-case filenames",
+    "- Filenames MUST follow source language. If the source is Chinese, use Chinese filenames directly (DO NOT transliterate to pinyin). If the source is English, use readable English filenames.",
     "- Follow the analysis recommendations on what to emphasize",
     "- If the analysis found connections to existing pages, add cross-references",
+    "",
+    "## Page Type Rules (CRITICAL — read before writing each FILE block)",
+    "",
+    `### Entity Pages  (path must be under wiki/sources/${sourceBaseName}/entities/)`,
+    "- An entity page is about a SPECIFIC PERSON, ORGANIZATION, PRODUCT, DATASET, or TOOL",
+    "- Content MUST describe: who/what this entity is, their background, their role in this source",
+    "- ❌ DO NOT write about medical conditions, abstract concepts, or techniques in entity pages",
+    "- ✅ Example correct: a page about '韩松' describes this person's identity and role in the source",
+    "",
+    `### Concept Pages  (path must be under wiki/sources/${sourceBaseName}/concepts/)`,
+    "- A concept page is about an ABSTRACT IDEA, MEDICAL CONDITION, METHODOLOGY, or TECHNIQUE",
+    "- Content MUST describe: definition, clinical/technical significance, how it appears in this source",
+    "- ❌ DO NOT write about specific people, organizations, or products in concept pages",
+    "- ✅ Example correct: a page about '高尿酸血症' explains what this medical condition is",
+    "",
+    "### SELF-CHECK before writing each FILE block:",
+    "- Path contains /entities/ → content MUST be about a specific person/org/product/tool",
+    "- Path contains /concepts/ → content MUST be about an abstract idea/condition/method",
+    "- If content and path type do not match → FIX IT before outputting",
     "",
     "## Review Items",
     "",
@@ -484,6 +543,192 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
 
 function getStore() {
   return useChatStore.getState()
+}
+
+// ── File plan ─────────────────────────────────────────────────────────────
+
+interface PlanItem {
+  type: "entity" | "concept"
+  name: string
+  description: string
+}
+
+function parsePlan(analysis: string): PlanItem[] {
+  const planMatch = analysis.match(/## File Plan\s*\n([\s\S]*)$/)
+  const planSection = planMatch ? planMatch[1] : analysis
+  const items: PlanItem[] = []
+
+  for (const line of planSection.split("\n")) {
+    const entityMatch = line.match(/^ENTITY:\s*(.+?)\s*\|\s*(.+)$/)
+    if (entityMatch) {
+      items.push({ type: "entity", name: entityMatch[1].trim(), description: entityMatch[2].trim() })
+      continue
+    }
+    const conceptMatch = line.match(/^CONCEPT:\s*(.+?)\s*\|\s*(.+)$/)
+    if (conceptMatch) {
+      items.push({ type: "concept", name: conceptMatch[1].trim(), description: conceptMatch[2].trim() })
+    }
+  }
+  return items
+}
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\:*?"<>|]/g, "-").trim()
+}
+
+function buildSourceSummaryPrompt(
+  sourceFileName: string,
+  purpose: string,
+  schema: string,
+): string {
+  const base = sourceFileName.replace(/\.[^.]+$/, "")
+  return [
+    "You are a wiki maintainer. Generate EXACTLY ONE wiki file: the source summary page.",
+    "",
+    LANGUAGE_RULE,
+    "",
+    `## File to Generate`,
+    `- Path: wiki/sources/${base}.md`,
+    `- Type: source`,
+    "",
+    "## Output Format",
+    `Output ONLY this single FILE block:`,
+    `---FILE: wiki/sources/${base}.md---`,
+    "(YAML frontmatter + content)",
+    "---END FILE---",
+    "",
+    "## Frontmatter",
+    "```yaml",
+    "---",
+    "type: source",
+    `title: "${base}"`,
+    "created: YYYY-MM-DD",
+    "updated: YYYY-MM-DD",
+    "tags: []",
+    "related: []",
+    `sources: ["${sourceFileName}"]`,
+    "---",
+    "```",
+    "",
+    "## Content Rules",
+    "- Summarize the source document's key findings, entities, and concepts",
+    "- Use [[wikilink]] to link to entity and concept pages",
+    "- Be comprehensive but concise",
+    "",
+    purpose ? `## Wiki Purpose\n${purpose}` : "",
+    schema ? `## Wiki Schema\n${schema}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+function buildSingleFilePrompt(
+  filePath: string,
+  fileType: "entity" | "concept",
+  title: string,
+  description: string,
+  sourceFileName: string,
+  purpose: string,
+): string {
+  const typeRules =
+    fileType === "entity"
+      ? [
+          `- This is an ENTITY page about a specific person, organization, product, or tool: "${title}"`,
+          `- Content MUST describe who/what "${title}" is and their role in the source`,
+          "- DO NOT write about abstract ideas, medical conditions, or techniques in this page",
+          "- Focus on: identity, background, significance, role in the source document",
+        ]
+      : [
+          `- This is a CONCEPT page about an abstract idea, medical condition, or technique: "${title}"`,
+          `- Content MUST explain what "${title}" means and why it matters`,
+          "- DO NOT write about specific people or organizations in this page",
+          "- Focus on: definition, clinical/technical significance, how it appears in the source",
+        ]
+
+  return [
+    `You are a wiki maintainer. Generate EXACTLY ONE wiki file.`,
+    "",
+    LANGUAGE_RULE,
+    "",
+    `## File to Generate`,
+    `- Path: ${filePath}`,
+    `- Type: ${fileType}`,
+    `- Title: ${title}`,
+    `- Description: ${description}`,
+    `- Source: ${sourceFileName}`,
+    "",
+    "## Output Format",
+    "Output ONLY this single FILE block (no other text before or after):",
+    `---FILE: ${filePath}---`,
+    "(YAML frontmatter + page content)",
+    "---END FILE---",
+    "",
+    "## Frontmatter",
+    "```yaml",
+    "---",
+    `type: ${fileType}`,
+    `title: "${title}"`,
+    "created: YYYY-MM-DD",
+    "updated: YYYY-MM-DD",
+    "tags: []",
+    "related: []",
+    `sources: ["${sourceFileName}"]`,
+    "---",
+    "```",
+    "",
+    "## Content Rules (CRITICAL)",
+    ...typeRules,
+    "- Use [[wikilink]] syntax for cross-references to other pages",
+    `- The \`sources\` field MUST contain "${sourceFileName}"`,
+    "",
+    purpose ? `## Wiki Purpose\n${purpose}` : "",
+  ].filter(Boolean).join("\n")
+}
+
+function buildSharedFilesPrompt(
+  sourceFileName: string,
+  writtenFiles: string[],
+  purpose: string,
+  _index: string,
+  overview: string,
+): string {
+  return [
+    "You are a wiki maintainer. Generate exactly 2 wiki management files.",
+    "",
+    LANGUAGE_RULE,
+    "",
+    `## Source Just Ingested: ${sourceFileName}`,
+    `Pages created: ${writtenFiles.join(", ")}`,
+    "",
+    "## Files to Generate",
+    "",
+    "1. wiki/log.md — append a new log entry ONLY",
+    `   - Format: ## [${new Date().toISOString().slice(0, 10)}] ingest | ${sourceFileName}`,
+    "   - List the pages created",
+    "",
+    "2. wiki/overview.md — updated high-level summary of the entire wiki",
+    "   - 2-5 paragraphs covering ALL topics in the wiki",
+    "   - Reflect the newly added content",
+    "",
+    "## Output Format",
+    "---FILE: wiki/log.md---",
+    "(new log entry only)",
+    "---END FILE---",
+    "---FILE: wiki/overview.md---",
+    "(complete updated overview)",
+    "---END FILE---",
+    "",
+    "## Review Items",
+    "After the FILE blocks, you may output REVIEW blocks:",
+    "---REVIEW: type | Title---",
+    "Description.",
+    "OPTIONS: Create Page | Skip",
+    "PAGES: wiki/page1.md",
+    "SEARCH: query1 | query2",
+    "---END REVIEW---",
+    "Review types: contradiction, duplicate, missing-page, suggestion",
+    "",
+    purpose ? `## Wiki Purpose\n${purpose}` : "",
+    overview ? `## Current Overview\n${overview}` : "",
+  ].filter(Boolean).join("\n")
 }
 
 async function tryReadFile(projectId: string, relativePath: string): Promise<string> {
@@ -652,11 +897,9 @@ export async function executeIngestWrites(
   )
 
   const writtenPaths: string[] = []
-  const matches = accumulated.matchAll(FILE_BLOCK_REGEX)
 
-  for (const match of matches) {
-    const relativePath = match[1].trim()
-    let content = match[2]
+  for (const { path: relativePath, content: rawContent } of parseFileBlocks(accumulated)) {
+    let content = rawContent
 
     if (!relativePath) continue
 

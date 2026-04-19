@@ -123,6 +123,7 @@
     "orphan": "Orphan Page",
     "brokenLink": "Broken Link",
     "noOutlinks": "No Outbound Links",
+    "typeMismatch": "Type Mismatch",
     "semanticIssue": "Semantic Issue",
     "contradiction": "Contradiction",
     "stale": "Stale Content",

@@ -28,6 +28,10 @@ interface WikiPageInfo {
   origin?: string
 }
 
+function canonicalTitleFromFileName(fileName: string): string {
+  return fileName.replace(/\.md$/, "").replace(/-/g, " ").trim()
+}
+
 const TYPE_CONFIG: Record<string, { icon: IconComp; labelKey: string; iconColor: string; order: number }> = {
   overview: { icon: ViewModule, labelKey: "knowledgeTree.overview", iconColor: "warning.main", order: 0 },
   entity: { icon: PeopleOutlineOutlined, labelKey: "knowledgeTree.entities", iconColor: "info.main", order: 1 },
@@ -48,7 +52,7 @@ const DEFAULT_CONFIG = {
 export function KnowledgeTree() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
+  const activeTabPath = useWikiStore((s) => s.activeTabPath)
   const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const fileTree = useWikiStore((s) => s.fileTree)
@@ -195,12 +199,13 @@ export function KnowledgeTree() {
               {isExpanded && (
                 <Box sx={{ ml: 1.5 }}>
                   {items.map((page) => {
-                    const isSelected = selectedFile === page.relativePath
+                    const isSelected = activeTabPath === page.relativePath
                     return (
                       <Box
                         key={page.relativePath}
                         component="button"
                         type="button"
+                        aria-current={isSelected ? "page" : undefined}
                         onClick={() => { navigateInCurrentTab(page.relativePath); setActiveView("wiki") }}
                         title={page.relativePath}
                         sx={{
@@ -246,7 +251,7 @@ function RawSourcesSection() {
   const project = useWikiStore((s) => s.project)
   const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
-  const selectedFile = useWikiStore((s) => s.selectedFile)
+  const activeTabPath = useWikiStore((s) => s.activeTabPath)
   const [expanded, setExpanded] = useState(false)
   const [sources, setSources] = useState<FileNode[]>([])
 
@@ -297,12 +302,13 @@ function RawSourcesSection() {
       {expanded && (
         <Box sx={{ ml: 1.5 }}>
           {sources.map((file) => {
-            const isSelected = selectedFile === file.relativePath
+            const isSelected = activeTabPath === file.relativePath
             return (
               <Box
                 key={file.relativePath}
                 component="button"
                 type="button"
+                aria-current={isSelected ? "page" : undefined}
                 onClick={() => { navigateInCurrentTab(file.relativePath); setActiveView("wiki") }}
                 sx={{
                   display: "flex",
@@ -335,15 +341,16 @@ function RawSourcesSection() {
 
 function parsePageInfo(relativePath: string, fileName: string, content: string): WikiPageInfo {
   let type = "other"
-  let title = fileName.replace(".md", "").replace(/-/g, " ")
+  let title = canonicalTitleFromFileName(fileName)
   const tags: string[] = []
   let origin: string | undefined
+  let frontmatterType: string | null = null
 
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---/)
   if (fmMatch) {
     const fm = fmMatch[1]
     const typeMatch = fm.match(/^type:\s*(.+)$/m)
-    if (typeMatch) type = typeMatch[1].trim().toLowerCase()
+    if (typeMatch) frontmatterType = typeMatch[1].trim().toLowerCase()
 
     const titleMatch = fm.match(/^title:\s*["']?(.+?)["']?\s*$/m)
     if (titleMatch) title = titleMatch[1].trim()
@@ -357,14 +364,26 @@ function parsePageInfo(relativePath: string, fileName: string, content: string):
     if (originMatch) origin = originMatch[1].trim()
   }
 
-  if (type === "other") {
-    if (relativePath.includes("/entities/")) type = "entity"
-    else if (relativePath.includes("/concepts/")) type = "concept"
-    else if (relativePath.includes("/sources/")) type = "source"
-    else if (relativePath.includes("/queries/")) type = "query"
-    else if (relativePath.includes("/comparisons/")) type = "comparison"
-    else if (relativePath.includes("/synthesis/")) type = "synthesis"
-    else if (fileName === "overview.md") type = "overview"
+  // Canonical typing is path-first. This prevents incorrect frontmatter type
+  // from mis-grouping pages (e.g. overview.md accidentally marked as source).
+  if (fileName === "overview.md") type = "overview"
+  else if (relativePath.includes("/entities/")) type = "entity"
+  else if (relativePath.includes("/concepts/")) type = "concept"
+  else if (relativePath.includes("/sources/")) type = "source"
+  else if (relativePath.includes("/queries/")) type = "query"
+  else if (relativePath.includes("/comparisons/")) type = "comparison"
+  else if (relativePath.includes("/synthesis/")) type = "synthesis"
+  else if (frontmatterType) type = frontmatterType
+
+  // Canonical title is path-first for source/entity/concept pages to avoid
+  // dirty frontmatter causing label/path mismatch in sidebar.
+  if (type === "overview") {
+    if (!title || /^overview$/i.test(title)) title = "Wiki 总览"
+  } else if (
+    (type === "entity" || type === "concept" || type === "source") &&
+    relativePath.startsWith("wiki/sources/")
+  ) {
+    title = canonicalTitleFromFileName(fileName)
   }
 
   return { relativePath, title, type, tags, origin }

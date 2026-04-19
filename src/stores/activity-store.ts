@@ -4,6 +4,8 @@ import { persist } from "zustand/middleware"
 export interface ActivityItem {
   id: string
   type: "ingest" | "lint" | "query"
+  projectId?: string
+  sourcePath?: string
   title: string
   status: "running" | "done" | "error"
   detail: string
@@ -20,17 +22,23 @@ interface ActivityState {
   clearErrors: () => void
 }
 
-// Derive the next counter from persisted items to avoid id collisions after reload.
-function initCounter(items: ActivityItem[]): number {
-  let max = 0
-  for (const item of items) {
-    const m = item.id.match(/^activity-(\d+)$/)
-    if (m) max = Math.max(max, parseInt(m[1], 10))
-  }
-  return max
+function genId(): string {
+  return `activity-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
 }
 
-let counter = 0
+function dedupeItemIds(items: ActivityItem[]): ActivityItem[] {
+  const seen = new Set<string>()
+  return items.map((item) => {
+    if (!seen.has(item.id)) {
+      seen.add(item.id)
+      return item
+    }
+    let nextId = genId()
+    while (seen.has(nextId)) nextId = genId()
+    seen.add(nextId)
+    return { ...item, id: nextId }
+  })
+}
 
 export const useActivityStore = create<ActivityState>()(
   persist(
@@ -38,14 +46,22 @@ export const useActivityStore = create<ActivityState>()(
       items: [],
 
       addItem: (item) => {
-        const id = `activity-${++counter}`
+        let createdId = ""
         set((state) => ({
-          items: [
-            { ...item, id, createdAt: Date.now() },
-            ...state.items,
-          ],
+          // Guard against rare timestamp/random collisions that can cause duplicate React keys.
+          items: (() => {
+            let id = genId()
+            while (state.items.some((existing) => existing.id === id)) {
+              id = genId()
+            }
+            createdId = id
+            return [
+              { ...item, id, createdAt: Date.now() },
+              ...state.items,
+            ]
+          })(),
         }))
-        return id
+        return createdId
       },
 
       updateItem: (id, updates) =>
@@ -79,25 +95,29 @@ export const useActivityStore = create<ActivityState>()(
       name: "llm-wiki-activity",
       // Only persist items, not actions
       partialize: (state) => ({ items: state.items }),
-      // On rehydration: any "running" item was killed by page refresh; also prune old items
-      // and sync the in-memory counter so new IDs don't collide with persisted ones.
+      // On rehydration: any "running" item was killed by page refresh; also prune old items.
       onRehydrateStorage: () => (state) => {
         if (!state) return
         const now = Date.now()
+        // On reload: convert running→error, and DROP all error items
+        // (errors are session-scoped; only done items are worth keeping across refreshes)
         const normalized = state.items
           .map((item) =>
             item.status === "running"
               ? { ...item, status: "error" as const, detail: "任务被页面刷新中断，请重新生成" }
               : item
           )
-          // Only keep items from the last 24 hours
-          .filter((item) => now - item.createdAt < 24 * 60 * 60 * 1000)
-
-        // Sync counter so new ids don't collide with already-persisted ids.
-        counter = initCounter(normalized)
+          .filter((item) =>
+            // Keep done items for 24 hours (useful history)
+            item.status === "done"
+              ? now - item.createdAt < 24 * 60 * 60 * 1000
+              // Drop ALL error items on page reload — they are stale session artifacts
+              : false
+          )
+        const deduped = dedupeItemIds(normalized)
 
         // Use setState to properly notify subscribers (not direct mutation).
-        useActivityStore.setState({ items: normalized })
+        useActivityStore.setState({ items: deduped })
       },
     }
   )

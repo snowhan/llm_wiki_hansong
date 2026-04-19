@@ -54,4 +54,31 @@ describe("WelcomeScreen", () => {
     expect(screen.getByText("Old Wiki")).toBeTruthy()
     expect(screen.getByText("abc123de…")).toBeTruthy()
   })
+
+  it("does not render nested button inside recent project item", async () => {
+    recentMocks.getRecentProjects.mockResolvedValue([{ id: "abc123def456", name: "Old Wiki" }])
+    const { container } = render(
+      <WelcomeScreen onCreateProject={vi.fn()} onOpenProject={vi.fn()} onSelectProject={vi.fn()} />,
+    )
+    await screen.findByText("Old Wiki")
+    expect(container.querySelector("button button")).toBeNull()
+  })
+
+  it("clicking remove button does not trigger project selection", async () => {
+    recentMocks.getRecentProjects
+      .mockResolvedValueOnce([{ id: "abc123def456", name: "Old Wiki" }])
+      .mockResolvedValueOnce([])
+
+    const onSelectProject = vi.fn()
+    render(
+      <WelcomeScreen onCreateProject={vi.fn()} onOpenProject={vi.fn()} onSelectProject={onSelectProject} />,
+    )
+    const removeButton = await screen.findByLabelText("common.close")
+    fireEvent.click(removeButton)
+
+    await waitFor(() => {
+      expect(recentMocks.removeFromRecentProjects).toHaveBeenCalledWith("abc123def456")
+    })
+    expect(onSelectProject).not.toHaveBeenCalled()
+  })
 })

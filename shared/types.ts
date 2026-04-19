@@ -59,6 +59,7 @@ export interface ServerIngestTask {
   projectId: string
   sourcePath: string   // relative to project root
   folderContext: string
+  force: boolean
   status: "pending" | "running" | "done" | "error"
   detail: string
   filesWritten: string[]

@@ -24,6 +24,9 @@ export interface SseCallbacks {
   onToken?: (step: string, token: string) => void
   onDone?: (task: ServerIngestTask) => void
   onError?: (msg: string) => void
+  /** Fired when the SSE transport closes unexpectedly (distinct from a task error).
+   *  Callers should query the server before deciding whether to mark as failed. */
+  onConnectionLost?: () => void
 }
 
 function authHeaders(): Record<string, string> {
@@ -40,6 +43,7 @@ export async function startServerIngest(params: {
   projectId: string
   sourcePath: string   // relative to project root
   folderContext?: string
+  force?: boolean
 }): Promise<string> {
   const res = await fetch("/api/ingest/start", {
     method: "POST",
@@ -141,8 +145,13 @@ export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () 
     if (intentionallyClosed) return
     if (es.readyState === EventSource.CLOSED) {
       intentionallyClosed = true
-      callbacks.onError?.("SSE connection error")
-      return
+      // Prefer onConnectionLost so callers can query the server before deciding
+      // whether to report failure. Fall back to onError for legacy callers.
+      if (callbacks.onConnectionLost) {
+        callbacks.onConnectionLost()
+      } else {
+        callbacks.onError?.("SSE connection error")
+      }
     }
   }
 

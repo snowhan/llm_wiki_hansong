@@ -253,8 +253,17 @@ export function WelcomeScreen({
             <Stack spacing={0.5}>
               {recentProjects.map((proj) => (
                 <ButtonBase
+                  component="div"
+                  role="button"
+                  tabIndex={0}
                   key={proj.id}
                   onClick={() => onSelectProject(proj)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      onSelectProject(proj)
+                    }
+                  }}
                   sx={{
                     display: "flex",
                     width: "100%",

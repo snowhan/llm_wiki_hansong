@@ -65,6 +65,20 @@ function flattenNames(nodes: FileNode[]): string[] {
   return names
 }
 
+/** Recursively find the first file matching `fileName` in a FileNode tree.
+ *  Returns its `relativePath`, or null if not found. */
+function findFileInTree(nodes: FileNode[], fileName: string): string | null {
+  for (const node of nodes) {
+    if (node.is_dir && node.children) {
+      const found = findFileInTree(node.children, fileName)
+      if (found) return found
+    } else if (!node.is_dir && node.name === fileName) {
+      return node.relativePath
+    }
+  }
+  return null
+}
+
 interface ChatMessageProps {
   message: DisplayMessage
   isLastAssistant?: boolean
@@ -481,6 +495,7 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
                 const id = getFileName(page.relativePath.replace(/^wiki\//, "").replace(/\.md$/, ""))
                 const candidates = [
                   page.relativePath,
+                  // Legacy global paths (pre-namespace)
                   `wiki/entities/${id}.md`,
                   `wiki/concepts/${id}.md`,
                   `wiki/sources/${id}.md`,
@@ -498,6 +513,12 @@ function CitedReferencesPanel({ content, savedReferences }: { content: string; s
                     // try next
                   }
                 }
+                // Namespace fallback: scan wiki/sources/<stem>/entities|concepts/
+                try {
+                  const sourcesTree = await listDirectory(project.id, "wiki/sources")
+                  const found = findFileInTree(sourcesTree, `${id}.md`)
+                  if (found) { setSelectedFile(found); return }
+                } catch { /* ignore */ }
                 // Last resort: set the original path anyway
                 setSelectedFile(page.relativePath)
               }}
@@ -706,6 +727,7 @@ function MarkdownContent({ content }: { content: string }) {
   const onWikilinkClick = useCallback(
     async (pageName: string) => {
       if (!project) return
+      // 1. Try legacy global paths first (backward compat with pre-namespace files)
       const dirs = ["entities", "concepts", "sources", "synthesis", "comparisons", "queries", ""]
       for (const dir of dirs) {
         const tryPath = dir ? `wiki/${dir}/${pageName}.md` : `wiki/${pageName}.md`
@@ -717,6 +739,18 @@ function MarkdownContent({ content }: { content: string }) {
         } catch {
           // try next
         }
+      }
+      // 2. Fallback: scan wiki/sources/<stem>/entities|concepts/ for namespaced pages
+      try {
+        const sourcesTree = await listDirectory(project.id, "wiki/sources")
+        const found = findFileInTree(sourcesTree, `${pageName}.md`)
+        if (found) {
+          const fc = await readFile(project.id, found)
+          setSelectedFile(found)
+          setFileContent(fc)
+        }
+      } catch {
+        // not found anywhere — silently ignore
       }
     },
     [project, setSelectedFile, setFileContent],
