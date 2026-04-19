@@ -13,6 +13,7 @@
     "graph": "关系图",
     "lint": "检查",
     "review": "待审阅",
+    "mappingCheck": "映射审核",
     "settings": "设置",
     "admin": "管理员",
     "switchProject": "切换项目"
@@ -393,5 +394,39 @@
       "done": "已完成",
       "error": "错误"
     }
+  },
+  "mappingCheck": {
+    "title": "映射审核",
+    "subtitle": "检查生成的 Wiki 页面路径与内容类型是否匹配",
+    "filterAll": "全部",
+    "filterHighRisk": "高风险",
+    "filterApproved": "已审核",
+    "empty": "暂无需要审核的文件",
+    "emptyHighRisk": "未发现高风险映射",
+    "emptyApproved": "暂无已审核文件",
+    "riskHigh": "高风险",
+    "riskOk": "正常",
+    "statusPending": "待审核",
+    "statusApproved": "已审核",
+    "pathType": "路径类型",
+    "frontmatterType": "类型字段",
+    "frontmatterTitle": "标题字段",
+    "contentPreview": "内容预览",
+    "riskReason": "风险原因",
+    "openInEditor": "在编辑器中打开",
+    "markApproved": "标记为正确",
+    "saveChanges": "保存修改",
+    "saving": "保存中...",
+    "savedSuccess": "已保存",
+    "clearAll": "清除全部",
+    "clearConfirm": "确认清除本项目所有映射审核记录？",
+    "ingestSession": "生成批次",
+    "totalFiles": "共 {{count}} 个文件",
+    "highRiskFiles": "{{count}} 个高风险",
+    "editTitle": "编辑标题",
+    "editType": "编辑类型",
+    "typeEntity": "entity",
+    "typeConcept": "concept",
+    "typeSource": "source"
   }
 }

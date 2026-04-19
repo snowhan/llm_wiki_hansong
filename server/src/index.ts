@@ -14,6 +14,7 @@ import vectorRouter from "./routes/vector.js"
 import preprocessRouter from "./routes/preprocess.js"
 import ingestRouter from "./routes/ingest.js"
 import adminRouter from "./routes/admin.js"
+import mappingCheckRouter from "./routes/mapping-check.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -33,6 +34,7 @@ app.use("/api/vector", vectorRouter)
 app.use("/api/preprocess", preprocessRouter)
 app.use("/api/ingest", ingestRouter)
 app.use("/api/admin", adminRouter)
+app.use("/api/mapping-check", mappingCheckRouter)
 
 const distDir = process.env.STATIC_DIR ?? path.resolve(__dirname, "../../../../dist")
 app.use(express.static(distDir))

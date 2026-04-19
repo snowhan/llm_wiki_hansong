@@ -33,6 +33,20 @@ export async function apiGet<T>(url: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export async function apiPatch<T = void>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${url}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => res.statusText)
+    throw new Error(text || `HTTP ${res.status}`)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
+
 export async function apiPut(url: string, body?: unknown): Promise<void> {
   const res = await fetch(`${BASE_URL}${url}`, {
     method: "PUT",

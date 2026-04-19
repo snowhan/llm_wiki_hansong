@@ -8,6 +8,7 @@ import Search from "@mui/icons-material/Search"
 import AccountTree from "@mui/icons-material/AccountTree"
 import CheckCircleOutlineOutlined from "@mui/icons-material/CheckCircleOutlineOutlined"
 import FormatListBulleted from "@mui/icons-material/FormatListBulleted"
+import FactCheck from "@mui/icons-material/FactCheck"
 import Explore from "@mui/icons-material/Explore"
 import Settings from "@mui/icons-material/Settings"
 import SwapHoriz from "@mui/icons-material/SwapHoriz"
@@ -16,6 +17,7 @@ import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useReviewStore } from "@/stores/review-store"
 import { useResearchStore } from "@/stores/research-store"
+import { useHighRiskMappingCount } from "@/stores/mapping-check-store"
 import { useTranslation } from "react-i18next"
 import logoImg from "@/assets/logo.png"
 import type { WikiState } from "@/stores/wiki-store"
@@ -31,6 +33,7 @@ const NAV_ITEMS: { view: NavView; icon: NavIcon; labelKey: string }[] = [
   { view: "graph", icon: AccountTree, labelKey: "nav.graph" },
   { view: "lint", icon: CheckCircleOutlineOutlined, labelKey: "nav.lint" },
   { view: "review", icon: FormatListBulleted, labelKey: "nav.review" },
+  { view: "mapping-check", icon: FactCheck, labelKey: "nav.mappingCheck" },
 ]
 
 interface IconSidebarProps {
@@ -42,6 +45,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const activeView = useWikiStore((s) => s.activeView)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const pendingCount = useReviewStore((s) => s.items.filter((i) => !i.resolved).length)
+  const highRiskMappingCount = useHighRiskMappingCount()
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
   const toggleResearchPanel = useResearchStore((s) => s.setPanelOpen)
@@ -121,7 +125,18 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
 
       <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", flex: 1, width: "100%" }}>
         {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => (
-          <Tooltip key={view} title={<>{t(labelKey)}{view === "review" && pendingCount > 0 ? ` (${pendingCount})` : ""}</>} placement="right" enterDelay={300}>
+          <Tooltip
+            key={view}
+            title={
+              <>
+                {t(labelKey)}
+                {view === "review" && pendingCount > 0 ? ` (${pendingCount})` : ""}
+                {view === "mapping-check" && highRiskMappingCount > 0 ? ` (${highRiskMappingCount})` : ""}
+              </>
+            }
+            placement="right"
+            enterDelay={300}
+          >
             <Box sx={{ position: "relative" }}>
               <IconButton
                 size="small"
@@ -133,6 +148,11 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               {view === "review" && pendingCount > 0 && (
                 <Box component="span" sx={badgeSx("#B91C1C")}>
                   {pendingCount > 99 ? "99+" : pendingCount}
+                </Box>
+              )}
+              {view === "mapping-check" && highRiskMappingCount > 0 && (
+                <Box component="span" sx={badgeSx("#D97706")}>
+                  {highRiskMappingCount > 99 ? "99+" : highRiskMappingCount}
                 </Box>
               )}
             </Box>

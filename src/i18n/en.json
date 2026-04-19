@@ -13,6 +13,7 @@
     "graph": "Graph",
     "lint": "Lint",
     "review": "Review",
+    "mappingCheck": "Mapping Review",
     "settings": "Settings",
     "admin": "Admin",
     "switchProject": "Switch Project"
@@ -393,5 +394,39 @@
       "done": "Done",
       "error": "Error"
     }
+  },
+  "mappingCheck": {
+    "title": "Mapping Review",
+    "subtitle": "Verify that generated Wiki pages have matching path types and content",
+    "filterAll": "All",
+    "filterHighRisk": "High Risk",
+    "filterApproved": "Approved",
+    "empty": "No files to review",
+    "emptyHighRisk": "No high-risk mappings found",
+    "emptyApproved": "No approved files yet",
+    "riskHigh": "High Risk",
+    "riskOk": "OK",
+    "statusPending": "Pending",
+    "statusApproved": "Approved",
+    "pathType": "Path Type",
+    "frontmatterType": "Type Field",
+    "frontmatterTitle": "Title Field",
+    "contentPreview": "Content Preview",
+    "riskReason": "Risk Reason",
+    "openInEditor": "Open in Editor",
+    "markApproved": "Mark as OK",
+    "saveChanges": "Save Changes",
+    "saving": "Saving...",
+    "savedSuccess": "Saved",
+    "clearAll": "Clear All",
+    "clearConfirm": "Clear all mapping review records for this project?",
+    "ingestSession": "Ingest Session",
+    "totalFiles": "{{count}} file(s)",
+    "highRiskFiles": "{{count}} high-risk",
+    "editTitle": "Edit Title",
+    "editType": "Edit Type",
+    "typeEntity": "entity",
+    "typeConcept": "concept",
+    "typeSource": "source"
   }
 }
