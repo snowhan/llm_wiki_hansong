@@ -24,7 +24,7 @@ interface WikiState {
   selectedFile: string | null       // relativePath within project, or null
   fileContent: string
   chatExpanded: boolean
-  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "review" | "mapping-check" | "settings" | "admin"
+  activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "review" | "mapping-check" | "llm-debug" | "settings" | "admin"
   llmConfig: LlmConfig
   searchApiConfig: SearchApiConfig
   embeddingConfig: EmbeddingConfig

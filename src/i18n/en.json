@@ -14,7 +14,7 @@
     "lint": "Lint",
     "review": "Review",
     "mappingCheck": "Mapping Review",
-    "settings": "Settings",
+    "llmDebug": "LLM Debug",
     "admin": "Admin",
     "switchProject": "Switch Project"
   },
@@ -428,5 +428,20 @@
     "typeEntity": "entity",
     "typeConcept": "concept",
     "typeSource": "source"
+  },
+  "llmDebug": {
+    "title": "LLM Debug Log",
+    "live": "Live",
+    "disconnected": "Disconnected",
+    "records": "records",
+    "clearAll": "Clear All",
+    "empty": "No LLM calls recorded yet",
+    "emptyHint": "Trigger any LLM call and logs will appear here in real time",
+    "input": "Input",
+    "messages": "messages",
+    "output": "Output",
+    "emptyOutput": "(empty output)",
+    "done": "Done",
+    "error": "Error"
   }
 }

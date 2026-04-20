@@ -14,7 +14,7 @@
     "lint": "检查",
     "review": "待审阅",
     "mappingCheck": "映射审核",
-    "settings": "设置",
+    "llmDebug": "LLM 调试",
     "admin": "管理员",
     "switchProject": "切换项目"
   },
@@ -428,5 +428,20 @@
     "typeEntity": "entity",
     "typeConcept": "concept",
     "typeSource": "source"
+  },
+  "llmDebug": {
+    "title": "LLM 调试日志",
+    "live": "实时推送中",
+    "disconnected": "未连接",
+    "records": "条记录",
+    "clearAll": "清除全部",
+    "empty": "暂无 LLM 调用记录",
+    "emptyHint": "触发任意 LLM 调用后，日志将在此处实时显示",
+    "input": "输入",
+    "messages": "条消息",
+    "output": "输出",
+    "emptyOutput": "（无输出）",
+    "done": "成功",
+    "error": "错误"
   }
 }

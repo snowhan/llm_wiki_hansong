@@ -9,13 +9,15 @@
 
 import fs from "node:fs/promises"
 import path from "node:path"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import type { Response } from "express"
 import type { LlmConfig, ServerIngestTask } from "../types.js"
 import { getProjectRoot } from "./project-service.js"
+import { logLlmCall, logFileChange, nowBeijing } from "./ingest-audit-logger.js"
 import { getState } from "./state-service.js"
 import { getProviderConfig } from "../lib/llm-providers.js"
 import type { ChatMessage } from "../lib/llm-providers.js"
+import { llmDebugLogger, inferLlmCallSource } from "./llm-debug-logger.js"
 
 // ── Task types ────────────────────────────────────────────────────────────
 
@@ -178,6 +180,21 @@ function extractFmField(content: string, field: string): string {
   return m ? m[1].trim() : ""
 }
 
+function extractMarkdownBody(content: string): string {
+  const fmMatch = content.match(/^---\s*\n[\s\S]*?\n---\s*\n?/)
+  if (fmMatch) return content.slice(fmMatch[0].length).trim()
+  return content.trim()
+}
+
+function normalizeForMatch(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, "").replace(/[`*_[\]()#.:,，。！？!?\-]/g, "")
+}
+
+function extractFirstHeading(body: string): string {
+  const m = body.match(/^#\s+(.+)\s*$/m)
+  return m ? m[1].trim() : ""
+}
+
 /**
  * Scan wiki/ directory, read frontmatter from every .md file, and write
  * a fresh wiki/index.md grouped by page type.
@@ -238,6 +255,73 @@ export async function rebuildWikiIndex(projectPath: string): Promise<void> {
 }
 
 /**
+ * Rebuild wiki/overview.md from current source summary pages.
+ * This avoids LLM race/contamination on shared overview file under concurrent ingest.
+ */
+export async function rebuildWikiOverview(projectPath: string): Promise<void> {
+  const wikiDir = path.join(projectPath, "wiki")
+  const sourcesDir = path.join(wikiDir, "sources")
+  let sourceEntries: fs.Dirent[] = []
+  try {
+    sourceEntries = await fs.readdir(sourcesDir, { withFileTypes: true })
+  } catch {
+    await writeWithMkdir(path.join(wikiDir, "overview.md"), "# Wiki Overview\n\nNo source summaries yet.\n")
+    return
+  }
+
+  const sourceSummaries = sourceEntries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
+
+  const allWikiFiles = await collectMdFiles(wikiDir, wikiDir)
+  const stats = { source: 0, entity: 0, concept: 0, other: 0 }
+  for (const relPath of allWikiFiles) {
+    if (INDEX_SKIP.has(path.basename(relPath))) continue
+    const content = await tryRead(path.join(wikiDir, relPath))
+    const type = extractFmField(content, "type")
+    if (type === "source") stats.source += 1
+    else if (type === "entity") stats.entity += 1
+    else if (type === "concept") stats.concept += 1
+    else stats.other += 1
+  }
+
+  const lines: string[] = [
+    "# Wiki Overview",
+    "",
+    "> Auto-generated from current wiki pages.",
+    "",
+    "## Snapshot",
+    "",
+    `- Source pages: ${stats.source}`,
+    `- Entity pages: ${stats.entity}`,
+    `- Concept pages: ${stats.concept}`,
+    `- Other pages: ${stats.other}`,
+    "",
+    "## Source Summaries",
+    "",
+  ]
+
+  if (sourceSummaries.length === 0) {
+    lines.push("- No source summary pages found.", "")
+  } else {
+    for (const fileName of sourceSummaries) {
+      const relPath = `sources/${fileName}`
+      const content = await tryRead(path.join(wikiDir, relPath))
+      const title = extractFmField(content, "title") || fileName.replace(/\.md$/, "")
+      const body = extractMarkdownBody(content)
+      const firstLine = body.split("\n").find((line) => line.trim().length > 0) ?? ""
+      const preview = firstLine.replace(/^#\s+/, "").slice(0, 90)
+      const slug = fileName.replace(/\.md$/, "")
+      lines.push(`- [[${slug}]] — ${title}${preview ? `: ${preview}` : ""}`)
+    }
+    lines.push("")
+  }
+
+  await writeWithMkdir(path.join(wikiDir, "overview.md"), lines.join("\n"))
+}
+
+/**
  * Schedule an index rebuild for the given project.
  * Rebuilds are serialised per-project via a promise chain so concurrent ingest
  * tasks never produce a partially-written index.md.
@@ -252,6 +336,16 @@ export function scheduleIndexRebuild(projectPath: string): void {
       console.error("[ingest-service] Index rebuild failed:", err)
     }),
   )
+}
+
+/**
+ * Wait until all scheduled index rebuild work for a project is finished.
+ * Used by ingest flow so task status "done" is published after index.md is up to date.
+ */
+export async function waitForIndexRebuild(projectPath: string): Promise<void> {
+  const pending = _rebuildQueue.get(projectPath)
+  if (!pending) return
+  await pending
 }
 
 async function readSourceForIngest(sourcePath: string): Promise<string> {
@@ -318,6 +412,9 @@ async function callLlm(
 ): Promise<void> {
   const pc = getProviderConfig(llmConfig)
   const body = pc.buildBody(messages)
+  const startMs = Date.now()
+  let outputText = ""
+  let callError: string | undefined
 
   const response = await fetch(pc.url, {
     method: "POST",
@@ -328,7 +425,20 @@ async function callLlm(
 
   if (!response.ok) {
     const err = await response.text().catch(() => "")
-    throw new Error(`LLM ${response.status}: ${err.slice(0, 200)}`)
+    callError = `LLM ${response.status}: ${err.slice(0, 200)}`
+    llmDebugLogger.append({
+      id: randomUUID(),
+      timestamp: startMs,
+      source: inferLlmCallSource(messages),
+      provider: llmConfig.provider,
+      model: llmConfig.model ?? "",
+      messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
+      output: "",
+      durationMs: Date.now() - startMs,
+      status: "error",
+      error: callError,
+    }).catch(() => {})
+    throw new Error(callError)
   }
   if (!response.body) throw new Error("Empty LLM response body")
 
@@ -345,15 +455,34 @@ async function callLlm(
       buf = lines.pop() ?? ""
       for (const line of lines) {
         const t = pc.parseStream(line.trim())
-        if (t !== null) onToken(t)
+        if (t !== null) {
+          outputText += t
+          onToken(t)
+        }
       }
     }
     if (buf.trim()) {
       const t = pc.parseStream(buf.trim())
-      if (t !== null) onToken(t)
+      if (t !== null) {
+        outputText += t
+        onToken(t)
+      }
     }
   } finally {
     reader.releaseLock()
+    // Debug logging — non-blocking, never throws
+    llmDebugLogger.append({
+      id: randomUUID(),
+      timestamp: startMs,
+      source: inferLlmCallSource(messages),
+      provider: llmConfig.provider,
+      model: llmConfig.model ?? "",
+      messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
+      output: outputText,
+      durationMs: Date.now() - startMs,
+      status: callError ? "error" : "done",
+      ...(callError ? { error: callError } : {}),
+    }).catch(() => {})
   }
 }
 
@@ -371,7 +500,7 @@ async function callLlm(
  * terminator for any open block, so missing ---END FILE--- markers can
  * never cause content bleed between files.
  */
-function parseFileBlocks(text: string): Array<{ path: string; content: string }> {
+export function parseFileBlocks(text: string): Array<{ path: string; content: string }> {
   const results: Array<{ path: string; content: string }> = []
   const lines = text.split("\n")
   let currentPath: string | null = null
@@ -397,10 +526,11 @@ function parseFileBlocks(text: string): Array<{ path: string; content: string }>
     }
   }
   flush() // handle trailing open block
+
   return results
 }
 
-function normFrontmatter(content: string): string {
+export function normFrontmatter(content: string): string {
   if (/^-{3}[ \t]*\r?\n/.test(content)) return content
   const m = content.match(/^((?:[a-z_][a-z0-9_]*[ \t]*:[ \t]*[^\n]*\n){2,})/)
   if (m) {
@@ -409,6 +539,117 @@ function normFrontmatter(content: string): string {
   return content
 }
 
+/**
+ * Set or insert a frontmatter key/value pair (the block between the --- delimiters).
+ */
+export function setFmField(fm: string, key: string, value: string): string {
+  const line = `${key}: ${value}`
+  const re = new RegExp(`^${key}:\\s*.*$`, "m")
+  if (re.test(fm)) return fm.replace(re, line)
+  return `${fm}\n${line}`.trim()
+}
+
+/**
+ * Correct the `title` and `type` frontmatter fields to match the canonical
+ * values derived from the file path.  Called by writeSingleBlock so that LLM
+ * output with wrong titles never reaches disk.
+ */
+export function ensureCanonicalTitleType(rel: string, content: string): string {
+  const fmMatch = content.match(/^(---\n)([\s\S]*?)(\n---\n?)([\s\S]*)$/)
+  if (!fmMatch) return content
+
+  const canonicalType = rel === "wiki/overview.md"
+    ? "overview"
+    : rel.includes("/entities/") ? "entity"
+    : rel.includes("/concepts/") ? "concept"
+    : /^wiki\/sources\/[^/]+\.md$/.test(rel) ? "source"
+    : null
+
+  const entityMatch = rel.match(/^wiki\/sources\/.+\/(entities|concepts)\/([^/]+)\.md$/)
+  const sourceMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
+  const canonicalTitle = rel === "wiki/overview.md"
+    ? "Wiki 总览"
+    : entityMatch ? path.basename(rel, ".md")
+    : sourceMatch ? sourceMatch[1]
+    : null
+
+  if (!canonicalType && !canonicalTitle) return content
+
+  let fm = fmMatch[2]
+  if (canonicalType) fm = setFmField(fm, "type", canonicalType)
+  if (canonicalTitle) fm = setFmField(fm, "title", canonicalTitle)
+  return `---\n${fm}\n---\n${fmMatch[4]}`
+}
+
+
+/**
+ * Check that the frontmatter title in a wiki file matches the file's basename.
+ * Returns true when consistent (or when the check is not applicable).
+ * This is the invariant that prevents LLM path-content mismatches from reaching disk.
+ */
+export function isTitleFilenameConsistent(rel: string, content: string): boolean {
+  const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
+  const titleInFrontmatter = titleMatch?.[1]?.trim()
+  if (!titleInFrontmatter) return true // no title → let empty-content check handle it
+
+  // 汇总页：wiki/sources/<base>.md（直接在 sources/ 下，不含子目录）
+  const sourceSummaryMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
+  if (sourceSummaryMatch) {
+    return titleInFrontmatter.toLowerCase() === sourceSummaryMatch[1].toLowerCase()
+  }
+
+  // 实体/概念页：wiki/sources/<base>/entities/<name>.md 或 .../concepts/<name>.md
+  if (!rel.match(/\/(entities|concepts)\/[^/]+\.md$/)) return true
+  const fileBasename = path.basename(rel, ".md")
+  return titleInFrontmatter.toLowerCase() === fileBasename.toLowerCase()
+}
+
+/**
+ * Check semantic consistency between path/title/body for generated pages.
+ * This blocks cases where filename/title are valid but body obviously belongs to another topic.
+ */
+export function isBodyTitleSemanticallyConsistent(rel: string, content: string): boolean {
+  if (!rel.endsWith(".md")) return true
+  if (rel === "wiki/log.md" || rel === "wiki/index.md" || rel === "wiki/overview.md") return true
+  const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
+  const title = titleMatch?.[1]?.trim()
+  if (!title) return true
+
+  const expectedType = rel.includes("/entities/")
+    ? "entity"
+    : rel.includes("/concepts/")
+      ? "concept"
+      : null
+  if (expectedType) {
+    const type = extractFmField(content, "type")
+    if (type && type !== expectedType) return false
+  }
+
+  const body = extractMarkdownBody(content)
+  if (!body) return false
+  const titleNorm = normalizeForMatch(title)
+  const bodyNorm = normalizeForMatch(body)
+  const heading = extractFirstHeading(body)
+  if (heading) {
+    const headingNorm = normalizeForMatch(heading)
+    if (!headingNorm.includes(titleNorm) && !titleNorm.includes(headingNorm)) return false
+  }
+
+  if (rel.includes("/entities/") || rel.includes("/concepts/")) {
+    const hasDirectMention = bodyNorm.includes(titleNorm)
+    const hasWikilinkMention = body.includes(`[[${title}]]`)
+    if (!hasDirectMention && !hasWikilinkMention) return false
+  }
+
+  const summaryMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
+  if (summaryMatch) {
+    const sourceBaseNorm = normalizeForMatch(summaryMatch[1])
+    const hasSourceMention = bodyNorm.includes(sourceBaseNorm) || body.includes(`[[${summaryMatch[1]}]]`)
+    if (!hasSourceMention) return false
+  }
+
+  return true
+}
 
 async function writeSingleBlock(
   projectPath: string,
@@ -436,11 +677,30 @@ async function writeSingleBlock(
 
   if (rel.endsWith(".md") && !isLogFile) {
     content = normFrontmatter(content)
+    content = ensureCanonicalTitleType(rel, content)
   }
   if (!isLogFile && !content.trim()) {
     console.warn(`[ingest-service] Skipping empty content for ${rel}`)
     return false
   }
+
+  // TEST: title-filename 一致性校验暂时注释掉，用于测试错位是否由 LLM 输出本身导致
+  // if (!isTitleFilenameConsistent(rel, content)) {
+  //   const fileBasename = path.basename(rel, ".md")
+  //   const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
+  //   console.warn(
+  //     `[ingest-service] ⛔ REJECTED title-filename mismatch: path="${rel}" title="${titleMatch?.[1]?.trim()}" filename="${fileBasename}"`,
+  //   )
+  //   return false
+  // }
+  // TEST: semantic mismatch 拦截暂时注释掉，测试 LLM 原始输出写入磁盘的裸状态
+  // if (!isBodyTitleSemanticallyConsistent(rel, content)) {
+  //   const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
+  //   console.warn(
+  //     `[ingest-service] ⛔ REJECTED semantic mismatch: path="${rel}" title="${titleMatch?.[1]?.trim() ?? ""}"`,
+  //   )
+  //   return false
+  // }
 
   const full = path.join(projectPath, rel)
   try {
@@ -458,11 +718,112 @@ async function writeSingleBlock(
   }
 }
 
-async function writeBlocks(projectPath: string, text: string): Promise<string[]> {
+/**
+ * Build the set of paths this ingest task is allowed to write.
+ * Paths outside this set are rejected to prevent LLM cross-source hallucinations.
+ *
+ * Allowed:
+ *   - wiki/sources/<sourceBase>.md          (source summary page)
+ *   - wiki/sources/<sourceBase>/**          (entities, concepts, etc.)
+ *   - wiki/log.md                           (append-only log)
+ *   - wiki/overview.md                      (shared overview, updated each ingest)
+ *
+ * wiki/index.md is intentionally excluded — it is rebuilt programmatically after
+ * each ingest via rebuildWikiIndex(), so any LLM-written version is discarded.
+ */
+export function buildAllowedPaths(sourceBase: string): ReadonlySet<string> {
+  return new Set<string>([
+    `wiki/sources/${sourceBase}.md`,
+    `wiki/log.md`,
+    `wiki/overview.md`,
+  ]) as ReadonlySet<string>
+}
+
+async function writeBlocks(
+  projectPath: string,
+  text: string,
+  sourceBase: string,
+  taskId: string,
+  sourceFile: string,
+): Promise<string[]> {
   const written: string[] = []
-  for (const { path: rel, content: rawContent } of parseFileBlocks(text)) {
-    if (await writeSingleBlock(projectPath, rel, rawContent)) written.push(rel)
+  const rejected: string[] = []
+  const staticAllowed = buildAllowedPaths(sourceBase)
+  const sourcePrefix = `wiki/sources/${sourceBase}/`
+  const blocks = parseFileBlocks(text)
+
+  console.log(`[writeBlocks] source="${sourceBase}" totalBlocks=${blocks.length}`)
+
+  for (const { path: relRaw, content: rawContent } of blocks) {
+    // Normalize to prevent path traversal (e.g. "sources/A/../../evil.md")
+    const rel = path.posix.normalize(relRaw)
+    if (rel === "wiki/overview.md") {
+      // Shared overview is rebuilt programmatically to avoid concurrent LLM drift.
+      continue
+    }
+
+    // Extract title and sources from frontmatter for logging
+    const titleMatch = rawContent.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
+    const titleInContent = titleMatch?.[1]?.trim() ?? "(no title)"
+    const sourcesMatch = rawContent.match(/^---\s*\n[\s\S]*?^sources:\s*(.+?)$/m)
+    const sourcesField = sourcesMatch?.[1]?.trim() ?? ""
+    const fileBasename = rel.split("/").pop()?.replace(/\.md$/, "") ?? ""
+    const titleMatchesFilename = fileBasename.toLowerCase() === titleInContent.toLowerCase()
+
+    const isAllowed = rel.startsWith(sourcePrefix) || staticAllowed.has(rel)
+    if (!isAllowed) {
+      rejected.push(rel)
+      console.warn(
+        `[writeBlocks] ⛔ REJECTED out-of-scope (source=${sourceBase}): ${rel}`,
+      )
+      logFileChange(projectPath, {
+        ts: nowBeijing(),
+        taskId,
+        sourceFile,
+        operation: "rejected-scope",
+        path: rel,
+        titleInContent,
+        titleMatchesFilename,
+        sourcesField,
+        contentSnippet: rawContent.slice(0, 300),
+      }).catch(() => {})
+      continue
+    }
+    const ok = await writeSingleBlock(projectPath, rel, rawContent)
+    if (ok) {
+      written.push(rel)
+      console.log(`[writeBlocks] ✅ WRITTEN (source=${sourceBase}): ${rel}`)
+      logFileChange(projectPath, {
+        ts: nowBeijing(),
+        taskId,
+        sourceFile,
+        operation: "written",
+        path: rel,
+        titleInContent,
+        titleMatchesFilename,
+        sourcesField,
+        contentSnippet: rawContent.slice(0, 300),
+      }).catch(() => {})
+    } else {
+      console.warn(`[writeBlocks] ⚠️ SKIPPED empty/invalid (source=${sourceBase}): ${rel}`)
+      logFileChange(projectPath, {
+        ts: nowBeijing(),
+        taskId,
+        sourceFile,
+        operation: "skipped-empty",
+        path: rel,
+        titleInContent,
+        titleMatchesFilename,
+        sourcesField,
+        contentSnippet: rawContent.slice(0, 300),
+      }).catch(() => {})
+    }
   }
+
+  console.log(
+    `[writeBlocks] DONE source="${sourceBase}" written=${written.length} rejected=${rejected.length}` +
+    (rejected.length > 0 ? ` rejectedPaths=[${rejected.join(", ")}]` : ""),
+  )
   return written
 }
 
@@ -505,7 +866,7 @@ const LANGUAGE_RULE =
   "If the source is in Chinese, write in Chinese. If in English, write in English. " +
   "Wiki page titles, content, and descriptions should all be in the same language as the source material."
 
-function buildAnalysisPrompt(purpose: string, index: string): string {
+function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): string {
   return [
     "You are an expert research analyst. Read the source document and produce a structured analysis.",
     "",
@@ -517,29 +878,28 @@ function buildAnalysisPrompt(purpose: string, index: string): string {
     "List people, organizations, products, datasets, tools mentioned. For each:",
     "- Name and type",
     "- Role in the source (central vs. peripheral)",
-    "- Whether it likely already exists in the wiki (check the index)",
+    "- Whether it likely already exists as a page for this source (check existing pages below)",
     "",
     "## Key Concepts",
     "List theories, methods, techniques, phenomena. For each:",
     "- Name and brief definition",
     "- Why it matters in this source",
-    "- Whether it likely already exists in the wiki",
+    "- Whether it likely already exists as a page for this source",
     "",
     "## Main Arguments & Findings",
     "- What are the core claims or results?",
     "- What evidence supports them?",
     "- How strong is the evidence?",
     "",
-    "## Connections to Existing Wiki",
-    "- What existing pages does this source relate to?",
+    "## Connections to Existing Pages",
+    "- What existing pages for this source does the new content relate to?",
     "- Does it strengthen, challenge, or extend existing knowledge?",
     "",
     "## Contradictions & Tensions",
-    "- Does anything in this source conflict with existing wiki content?",
-    "- Are there internal tensions or caveats?",
+    "- Are there internal tensions or caveats within this source?",
     "",
     "## Recommendations",
-    "- What wiki pages should be created or updated?",
+    "- What wiki pages should be created or updated for this source?",
     "- What should be emphasized vs. de-emphasized?",
     "- Any open questions worth flagging for the user?",
     "",
@@ -548,14 +908,14 @@ function buildAnalysisPrompt(purpose: string, index: string): string {
     "If a folder context is provided, use it as a hint for categorization.",
     "",
     purpose ? `## Wiki Purpose (for context)\n${purpose}` : "",
-    index ? `## Current Wiki Index (for checking existing content)\n${index}` : "",
+    existingSourcePaths ? `## Existing pages for this source\n${existingSourcePaths}` : "",
   ].filter(Boolean).join("\n")
 }
 
 function buildGenerationPrompt(
   schema: string,
   purpose: string,
-  index: string,
+  existingSourcePaths: string,
   sourceFileName: string,
   overview?: string,
 ): string {
@@ -582,9 +942,8 @@ function buildGenerationPrompt(
     `1. A source summary page at **wiki/sources/${base}.md** (MUST use this exact path)`,
     `2. Entity pages in **wiki/sources/${base}/entities/** for key entities identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/entities/entity-name.md)`,
     `3. Concept pages in **wiki/sources/${base}/concepts/** for key concepts identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/concepts/concept-name.md)`,
-    "4. An updated wiki/index.md — add new entries to existing categories, preserve all existing entries",
-    "5. A log entry for wiki/log.md (just the new entry to append, format: ## [YYYY-MM-DD] ingest | Title)",
-    "6. An updated wiki/overview.md — a high-level summary of what the entire wiki covers, updated to reflect the newly ingested source.",
+    "4. A log entry for wiki/log.md (just the new entry to append, format: ## [YYYY-MM-DD] ingest | Title)",
+    "5. An updated wiki/overview.md — a high-level summary of what the entire wiki covers, updated to reflect the newly ingested source.",
     "",
     "## Frontmatter Rules (CRITICAL)",
     "",
@@ -646,7 +1005,7 @@ function buildGenerationPrompt(
     "",
     purpose ? `## Wiki Purpose\n${purpose}` : "",
     schema ? `## Wiki Schema\n${schema}` : "",
-    index ? `## Current Wiki Index (preserve all existing entries, add new ones)\n${index}` : "",
+    existingSourcePaths ? `## Existing pages for this source (use [[wikilink]] syntax to reference them; skip regenerating if content is already correct)\n${existingSourcePaths}` : "",
     overview ? `## Current Overview (update this to reflect the new source)\n${overview}` : "",
   ].filter(Boolean).join("\n")
 }
@@ -663,7 +1022,7 @@ interface PlanItem {
  * Extract entity/concept file plan from the LLM analysis output.
  * Looks for lines like: ENTITY: Name | description
  */
-function parsePlan(analysis: string): PlanItem[] {
+export function parsePlan(analysis: string): PlanItem[] {
   const planMatch = analysis.match(/## File Plan\s*\n([\s\S]*)$/)
   const planSection = planMatch ? planMatch[1] : analysis
   const items: PlanItem[] = []
@@ -680,6 +1039,122 @@ function parsePlan(analysis: string): PlanItem[] {
     }
   }
   return items
+}
+
+interface PlanCountSummary {
+  expectedEntityNames: string[]
+  expectedConceptNames: string[]
+}
+
+interface PlannedCountGateInput {
+  expectedEntityNames: string[]
+  expectedConceptNames: string[]
+  actualEntityNames: string[]
+  actualConceptNames: string[]
+}
+
+interface PlannedCountGateResult {
+  ok: boolean
+  detail?: string
+}
+
+function normalizeCountName(name: string): string {
+  return name.trim().toLowerCase()
+}
+
+function dedupeNames(names: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const rawName of names) {
+    const normalized = normalizeCountName(rawName)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    result.push(rawName.trim())
+  }
+  return result
+}
+
+function summarizePlanCounts(items: PlanItem[]): PlanCountSummary {
+  const expectedEntityNames = dedupeNames(
+    items.filter((item) => item.type === "entity").map((item) => item.name),
+  )
+  const expectedConceptNames = dedupeNames(
+    items.filter((item) => item.type === "concept").map((item) => item.name),
+  )
+  return { expectedEntityNames, expectedConceptNames }
+}
+
+function findMissingPlannedNames(expectedNames: string[], actualNames: string[]): string[] {
+  const actualSet = new Set(actualNames.map((name) => normalizeCountName(name)))
+  return expectedNames.filter((name) => !actualSet.has(normalizeCountName(name)))
+}
+
+export function evaluatePlannedCountGate(input: PlannedCountGateInput): PlannedCountGateResult {
+  const expectedEntityNames = dedupeNames(input.expectedEntityNames)
+  const expectedConceptNames = dedupeNames(input.expectedConceptNames)
+  const actualEntityNames = dedupeNames(input.actualEntityNames)
+  const actualConceptNames = dedupeNames(input.actualConceptNames)
+
+  const missingEntities = findMissingPlannedNames(expectedEntityNames, actualEntityNames)
+  const missingConcepts = findMissingPlannedNames(expectedConceptNames, actualConceptNames)
+  const entityMissingCount = Math.max(0, expectedEntityNames.length - actualEntityNames.length)
+  const conceptMissingCount = Math.max(0, expectedConceptNames.length - actualConceptNames.length)
+
+  if (entityMissingCount === 0 && conceptMissingCount === 0) {
+    return { ok: true }
+  }
+
+  const details: string[] = [
+    `planned_count_mismatch: expected entities=${expectedEntityNames.length}, concepts=${expectedConceptNames.length}; actual entities=${actualEntityNames.length}, concepts=${actualConceptNames.length}`,
+  ]
+  if (entityMissingCount > 0) {
+    details.push(
+      `missing entities=${entityMissingCount}` +
+      (missingEntities.length > 0 ? ` sample=[${missingEntities.slice(0, 5).join(", ")}]` : ""),
+    )
+  }
+  if (conceptMissingCount > 0) {
+    details.push(
+      `missing concepts=${conceptMissingCount}` +
+      (missingConcepts.length > 0 ? ` sample=[${missingConcepts.slice(0, 5).join(", ")}]` : ""),
+    )
+  }
+  return { ok: false, detail: details.join(" | ") }
+}
+
+async function collectActualWikiNames(
+  projectPath: string,
+  sourceBase: string,
+): Promise<{ entityNames: string[]; conceptNames: string[] }> {
+  const sourceRoot = path.join(projectPath, "wiki", "sources", sourceBase)
+  const [entityFiles, conceptFiles] = await Promise.all([
+    collectMdFiles(path.join(sourceRoot, "entities"), path.join(sourceRoot, "entities")),
+    collectMdFiles(path.join(sourceRoot, "concepts"), path.join(sourceRoot, "concepts")),
+  ])
+  const entityNames = entityFiles
+    .filter((relPath) => relPath.endsWith(".md"))
+    .map((relPath) => path.basename(relPath, ".md"))
+  const conceptNames = conceptFiles
+    .filter((relPath) => relPath.endsWith(".md"))
+    .map((relPath) => path.basename(relPath, ".md"))
+  return { entityNames, conceptNames }
+}
+
+async function validatePostRebuildCountGate(
+  projectPath: string,
+  sourceBase: string,
+  summary: PlanCountSummary,
+): Promise<PlannedCountGateResult> {
+  if (summary.expectedEntityNames.length === 0 && summary.expectedConceptNames.length === 0) {
+    return { ok: true }
+  }
+  const actual = await collectActualWikiNames(projectPath, sourceBase)
+  return evaluatePlannedCountGate({
+    expectedEntityNames: summary.expectedEntityNames,
+    expectedConceptNames: summary.expectedConceptNames,
+    actualEntityNames: actual.entityNames,
+    actualConceptNames: actual.conceptNames,
+  })
 }
 
 /** Remove characters that are unsafe in filenames */
@@ -868,11 +1343,10 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
   try {
     updateTask(task, { status: "running", detail: "Reading source..." })
 
-    const [sourceContent, schema, purpose, index, overview] = await Promise.all([
+    const [sourceContent, schema, purpose, overview] = await Promise.all([
       readSourceForIngest(absSourcePath),
       tryRead(path.join(projectPath, "schema.md")),
       tryRead(path.join(projectPath, "purpose.md")),
-      tryRead(path.join(projectPath, "wiki", "index.md")),
       tryRead(path.join(projectPath, "wiki", "overview.md")),
     ])
 
@@ -908,21 +1382,33 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
         ? sourceContent.slice(0, 50000) + "\n\n[...truncated...]"
         : sourceContent
 
+    // Compute source base and scan for existing pages under this source directory.
+    // This gives the LLM awareness of previously ingested pages for this source
+    // WITHOUT exposing content from other sources (which causes cross-source contamination).
+    const sourceBase = fileName.replace(/\.[^.]+$/, "")
+    const sourceDirAbs = path.join(projectPath, "wiki", "sources", sourceBase)
+    const existingSourceFiles = await collectMdFiles(sourceDirAbs, path.join(projectPath, "wiki")).catch(
+      () => [] as string[],
+    )
+    const existingSourcePaths = existingSourceFiles.length > 0
+      ? existingSourceFiles.map((p) => `- wiki/${p}`).join("\n")
+      : ""
+
     // ── Step 1: Analysis ──────────────────────────────────────────────────
     updateTask(task, { detail: "Step 1: Analyzing source..." })
     let analysis = ""
+    const step1SystemPrompt = buildAnalysisPrompt(purpose, existingSourcePaths)
+    const step1UserMsg =
+      `Analyze this source document:\n\n**File:** ${fileName}` +
+      (folderContext ? `\n**Folder context:** ${folderContext}` : "") +
+      `\n\n---\n\n${truncated}`
+    const step1Start = Date.now()
 
     await callLlm(
       llmConfig,
       [
-        { role: "system", content: buildAnalysisPrompt(purpose, index) },
-        {
-          role: "user",
-          content:
-            `Analyze this source document:\n\n**File:** ${fileName}` +
-            (folderContext ? `\n**Folder context:** ${folderContext}` : "") +
-            `\n\n---\n\n${truncated}`,
-        },
+        { role: "system", content: step1SystemPrompt },
+        { role: "user", content: step1UserMsg },
       ],
       (token) => {
         analysis += token
@@ -931,33 +1417,44 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       ac.signal,
     )
 
+    logLlmCall(projectPath, {
+      ts: nowBeijing(new Date(step1Start)),
+      taskId: task.id,
+      sourceFile: fileName,
+      step: "1-analysis",
+      model: llmConfig.model ?? "",
+      durationMs: Date.now() - step1Start,
+      status: "done",
+      systemPrompt: step1SystemPrompt,
+      userMessage: step1UserMsg,
+      output: analysis,
+    }).catch(() => {})
+
     if (ac.signal.aborted) return
+    const plannedCounts = summarizePlanCounts(parsePlan(analysis))
 
     // ── Step 2: Generation ────────────────────────────────────────────────
     updateTask(task, { detail: "Step 2/2: Generating wiki pages..." })
     let generation = ""
+    const step2SystemPrompt = buildGenerationPrompt(schema, purpose, existingSourcePaths, fileName, overview)
+    const step2UserMsg = [
+      `Based on the following analysis of **${fileName}**, generate the wiki files.`,
+      "",
+      "## Source Analysis",
+      "",
+      analysis,
+      "",
+      "## Original Source Content",
+      "",
+      truncated,
+    ].join("\n")
+    const step2Start = Date.now()
 
     await callLlm(
       llmConfig,
       [
-        {
-          role: "system",
-          content: buildGenerationPrompt(schema, purpose, index, fileName, overview),
-        },
-        {
-          role: "user",
-          content: [
-            `Based on the following analysis of **${fileName}**, generate the wiki files.`,
-            "",
-            "## Source Analysis",
-            "",
-            analysis,
-            "",
-            "## Original Source Content",
-            "",
-            truncated,
-          ].join("\n"),
-        },
+        { role: "system", content: step2SystemPrompt },
+        { role: "user", content: step2UserMsg },
       ],
       (token) => {
         generation += token
@@ -966,13 +1463,26 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       ac.signal,
     )
 
+    logLlmCall(projectPath, {
+      ts: nowBeijing(new Date(step2Start)),
+      taskId: task.id,
+      sourceFile: fileName,
+      step: "2-generation",
+      model: llmConfig.model ?? "",
+      durationMs: Date.now() - step2Start,
+      status: "done",
+      systemPrompt: step2SystemPrompt,
+      userMessage: step2UserMsg,
+      output: generation,
+    }).catch(() => {})
+
     if (ac.signal.aborted) return
 
     // ── Step 3: Write files ───────────────────────────────────────────────
     updateTask(task, { detail: "Writing files..." })
-    const writtenPaths = await writeBlocks(projectPath, generation)
+    const writtenPaths = await writeBlocks(projectPath, generation, sourceBase, task.id, fileName)
 
-    const summaryPath = `wiki/sources/${fileName.replace(/\.[^.]+$/, "")}.md`
+    const summaryPath = `wiki/sources/${sourceBase}.md`
     if (!writtenPaths.includes(summaryPath)) {
       const date = new Date().toISOString().slice(0, 10)
       const fallback = [
@@ -1004,8 +1514,30 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
     }
 
     if (writtenPaths.length > 0) {
-      await persistCache(projectPath, fileName, sourceContent, writtenPaths)
       scheduleIndexRebuild(projectPath)
+      await waitForIndexRebuild(projectPath)
+      const rebuiltIndex = await tryRead(path.join(projectPath, "wiki", "index.md"))
+      if (rebuiltIndex && !writtenPaths.includes("wiki/index.md")) writtenPaths.push("wiki/index.md")
+      try {
+        await rebuildWikiOverview(projectPath)
+        const rebuiltOverview = await tryRead(path.join(projectPath, "wiki", "overview.md"))
+        if (rebuiltOverview && !writtenPaths.includes("wiki/overview.md")) writtenPaths.push("wiki/overview.md")
+      } catch (err) {
+        console.error("[ingest-service] Overview rebuild failed:", err)
+      }
+
+      const countGate = await validatePostRebuildCountGate(projectPath, sourceBase, plannedCounts)
+      if (!countGate.ok) {
+        updateTask(task, {
+          status: "error",
+          detail: countGate.detail ?? "Planned count mismatch",
+          filesWritten: writtenPaths,
+          error: countGate.detail ?? "Planned count mismatch",
+        })
+        return
+      }
+
+      await persistCache(projectPath, fileName, sourceContent, writtenPaths)
     }
 
     const detail =

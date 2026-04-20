@@ -17,8 +17,9 @@ export async function writeFile(
   projectId: string,
   relativePath: string,
   contents: string,
+  options?: { writer?: string },
 ): Promise<void> {
-  await apiPost("/api/fs/write", { projectId, path: relativePath, contents })
+  await apiPost("/api/fs/write", { projectId, path: relativePath, contents, writer: options?.writer })
 }
 
 export async function listDirectory(

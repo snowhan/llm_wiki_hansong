@@ -158,6 +158,31 @@ describe("SourcesView status reconciliation", () => {
     })
   })
 
+  it("reconciles stale running activity to error when file status becomes error", async () => {
+    render(<SourcesView />)
+    await screen.findByText(FILE_NAME)
+
+    const activityId = useActivityStore.getState().addItem({
+      type: "ingest",
+      projectId: PROJECT.id,
+      sourcePath: FILE_PATH,
+      title: FILE_NAME,
+      status: "running",
+      detail: "Step 2/2: Generating wiki pages...",
+      filesWritten: [],
+    })
+
+    await act(async () => {
+      useWikiStore.getState().setIngestStatus(FILE_PATH, "error")
+      useWikiStore.getState().setServerTaskId(FILE_PATH, null)
+    })
+
+    await waitFor(() => {
+      const item = useActivityStore.getState().items.find((i) => i.id === activityId)
+      expect(item?.status).toBe("error")
+    })
+  })
+
   it("reconciles all duplicated running activities for the same source", async () => {
     render(<SourcesView />)
     await screen.findByText(FILE_NAME)

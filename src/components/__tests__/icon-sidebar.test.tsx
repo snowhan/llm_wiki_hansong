@@ -33,9 +33,9 @@ describe("IconSidebar", () => {
   it("renders nav buttons for all views", () => {
     render(<IconSidebar onSwitchProject={() => {}} />)
     const buttons = screen.getAllByRole("button")
-    // 6 main nav + 1 research + 1 admin + 1 settings + 1 switch project = 10
-    expect(buttons.length).toBe(10)
-    expect(buttons.slice(0, 7).every((b) => b.className.includes("MuiIconButton"))).toBe(true)
+    // 8 main nav + 1 research + 1 admin + 1 settings + 1 switch project = 12
+    expect(buttons.length).toBe(12)
+    expect(buttons.slice(0, 9).every((b) => b.className.includes("MuiIconButton"))).toBe(true)
   })
 
   it("active view has highlighted style", () => {

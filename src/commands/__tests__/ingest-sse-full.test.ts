@@ -180,6 +180,21 @@ describe("E-03：done 事件 → onDone + 关闭 EventSource", () => {
     lastEs().emit({ type: "done", task: makeTask({ status: "done", filesWritten: files }) })
     expect(onDone.mock.calls[0][0].filesWritten).toEqual(files)
   })
+
+  it("done 事件携带 source/entity/concept/overview/log 文件时完整透传", () => {
+    const onDone = vi.fn()
+    subscribeIngestSSE("task-1", { onDone })
+    const files = [
+      "wiki/sources/2023体检报告.md",
+      "wiki/sources/2023体检报告/entities/韩松.md",
+      "wiki/sources/2023体检报告/concepts/高脂血症.md",
+      "wiki/overview.md",
+      "wiki/log.md",
+    ]
+    lastEs().emit({ type: "done", task: makeTask({ status: "done", filesWritten: files }) })
+    expect(onDone).toHaveBeenCalledOnce()
+    expect(onDone.mock.calls[0][0].filesWritten).toEqual(files)
+  })
 })
 
 // ── E-04：error 事件 ──────────────────────────────────────────────────────

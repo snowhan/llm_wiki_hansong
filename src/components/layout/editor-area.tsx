@@ -181,6 +181,7 @@ export function EditorArea() {
   const project = useWikiStore((s) => s.project)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readGenRef = useRef(0)
+  const loadedPathRef = useRef<string | null>(null)
 
   const activeTab = openTabs.find((t) => t.id === activeTabId)
   const isBlankTab = !!activeTab && isNewTab(activeTab.path)
@@ -211,11 +212,7 @@ export function EditorArea() {
         if (readGenRef.current !== gen) return
         const normalized = normalizeWikiContentByPath(activeTabPath, content)
         setFileContent(normalized)
-        if (normalized !== content) {
-          writeFile(project.id, activeTabPath, normalized).catch((err) =>
-            console.error("Failed to auto-normalize wiki file:", err),
-          )
-        }
+        loadedPathRef.current = activeTabPath
       })
       .catch((err) => { if (readGenRef.current === gen) setFileContent(t("preview.errorLoading", { err })) })
   }, [activeTabPath, setFileContent, t, project])
@@ -227,9 +224,11 @@ export function EditorArea() {
   const handleSave = useCallback(
     (markdown: string) => {
       if (!activeTabPath || isNewTab(activeTabPath) || !project) return
+      if (activeTabPath !== loadedPathRef.current) return
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      const snapshot = { path: activeTabPath, content: frontmatter + markdown }
       saveTimerRef.current = setTimeout(() => {
-        writeFile(project.id, activeTabPath, frontmatter + markdown).catch((err) =>
+        writeFile(project.id, snapshot.path, snapshot.content, { writer: "editor-autosave" }).catch((err) =>
           console.error("Failed to save:", err)
         )
       }, 1000)
@@ -241,7 +240,7 @@ export function EditorArea() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
-  }, [])
+  }, [activeTabPath])
 
   // No tabs at all
   if (openTabs.length === 0 || !activeTabId) {

@@ -13,7 +13,7 @@ import MenuItem from "@mui/material/MenuItem"
 import Collapse from "@mui/material/Collapse"
 import CircularProgress from "@mui/material/CircularProgress"
 import WarningAmberIcon from "@mui/icons-material/WarningAmber"
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline"
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlineOutlined"
 import OpenInNewIcon from "@mui/icons-material/OpenInNew"
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore"
 import ExpandLessIcon from "@mui/icons-material/ExpandLess"
@@ -124,7 +124,7 @@ function MappingCheckCard({
       }}
     >
       {/* Header row */}
-      <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ mb: 1, alignItems: "flex-start" }}>
         {/* Risk badge */}
         <Tooltip title={item.riskReason ?? (isHighRisk ? t("mappingCheck.riskHigh") : t("mappingCheck.riskOk"))}>
           <Box
@@ -208,7 +208,7 @@ function MappingCheckCard({
       {/* Fields row */}
       {editing ? (
         <Stack direction="column" spacing={1} sx={{ mb: 1 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Typography sx={{ fontSize: 11, color: "text.secondary", minWidth: 60 }}>
               {t("mappingCheck.frontmatterTitle")}
             </Typography>
@@ -226,7 +226,7 @@ function MappingCheckCard({
               }}
             />
           </Stack>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Typography sx={{ fontSize: 11, color: "text.secondary", minWidth: 60 }}>
               {t("mappingCheck.frontmatterType")}
             </Typography>
@@ -272,7 +272,7 @@ function MappingCheckCard({
           </Stack>
         </Stack>
       ) : (
-        <Stack direction="row" spacing={2} sx={{ mb: 1 }} alignItems="center">
+        <Stack direction="row" spacing={2} sx={{ mb: 1, alignItems: "center" }}>
           <Box>
             <Typography sx={{ fontSize: 10, color: "text.disabled", mb: 0.25 }}>
               {t("mappingCheck.frontmatterTitle")}
@@ -440,7 +440,7 @@ export function MappingReviewView() {
     >
       {/* Header */}
       <Box sx={{ px: 2.5, pt: 2, pb: 1.5, borderBottom: "1px solid rgba(245,243,239,0.06)" }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+        <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
           <Typography sx={{ fontSize: 16, fontWeight: 600, color: "#F5F3EF" }}>
             {t("mappingCheck.title")}
           </Typography>
@@ -519,14 +519,14 @@ export function MappingReviewView() {
       {/* Content */}
       <Box sx={{ flex: 1, overflow: "auto", px: 2.5, py: 2 }}>
         {loading ? (
-          <Stack alignItems="center" justifyContent="center" sx={{ height: "100%", gap: 1 }}>
+          <Stack sx={{ alignItems: "center", justifyContent: "center", height: "100%", gap: 1 }}>
             <CircularProgress size={24} sx={{ color: "#C2410C" }} />
             <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
               {t("app.loading")}
             </Typography>
           </Stack>
         ) : filtered.length === 0 ? (
-          <Stack alignItems="center" justifyContent="center" sx={{ height: "50%", gap: 1 }}>
+          <Stack sx={{ alignItems: "center", justifyContent: "center", height: "50%", gap: 1 }}>
             <CheckCircleOutlineIcon sx={{ fontSize: 32, color: filter === "high" ? "#4ADE80" : "text.disabled" }} />
             <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
               {getEmptyMessage()}

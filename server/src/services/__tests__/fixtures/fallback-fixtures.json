@@ -1,0 +1,31 @@
+[
+  {
+    "id": "fallback-good-entity-concept",
+    "sourceName": "2023体检报告.pdf",
+    "llmRawOutput": "---FILE: wiki/sources/2023体检报告.md---\n---\ntype: source\ntitle: 2023体检报告\nsources: [\"2023体检报告.pdf\"]\n---\n\n2023体检报告摘要。\n---END FILE---\n---FILE: wiki/sources/2023体检报告/entities/韩松.md---\n---\ntype: entity\ntitle: 韩松\nsources: [\"2023体检报告.pdf\"]\n---\n\n韩松是受检者。\n---END FILE---\n---FILE: wiki/sources/2023体检报告/concepts/高脂血症.md---\n---\ntype: concept\ntitle: 高脂血症\nsources: [\"2023体检报告.pdf\"]\n---\n\n高脂血症说明。\n---END FILE---\n---FILE: wiki/overview.md---\n# Overview\n体检知识库总览。\n---END FILE---",
+    "expectedPages": [
+      "wiki/sources/2023体检报告.md",
+      "wiki/sources/2023体检报告/entities/韩松.md",
+      "wiki/sources/2023体检报告/concepts/高脂血症.md",
+      "wiki/overview.md"
+    ],
+    "expectedViolations": [],
+    "tags": ["baseline", "good"]
+  },
+  {
+    "id": "fallback-bad-title-drift",
+    "sourceName": "2023体检报告.pdf",
+    "llmRawOutput": "---FILE: wiki/sources/2023体检报告/entities/韩松.md---\n---\ntype: entity\ntitle: 珠海奥乐医院\nsources: [\"2023体检报告.pdf\"]\n---\n\n错误内容漂移。\n---END FILE---",
+    "expectedPages": ["wiki/sources/2023体检报告/entities/韩松.md"],
+    "expectedViolations": ["INV-2"],
+    "tags": ["title-drift", "bad"]
+  },
+  {
+    "id": "fallback-bad-cross-source",
+    "sourceName": "2025体检报告.pdf",
+    "llmRawOutput": "---FILE: wiki/sources/2025体检报告/concepts/血脂异常.md---\n---\ntype: concept\ntitle: 高尿酸血症\nsources: [\"2023体检报告.pdf\"]\n---\n\n跨源污染内容。\n---END FILE---",
+    "expectedPages": ["wiki/sources/2025体检报告/concepts/血脂异常.md"],
+    "expectedViolations": ["INV-2", "INV-3"],
+    "tags": ["cross-source", "bad"]
+  }
+]

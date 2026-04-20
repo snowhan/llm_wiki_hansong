@@ -116,7 +116,7 @@ async function triggerMappingCheck(projectId: string, filesWritten: string[]) {
           filePath,
           pathType,
           frontmatterType: type,
-          frontmatterTitle: title || filePath.split("/").pop()?.replace(".md", "") ?? filePath,
+          frontmatterTitle: (title || filePath.split("/").pop()?.replace(".md", "")) ?? filePath,
           contentPreview: extractContentPreview(content),
           riskLevel: risk.riskLevel,
           riskReason: risk.reason,

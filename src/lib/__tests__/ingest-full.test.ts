@@ -424,7 +424,7 @@ describe("L-09：Step 2 无 FILE 块 → 写入 fallback 摘要页", () => {
     expect(calledPaths).not.toContain("wiki/sources/sample/concepts/代谢异常聚集.md")
   })
 
-  it("L-09: 英文 slug 文件名允许按中文 title 归一化改名", async () => {
+  it("L-09: 英文 slug 文件名直接按原始路径写入（不再改名）", async () => {
     const generation = [
       "---FILE: wiki/sources/sample/concepts/hepatitis-b-antibody.md---",
       "---",
@@ -440,7 +440,8 @@ describe("L-09：Step 2 无 FILE 块 → 写入 fallback 摘要页", () => {
     mockStreamChatTwoSteps("analysis", generation)
     await autoIngest(PROJECT_ID, SOURCE_PATH, BASE_LLM_CONFIG as never)
     const calledPaths = vi.mocked(writeFile).mock.calls.map((c) => c[1])
-    expect(calledPaths).toContain("wiki/sources/sample/concepts/乙肝表面抗体阳性.md")
+    // normalizeGeneratedWikiPath was removed; file is written at original path
+    expect(calledPaths).toContain("wiki/sources/sample/concepts/hepatitis-b-antibody.md")
   })
 })
 

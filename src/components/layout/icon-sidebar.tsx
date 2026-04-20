@@ -9,6 +9,7 @@ import AccountTree from "@mui/icons-material/AccountTree"
 import CheckCircleOutlineOutlined from "@mui/icons-material/CheckCircleOutlineOutlined"
 import FormatListBulleted from "@mui/icons-material/FormatListBulleted"
 import FactCheck from "@mui/icons-material/FactCheck"
+import BugReport from "@mui/icons-material/BugReport"
 import Explore from "@mui/icons-material/Explore"
 import Settings from "@mui/icons-material/Settings"
 import SwapHoriz from "@mui/icons-material/SwapHoriz"
@@ -34,6 +35,7 @@ const NAV_ITEMS: { view: NavView; icon: NavIcon; labelKey: string }[] = [
   { view: "lint", icon: CheckCircleOutlineOutlined, labelKey: "nav.lint" },
   { view: "review", icon: FormatListBulleted, labelKey: "nav.review" },
   { view: "mapping-check", icon: FactCheck, labelKey: "nav.mappingCheck" },
+  { view: "llm-debug", icon: BugReport, labelKey: "nav.llmDebug" },
 ]
 
 interface IconSidebarProps {

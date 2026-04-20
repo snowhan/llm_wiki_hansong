@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://llm-wiki.local/schemas/llm-output-fixture.schema.json",
+  "title": "LlmOutputFixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "sourceName", "llmRawOutput"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique fixture id."
+    },
+    "sourceName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original source file name used during ingest."
+    },
+    "llmRawOutput": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Raw model output that contains ---FILE blocks."
+    },
+    "expectedPages": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Optional list of paths expected to be written."
+    },
+    "expectedViolations": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Optional list of expected consistency violation codes."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "Free-form labels, e.g. cross-source/title-drift."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional human notes for provenance."
+    }
+  }
+}

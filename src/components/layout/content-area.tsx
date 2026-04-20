@@ -7,6 +7,7 @@ import { SearchView } from "@/components/search/search-view"
 import { GraphView } from "@/components/graph/graph-view"
 import { AdminView } from "@/components/admin/admin-view"
 import { MappingReviewView } from "@/components/sources/mapping-review-view"
+import { LlmDebugView } from "@/components/debug/llm-debug-view"
 
 export function ContentArea() {
   const activeView = useWikiStore((s) => s.activeView)
@@ -20,6 +21,8 @@ export function ContentArea() {
       return <ReviewView />
     case "mapping-check":
       return <MappingReviewView />
+    case "llm-debug":
+      return <LlmDebugView />
     case "lint":
       return <LintView />
     case "search":

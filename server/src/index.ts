@@ -15,6 +15,7 @@ import preprocessRouter from "./routes/preprocess.js"
 import ingestRouter from "./routes/ingest.js"
 import adminRouter from "./routes/admin.js"
 import mappingCheckRouter from "./routes/mapping-check.js"
+import llmDebugRouter from "./routes/llm-debug.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -35,6 +36,7 @@ app.use("/api/preprocess", preprocessRouter)
 app.use("/api/ingest", ingestRouter)
 app.use("/api/admin", adminRouter)
 app.use("/api/mapping-check", mappingCheckRouter)
+app.use("/api/llm/debug", llmDebugRouter)
 
 const distDir = process.env.STATIC_DIR ?? path.resolve(__dirname, "../../../../dist")
 app.use(express.static(distDir))
@@ -43,6 +45,17 @@ app.get("/{*splat}", (_req, res) => {
 })
 
 app.use(errorHandler)
+
+// Immediately exit on SIGTERM/SIGINT so tsx watch doesn't leave residual processes
+// that could continue writing to disk after a restart.
+process.on("SIGTERM", () => {
+  console.log("[llm-wiki-server] SIGTERM received → exit(0)")
+  process.exit(0)
+})
+process.on("SIGINT", () => {
+  console.log("[llm-wiki-server] SIGINT received → exit(0)")
+  process.exit(0)
+})
 
 app.listen(config.port, () => {
   console.log(`[llm-wiki-server] running on http://localhost:${config.port}`)

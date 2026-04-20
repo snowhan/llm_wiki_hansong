@@ -25,6 +25,7 @@ import ViewModuleIcon from "@mui/icons-material/ViewModule"
 import PublicIcon from "@mui/icons-material/Public"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
+import { startServerIngest } from "@/commands/ingest"
 import { lastQueryPages } from "@/components/chat/chat-panel"
 import type { DisplayMessage } from "@/stores/chat-store"
 import type { FileNode } from "@/types/wiki"
@@ -348,14 +349,10 @@ function SaveToWikiButton({ content, visible }: { content: string; visible: bool
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
 
-      // Full auto-ingest: extract entities, concepts, cross-references from saved content
-      const llmConfig = useWikiStore.getState().llmConfig
-      if (llmConfig.apiKey || llmConfig.provider === "ollama" || llmConfig.provider === "wps") {
-        const { autoIngest } = await import("@/lib/ingest")
-        autoIngest(project.id, filePath, llmConfig).catch((err) =>
-          console.error("Failed to auto-ingest saved query:", err)
-        )
-      }
+      // Auto-ingest via server: extract entities, concepts, cross-references from saved content
+      startServerIngest({ projectId: project.id, sourcePath: filePath }).catch((err) =>
+        console.error("Failed to auto-ingest saved query:", err)
+      )
     } catch (err) {
       console.error("Failed to save to wiki:", err)
     } finally {

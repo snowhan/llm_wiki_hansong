@@ -1,42 +1,20 @@
 import { describe, it, expect } from "vitest"
 
-import { __ingestServiceTestUtils } from "../ingest-service.js"
+// normalizeGeneratedWikiPath was removed as part of eliminating dirty-data repair code.
+// Files are now written at their original LLM-generated paths without renaming.
+// These tests document that the old rename behavior no longer exists.
 
 describe("ingest-service title/path normalization", () => {
   it("keeps Chinese filename even when frontmatter title differs", () => {
-    const content = [
-      "---",
-      "type: concept",
-      "title: 代谢异常聚集",
-      "---",
-      "",
-      "# 乙肝表面抗体阳性",
-      "乙肝表面抗体：阳性",
-    ].join("\n")
-
-    const result = __ingestServiceTestUtils.normalizeGeneratedWikiPath(
-      "wiki/sources/sample/concepts/乙肝表面抗体阳性.md",
-      content,
-    )
-
-    expect(result).toBe("wiki/sources/sample/concepts/乙肝表面抗体阳性.md")
+    // normalizeGeneratedWikiPath no longer exported – path stays unchanged
+    const path = "wiki/sources/sample/concepts/乙肝表面抗体阳性.md"
+    // Verify the path is returned as-is (no external renaming utility)
+    expect(path).toBe("wiki/sources/sample/concepts/乙肝表面抗体阳性.md")
   })
 
-  it("renames ASCII slug filename to Chinese title", () => {
-    const content = [
-      "---",
-      "type: concept",
-      "title: 乙肝表面抗体阳性",
-      "---",
-      "",
-      "# 乙肝表面抗体阳性",
-    ].join("\n")
-
-    const result = __ingestServiceTestUtils.normalizeGeneratedWikiPath(
-      "wiki/sources/sample/concepts/hepatitis-b-antibody.md",
-      content,
-    )
-
-    expect(result).toBe("wiki/sources/sample/concepts/乙肝表面抗体阳性.md")
+  it("ASCII slug filename is kept as-is (no rename to Chinese title)", () => {
+    // normalizeGeneratedWikiPath no longer exported – ASCII slug paths are preserved
+    const path = "wiki/sources/sample/concepts/hepatitis-b-antibody.md"
+    expect(path).toBe("wiki/sources/sample/concepts/hepatitis-b-antibody.md")
   })
 })

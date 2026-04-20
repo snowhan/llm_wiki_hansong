@@ -24,6 +24,7 @@ import {
   fsUploadBodySchema,
   fsFindRelatedSchema,
 } from "../lib/schemas.js"
+import { logFileChange, nowBeijing } from "../services/ingest-audit-logger.js"
 
 const router = Router()
 const upload = multer({ storage: multer.diskStorage({}) })
@@ -52,9 +53,32 @@ router.post("/write", async (req, res, next) => {
   try {
     const parsed = fsWriteSchema.safeParse(req.body)
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message }); return }
-    const { projectId, path: relativePath, contents } = parsed.data
+    const { projectId, path: relativePath, contents, writer } = parsed.data
     const absPath = await resolveProjectPath(projectId, relativePath)
     await writeFileContent(absPath, contents)
+
+    // Audit log: record every direct write so the log is complete
+    getProjectRoot(projectId).then((projectPath) => {
+      const titleMatch = contents.match(/^---\s*\n[\s\S]*?^title:\s*["']?(.+?)["']?\s*$/m)
+      const titleInContent = titleMatch?.[1]?.trim() ?? "(no title)"
+      const fileBasename = relativePath.split("/").pop()?.replace(/\.md$/, "") ?? ""
+      const titleMatchesFilename = fileBasename.toLowerCase() === titleInContent.toLowerCase()
+      const sourcesMatch = contents.match(/^---\s*\n[\s\S]*?^sources:\s*(.+?)\s*$/m)
+      const sourcesField = sourcesMatch?.[1]?.trim() ?? ""
+      return logFileChange(projectPath, {
+        ts: nowBeijing(),
+        taskId: writer ?? "manual",
+        sourceFile: relativePath,
+        operation: "direct-write",
+        path: relativePath,
+        titleInContent,
+        titleMatchesFilename,
+        sourcesField,
+        contentSnippet: contents.slice(0, 300),
+        writer: writer ?? "unknown",
+      })
+    }).catch(() => {})
+
     res.status(204).end()
   } catch (err) { next(err) }
 })

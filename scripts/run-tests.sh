@@ -44,6 +44,10 @@ case "$MODE" in
     echo "[1/1] Running mapping/overview focused regression tests..."
     npm run test:mapping-overview
     ;;
+  ingest-count-gate)
+    echo "[1/1] Running ingest count-gate regression..."
+    npm run test:ingest-count-gate
+    ;;
   ingest-regression)
     echo "[1/2] Running frontend ingest regression tests..."
     npx vitest run \
@@ -116,11 +120,12 @@ case "$MODE" in
     echo "  HTML report: coverage/index.html"
     ;;
   *)
-    echo "Usage: $0 [quick|status-sync|source-alignment|mapping-overview|ingest-regression|matrix [repeats]|soak [cycles] [matrix-repeats]|chaos [rounds]|parallel [rounds]|flake [rounds]|title-sync|regression [baseline|full|stress]|hygiene|full]"
+    echo "Usage: $0 [quick|status-sync|source-alignment|mapping-overview|ingest-count-gate|ingest-regression|matrix [repeats]|soak [cycles] [matrix-repeats]|chaos [rounds]|parallel [rounds]|flake [rounds]|title-sync|regression [baseline|full|stress]|hygiene|full]"
     echo "  quick  — run tests without coverage"
     echo "  status-sync — run focused status consistency regression suite"
     echo "  source-alignment — run source title/filename/content alignment suite"
     echo "  mapping-overview — run focused mapping and overview resilience suite"
+    echo "  ingest-count-gate — run server-side plan-count gate and concurrency regression"
     echo "  ingest-regression — run ingest regression suite (frontend + server)"
     echo "  matrix [repeats] — run broad test matrix (build + suites + stability loop)"
     echo "  soak [cycles] [matrix-repeats] — run long stability soak loops"

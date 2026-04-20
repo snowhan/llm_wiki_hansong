@@ -18,6 +18,7 @@ export const fsWriteSchema = z.object({
   projectId: projectIdSchema,
   path: relativePathSchema,
   contents: z.string(),
+  writer: z.string().optional(),
 })
 
 export const fsListSchema = z.object({

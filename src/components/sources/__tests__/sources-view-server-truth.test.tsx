@@ -253,4 +253,46 @@ describe("SourcesView server truth alignment", () => {
       expect(item?.status).toBe("done")
     })
   })
+
+  it("server done with multiple wiki artifacts still reconciles ingest status to done", async () => {
+    vi.mocked(getAllServerTasks).mockResolvedValue([makeTask({ status: "running" })])
+    vi.mocked(getServerIngestStatus).mockResolvedValue(
+      makeTask({
+        status: "done",
+        detail: "done",
+        filesWritten: [
+          "wiki/sources/a.md",
+          "wiki/sources/a/entities/韩松.md",
+          "wiki/sources/a/concepts/高脂血症.md",
+          "wiki/overview.md",
+          "wiki/log.md",
+        ],
+      }),
+    )
+
+    const activityId = useActivityStore.getState().addItem({
+      type: "ingest",
+      projectId: useWikiStore.getState().project?.id,
+      sourcePath: FILE_PATH,
+      title: FILE_NAME,
+      status: "running",
+      detail: "Step 2/2: Generating wiki pages...",
+      filesWritten: [],
+    })
+
+    render(<SourcesView />)
+    await screen.findByText(FILE_NAME)
+
+    await waitFor(() => expect(vi.mocked(subscribeIngestSSE)).toHaveBeenCalled())
+    const reconnectCallbacks = vi.mocked(subscribeIngestSSE).mock.calls[0][1] as SseCallbacks
+    await act(async () => {
+      await reconnectCallbacks.onConnectionLost?.()
+    })
+
+    await waitFor(() => {
+      const item = useActivityStore.getState().items.find((i) => i.id === activityId)
+      expect(item?.status).toBe("done")
+      expect(useWikiStore.getState().ingestStatuses[FILE_PATH]).toBe("done")
+    })
+  })
 })

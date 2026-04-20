@@ -400,6 +400,39 @@ npm start            # Starts backend serving built frontend
 7. Check **Review** for items needing your attention
 8. Run **Lint** periodically to maintain wiki health
 
+## Ingest Test Fixtures
+
+To make ingest regression tests reproducible even if the project workspace is cleaned,
+fixtures can be stored outside the repo.
+
+- Default external fixture dir: `~/.llm-wiki-test-fixtures/`
+- Override with env var: `LLM_WIKI_TEST_FIXTURE_DIR`
+- Fixture schema: `server/src/services/__tests__/fixtures/llm-output-fixture.schema.json`
+
+### Capture fixtures from real model output
+
+This script reads `llmDebugLogs` from app-state and exports ingest calls that contain FILE blocks:
+
+```bash
+npm run fixtures:sync
+```
+
+Optional flags:
+
+- `--dir=/absolute/path` set output fixture directory
+- `--state=/absolute/path/app-state.json` set app-state input file
+- `--seed-fallback` write repo fallback fixtures into the external directory
+- `--seed-fallback-only` only seed fallback fixtures
+
+### How tests load fixtures
+
+Server consistency tests load fixtures in this order:
+
+1. External dir (`~/.llm-wiki-test-fixtures/` by default)
+2. Repo fallback fixtures (`server/src/services/__tests__/fixtures/fallback-fixtures.json`)
+
+This keeps CI deterministic while still allowing local regression with real model outputs.
+
 ## Project Structure
 
 ```
