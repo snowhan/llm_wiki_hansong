@@ -7,6 +7,10 @@ import {
   registerSseClient,
   unregisterSseClient,
   rebuildWikiIndex,
+  startRebuildSummaryTask,
+  getRebuildSummaryTask,
+  startDeduplicateTask,
+  getDeduplicateTask,
 } from "../services/ingest-service.js"
 import { ingestStartSchema } from "../lib/schemas.js"
 import { getProjectRoot } from "../services/project-service.js"
@@ -114,3 +118,73 @@ router.post("/rebuild-index", async (req: Request, res: Response, next: NextFunc
 })
 
 export default router
+
+// ── Rebuild Summary routes ────────────────────────────────────────────────────
+
+/**
+ * POST /api/ingest/rebuild-summary
+ * Body: { projectId }
+ * Triggers LLM-based rebuild of wiki/index.md and wiki/overview.md.
+ * Returns: { taskId }
+ */
+router.post("/rebuild-summary", (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = req.body?.projectId as string | undefined
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required" })
+      return
+    }
+    const taskId = startRebuildSummaryTask(projectId)
+    res.json({ taskId })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * GET /api/ingest/rebuild-summary/status/:taskId
+ * Returns the current status of a rebuild-summary task.
+ */
+router.get("/rebuild-summary/status/:taskId", (req: Request, res: Response) => {
+  const task = getRebuildSummaryTask(req.params["taskId"] as string)
+  if (!task) {
+    res.status(404).json({ error: "Task not found" })
+    return
+  }
+  res.json({ task })
+})
+
+// ── Deduplicate routes ────────────────────────────────────────────────────────
+
+/**
+ * POST /api/ingest/deduplicate
+ * Body: { projectId }
+ * Triggers LLM-based deduplication of wiki entities and concepts.
+ * Returns: { taskId }
+ */
+router.post("/deduplicate", (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const projectId = req.body?.projectId as string | undefined
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required" })
+      return
+    }
+    const taskId = startDeduplicateTask(projectId)
+    res.json({ taskId })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * GET /api/ingest/deduplicate/status/:taskId
+ * Returns the current status of a deduplicate task.
+ */
+router.get("/deduplicate/status/:taskId", (req: Request, res: Response) => {
+  const task = getDeduplicateTask(req.params["taskId"] as string)
+  if (!task) {
+    res.status(404).json({ error: "Task not found" })
+    return
+  }
+  res.json({ task })
+})

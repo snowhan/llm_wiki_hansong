@@ -25,6 +25,7 @@ import ViewModuleIcon from "@mui/icons-material/ViewModule"
 import PublicIcon from "@mui/icons-material/Public"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
+import { useWikilinkNavigation } from "@/hooks/use-wikilink-navigation"
 import { startServerIngest } from "@/commands/ingest"
 import { lastQueryPages } from "@/components/chat/chat-panel"
 import type { DisplayMessage } from "@/stores/chat-store"
@@ -717,41 +718,7 @@ function MarkdownContent({ content }: { content: string }) {
   const { thinking, answer } = useMemo(() => separateThinking(cleaned), [cleaned])
   const processed = useMemo(() => processContent(answer), [answer])
 
-  const project = useWikiStore((s) => s.project)
-  const setSelectedFile = useWikiStore((s) => s.setSelectedFile)
-  const setFileContent = useWikiStore((s) => s.setFileContent)
-
-  const onWikilinkClick = useCallback(
-    async (pageName: string) => {
-      if (!project) return
-      // 1. Try legacy global paths first (backward compat with pre-namespace files)
-      const dirs = ["entities", "concepts", "sources", "synthesis", "comparisons", "queries", ""]
-      for (const dir of dirs) {
-        const tryPath = dir ? `wiki/${dir}/${pageName}.md` : `wiki/${pageName}.md`
-        try {
-          const fc = await readFile(project.id, tryPath)
-          setSelectedFile(tryPath)
-          setFileContent(fc)
-          return
-        } catch {
-          // try next
-        }
-      }
-      // 2. Fallback: scan wiki/sources/<stem>/entities|concepts/ for namespaced pages
-      try {
-        const sourcesTree = await listDirectory(project.id, "wiki/sources")
-        const found = findFileInTree(sourcesTree, `${pageName}.md`)
-        if (found) {
-          const fc = await readFile(project.id, found)
-          setSelectedFile(found)
-          setFileContent(fc)
-        }
-      } catch {
-        // not found anywhere — silently ignore
-      }
-    },
-    [project, setSelectedFile, setFileContent],
-  )
+  const onWikilinkClick = useWikilinkNavigation()
 
   return (
     <Box>

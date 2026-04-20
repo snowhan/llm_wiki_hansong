@@ -339,6 +339,24 @@ export function scheduleIndexRebuild(projectPath: string): void {
 }
 
 /**
+ * Per-project queue for overview rebuilds.
+ * Serialises concurrent calls so multiple finishing ingest tasks never race
+ * on writing wiki/overview.md simultaneously.
+ */
+const _overviewQueue = new Map<string, Promise<void>>()
+
+function scheduleOverviewRebuild(projectPath: string): Promise<void> {
+  const prev = _overviewQueue.get(projectPath) ?? Promise.resolve()
+  const next = prev
+    .then(() => rebuildWikiOverview(projectPath))
+    .catch((err) => {
+      console.error("[ingest-service] Overview rebuild failed:", err)
+    })
+  _overviewQueue.set(projectPath, next)
+  return next
+}
+
+/**
  * Wait until all scheduled index rebuild work for a project is finished.
  * Used by ingest flow so task status "done" is published after index.md is up to date.
  */
@@ -728,8 +746,7 @@ async function writeSingleBlock(
  *   - wiki/log.md                           (append-only log)
  *   - wiki/overview.md                      (shared overview, updated each ingest)
  *
- * wiki/index.md is intentionally excluded — it is rebuilt programmatically after
- * each ingest via rebuildWikiIndex(), so any LLM-written version is discarded.
+ * wiki/index.md is intentionally excluded — it is rebuilt programmatically after each ingest.
  */
 export function buildAllowedPaths(sourceBase: string): ReadonlySet<string> {
   return new Set<string>([
@@ -757,6 +774,7 @@ async function writeBlocks(
   for (const { path: relRaw, content: rawContent } of blocks) {
     // Normalize to prevent path traversal (e.g. "sources/A/../../evil.md")
     const rel = path.posix.normalize(relRaw)
+
     if (rel === "wiki/overview.md") {
       // Shared overview is rebuilt programmatically to avoid concurrent LLM drift.
       continue
@@ -1514,12 +1532,13 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
     }
 
     if (writtenPaths.length > 0) {
+      // Rebuild index programmatically (unconditional — LLM is not allowed to write index.md).
       scheduleIndexRebuild(projectPath)
       await waitForIndexRebuild(projectPath)
       const rebuiltIndex = await tryRead(path.join(projectPath, "wiki", "index.md"))
       if (rebuiltIndex && !writtenPaths.includes("wiki/index.md")) writtenPaths.push("wiki/index.md")
       try {
-        await rebuildWikiOverview(projectPath)
+        await scheduleOverviewRebuild(projectPath)
         const rebuiltOverview = await tryRead(path.join(projectPath, "wiki", "overview.md"))
         if (rebuiltOverview && !writtenPaths.includes("wiki/overview.md")) writtenPaths.push("wiki/overview.md")
       } catch (err) {
@@ -1557,4 +1576,519 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
   } finally {
     abortControllers.delete(task.id)
   }
+}
+
+// ── Rebuild Summary Task ──────────────────────────────────────────────────────
+// A separate, manually-triggered task that uses LLM to generate high-quality
+// wiki/index.md and wiki/overview.md based on all existing wiki pages.
+// This runs independently from individual ingest tasks to avoid concurrent writes.
+
+export interface RebuildSummaryTask {
+  id: string
+  projectId: string
+  status: "pending" | "running" | "done" | "error"
+  detail: string
+  error: string | null
+  filesWritten: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+const _rebuildSummaryTasks = new Map<string, RebuildSummaryTask>()
+
+/**
+ * Create and enqueue a new rebuild-summary task for the given project.
+ * Returns the taskId immediately; the task runs asynchronously.
+ */
+export function startRebuildSummaryTask(projectId: string): string {
+  const taskId = randomUUID()
+  const now = Date.now()
+  const task: RebuildSummaryTask = {
+    id: taskId,
+    projectId,
+    status: "pending",
+    detail: "排队中…",
+    error: null,
+    filesWritten: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+  _rebuildSummaryTasks.set(taskId, task)
+  // Run asynchronously so the caller gets the taskId immediately.
+  void runRebuildSummaryTask(task)
+  return taskId
+}
+
+/**
+ * Retrieve a rebuild-summary task by its ID.
+ */
+export function getRebuildSummaryTask(taskId: string): RebuildSummaryTask | undefined {
+  return _rebuildSummaryTasks.get(taskId)
+}
+
+function updateRebuildSummaryTask(task: RebuildSummaryTask, updates: Partial<RebuildSummaryTask>): void {
+  Object.assign(task, { ...updates, updatedAt: Date.now() })
+}
+
+/**
+ * Build the LLM prompt for rebuilding wiki/index.md and wiki/overview.md.
+ * @param pageListing - compact listing of all wiki pages (type, slug, title)
+ */
+export function buildRebuildSummaryPrompt(pageListing: string): string {
+  return [
+    "You are a wiki librarian. Generate two high-quality wiki meta-documents based on the existing wiki pages listed below.",
+    "",
+    LANGUAGE_RULE,
+    "",
+    "## Existing Wiki Pages",
+    "",
+    pageListing,
+    "",
+    "## Output Format",
+    "",
+    "Output each file in this exact format:",
+    "",
+    "---FILE: wiki/index.md---",
+    "(complete file content)",
+    "---END FILE---",
+    "",
+    "---FILE: wiki/overview.md---",
+    "(complete file content)",
+    "---END FILE---",
+    "",
+    "## Generate",
+    "",
+    "1. **wiki/index.md** — A well-organized catalog of all wiki pages.",
+    "   - Group pages by type (Entities, Concepts, Sources, etc.).",
+    "   - Each entry format: `- [[slug]] — Title`",
+    "   - Do NOT include index.md, overview.md, or log.md themselves.",
+    "",
+    "2. **wiki/overview.md** — A high-level prose summary of the entire wiki.",
+    "   - Describe the main topics, entities, and concepts covered.",
+    "   - Mention the number of sources, entities, and concepts.",
+    "   - Write in a clear, encyclopedic style.",
+    "   - Begin with a YAML frontmatter block: `---\\ntype: overview\\ntitle: Wiki 总览\\n---`",
+  ].join("\n")
+}
+
+/**
+ * Execute the rebuild-summary task: scan wiki pages, call LLM, write files.
+ */
+async function runRebuildSummaryTask(task: RebuildSummaryTask): Promise<void> {
+  const projectPath = await getProjectRoot(task.projectId).catch(() => null)
+  if (!projectPath) {
+    updateRebuildSummaryTask(task, {
+      status: "error",
+      detail: "Project not found",
+      error: `Project not found: ${task.projectId}`,
+    })
+    return
+  }
+
+  updateRebuildSummaryTask(task, { status: "running", detail: "扫描 Wiki 页面…" })
+
+  try {
+    // ── 1. Collect all wiki pages ────────────────────────────────────────────
+    const wikiDir = path.join(projectPath, "wiki")
+    const mdFiles = await collectMdFiles(wikiDir, wikiDir)
+    const skipFiles = new Set(["index.md", "overview.md", "log.md"])
+    const relevantFiles = mdFiles.filter((f) => !skipFiles.has(path.basename(f)))
+
+    if (relevantFiles.length === 0) {
+      updateRebuildSummaryTask(task, {
+        status: "error",
+        detail: "Wiki 中尚无页面，无法生成摘要",
+        error: "No wiki pages found",
+      })
+      return
+    }
+
+    // ── 2. Build compact page listing ────────────────────────────────────────
+    const lines: string[] = []
+    for (const relPath of relevantFiles) {
+      const fullPath = path.join(wikiDir, relPath)
+      let content = ""
+      try { content = await fs.readFile(fullPath, "utf-8") } catch { continue }
+      const typeVal = extractFmField(content, "type") || "other"
+      const titleVal = extractFmField(content, "title") || relPath.replace(/\.md$/, "")
+      const slug = path.basename(relPath, ".md")
+      lines.push(`[${typeVal}] [[${slug}]] — ${titleVal}`)
+    }
+
+    const pageListing = lines.join("\n")
+    const prompt = buildRebuildSummaryPrompt(pageListing)
+
+    // ── 3. Call LLM ──────────────────────────────────────────────────────────
+    updateRebuildSummaryTask(task, { detail: "调用 LLM 生成 index 和 overview…" })
+
+    const llmConfig = await getState("llmConfig") as LlmConfig | null
+    if (!llmConfig?.provider) {
+      updateRebuildSummaryTask(task, {
+        status: "error",
+        detail: "LLM 未配置，请在设置中配置模型",
+        error: "LLM is not configured",
+      })
+      return
+    }
+
+    let generation = ""
+    const messages: ChatMessage[] = [{ role: "user", content: prompt }]
+    await callLlm(
+      llmConfig,
+      messages,
+      (token: string) => { generation += token },
+    )
+
+    // ── 4. Parse and write files ──────────────────────────────────────────────
+    updateRebuildSummaryTask(task, { detail: "解析并写入文件…" })
+
+    const blocks = parseFileBlocks(generation)
+    const allowedOutputs = new Set(["wiki/index.md", "wiki/overview.md"])
+    const written: string[] = []
+
+    for (const { path: relRaw, content } of blocks) {
+      const rel = path.posix.normalize(relRaw)
+      if (!allowedOutputs.has(rel)) continue
+      try {
+        await writeWithMkdir(path.join(projectPath, rel), content)
+        written.push(rel)
+      } catch (err) {
+        console.error(`[rebuild-summary] Failed to write ${rel}:`, err)
+      }
+    }
+
+    if (written.length === 0) {
+      updateRebuildSummaryTask(task, {
+        status: "error",
+        detail: "LLM 未生成有效的 index.md 或 overview.md",
+        error: "LLM produced no valid FILE blocks",
+      })
+      return
+    }
+
+    updateRebuildSummaryTask(task, {
+      status: "done",
+      detail: `已重建：${written.join(", ")}`,
+      filesWritten: written,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[rebuild-summary] Task ${task.id} failed:`, err)
+    updateRebuildSummaryTask(task, {
+      status: "error",
+      detail: `失败: ${msg.slice(0, 120)}`,
+      error: msg,
+    })
+  }
+}
+
+// ── Deduplicate Task ──────────────────────────────────────────────────────────
+
+export interface MergeGroup {
+  /**
+   * Relative path from wikiDir to the canonical file, WITHOUT .md extension.
+   * Example: "sources/2024/entities/珠海奥乐医院"
+   * Using full paths (not just slugs) to correctly handle same-named files
+   * from different source directories.
+   */
+  canonical: string
+  /** Relative paths (same format as canonical) of files to merge into canonical and delete. */
+  aliases: string[]
+}
+
+export interface DeduplicateTask {
+  id: string
+  projectId: string
+  status: "pending" | "running" | "done" | "error"
+  detail: string
+  error: string | null
+  mergeCount: number
+  filesDeleted: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+const _deduplicateTasks = new Map<string, DeduplicateTask>()
+
+/**
+ * Parse the ---MERGE-PLAN--- block from LLM output.
+ * Returns an array of MergeGroup objects, or [] if absent/invalid.
+ */
+export function parseMergePlan(text: string): MergeGroup[] {
+  const match = text.match(/---MERGE-PLAN---\s*([\s\S]*?)\s*---END MERGE-PLAN---/)
+  if (!match || !match[1]) return []
+  try {
+    const parsed = JSON.parse(match[1].trim())
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (g): g is MergeGroup =>
+        typeof g === "object" && g !== null &&
+        typeof g.canonical === "string" &&
+        Array.isArray(g.aliases),
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Build the LLM prompt for deduplicating wiki entities and concepts.
+ * @param pageListing - compact listing including full path, slug, title for each page
+ */
+export function buildDeduplicatePrompt(pageListing: string): string {
+  return [
+    "You are a wiki librarian. Analyze the wiki pages listed below and identify duplicate or semantically similar entries.",
+    "",
+    LANGUAGE_RULE,
+    "",
+    "## Existing Wiki Pages (entities and concepts only)",
+    "",
+    "Each line format: [type] path: wiki/<rel-path> | slug: [[slug]] | title: <title> | sources: <count>",
+    "The `path` field is the UNIQUE identifier for each file (files can share the same slug but have different paths).",
+    "",
+    pageListing,
+    "",
+    "## Task",
+    "",
+    "1. Identify groups of pages that represent the same real-world entity or concept and should be merged.",
+    "   - Only group pages that are clearly duplicates or near-duplicates.",
+    "   - Do NOT group pages that are merely related.",
+    "   - If no duplicates exist, output an empty MERGE-PLAN array.",
+    "",
+    "2. For each merge group, choose ONE canonical page:",
+    "   - Prefer the page with the most source references.",
+    "   - Tiebreak: longest body, then alphabetical path.",
+    "   - Use the canonical page's FULL REL-PATH (without wiki/ prefix, without .md) as the `canonical` value.",
+    "   - Use each alias page's FULL REL-PATH (without wiki/ prefix, without .md) as the `aliases` values.",
+    "",
+    "3. For each merge group, generate the merged canonical page content.",
+    "   - Use the canonical page's EXACT full path (with wiki/ prefix and .md) as the FILE block path.",
+    "",
+    "## Output Format",
+    "",
+    "First output the merge plan (use FULL REL-PATHS, not just slugs):",
+    "",
+    "---MERGE-PLAN---",
+    '[{"canonical":"sources/2024/entities/example","aliases":["sources/2025/entities/example"]},...]',
+    "---END MERGE-PLAN---",
+    "",
+    "Then for each merge group output the merged canonical file:",
+    "",
+    "---FILE: wiki/sources/<source-base>/entities/<canonical-slug>.md---",
+    "(complete merged file content with YAML frontmatter)",
+    "---END FILE---",
+    "",
+    "CRITICAL: The `canonical` and `aliases` values in MERGE-PLAN must be the rel-path WITHOUT wiki/ prefix and WITHOUT .md.",
+    "Example: `sources/2024/entities/珠海奥乐医院`  (NOT just `珠海奥乐医院`)",
+    "",
+    "If there are no duplicates to merge, output only:",
+    "---MERGE-PLAN---",
+    "[]",
+    "---END MERGE-PLAN---",
+  ].join("\n")
+}
+
+/**
+ * Create and enqueue a new deduplicate task for the given project.
+ * Returns the taskId immediately; the task runs asynchronously.
+ */
+export function startDeduplicateTask(projectId: string): string {
+  const taskId = randomUUID()
+  const now = Date.now()
+  const task: DeduplicateTask = {
+    id: taskId,
+    projectId,
+    status: "pending",
+    detail: "排队中…",
+    error: null,
+    mergeCount: 0,
+    filesDeleted: [],
+    createdAt: now,
+    updatedAt: now,
+  }
+  _deduplicateTasks.set(taskId, task)
+  void runDeduplicateTask(task)
+  return taskId
+}
+
+/**
+ * Retrieve a deduplicate task by its ID.
+ */
+export function getDeduplicateTask(taskId: string): DeduplicateTask | undefined {
+  return _deduplicateTasks.get(taskId)
+}
+
+function updateDeduplicateTask(task: DeduplicateTask, updates: Partial<DeduplicateTask>): void {
+  Object.assign(task, { ...updates, updatedAt: Date.now() })
+}
+
+async function runDeduplicateTask(task: DeduplicateTask): Promise<void> {
+  const projectPath = await getProjectRoot(task.projectId).catch(() => null)
+  if (!projectPath) {
+    updateDeduplicateTask(task, {
+      status: "error",
+      detail: "Project not found",
+      error: `Project not found: ${task.projectId}`,
+    })
+    return
+  }
+
+  updateDeduplicateTask(task, { status: "running", detail: "扫描实体与概念词条…" })
+
+  try {
+    // ── 1. Collect entities + concepts from all source subdirectories ─────────
+    // Real structure: wiki/sources/<source-base>/entities/ and .../concepts/
+    const wikiDir = path.join(projectPath, "wiki")
+    const sourcesDir = path.join(wikiDir, "sources")
+
+    let sourceBases: string[] = []
+    try {
+      const entries = await fs.readdir(sourcesDir, { withFileTypes: true })
+      sourceBases = entries.filter((e) => e.isDirectory()).map((e) => e.name)
+    } catch { /* sources dir may not exist yet */ }
+
+    // allFiles: paths relative to wikiDir, e.g. "sources/<base>/entities/ai.md"
+    const allFiles: string[] = []
+    for (const sourceBase of sourceBases) {
+      const sourceRoot = path.join(sourcesDir, sourceBase)
+      const [entityFiles, conceptFiles] = await Promise.all([
+        collectMdFiles(path.join(sourceRoot, "entities"), wikiDir).catch(() => []),
+        collectMdFiles(path.join(sourceRoot, "concepts"), wikiDir).catch(() => []),
+      ])
+      allFiles.push(...entityFiles, ...conceptFiles)
+    }
+
+    if (allFiles.length === 0) {
+      updateDeduplicateTask(task, {
+        status: "done",
+        detail: "Wiki 中尚无实体或概念词条，无需去重",
+        mergeCount: 0,
+      })
+      return
+    }
+
+    // ── 2. Build compact page listing (include full path for LLM) ────────────
+    const lines: string[] = []
+    for (const relPath of allFiles) {
+      const fullPath = path.join(wikiDir, relPath)
+      let content = ""
+      try { content = await fs.readFile(fullPath, "utf-8") } catch { continue }
+      const typeVal = extractFmField(content, "type") || "other"
+      const titleVal = extractFmField(content, "title") || relPath.replace(/\.md$/, "")
+      const slug = path.basename(relPath, ".md")
+      const sourcesVal = extractFmField(content, "sources") || ""
+      // Include full path so LLM can reference canonical file location precisely
+      lines.push(`[${typeVal}] path: wiki/${relPath} | slug: [[${slug}]] | title: ${titleVal} | sources: ${sourcesVal || "none"}`)
+    }
+
+    const pageListing = lines.join("\n")
+    const prompt = buildDeduplicatePrompt(pageListing)
+
+    // ── 3. Call LLM ──────────────────────────────────────────────────────────
+    updateDeduplicateTask(task, { detail: "调用 LLM 分析重复词条…" })
+
+    const llmConfig = await getState("llmConfig") as LlmConfig | null
+    if (!llmConfig?.provider) {
+      updateDeduplicateTask(task, {
+        status: "error",
+        detail: "LLM 未配置，请在设置中配置模型",
+        error: "LLM is not configured",
+      })
+      return
+    }
+
+    let generation = ""
+    const messages: ChatMessage[] = [{ role: "user", content: prompt }]
+    await callLlm(llmConfig, messages, (token: string) => { generation += token })
+
+    // ── 4. Parse merge plan ───────────────────────────────────────────────────
+    updateDeduplicateTask(task, { detail: "解析合并计划…" })
+    const mergeGroups = parseMergePlan(generation)
+
+    if (mergeGroups.length === 0) {
+      updateDeduplicateTask(task, {
+        status: "done",
+        detail: "未发现重复词条，无需合并",
+        mergeCount: 0,
+      })
+      return
+    }
+
+    // ── 5. Execute merges ────────────────────────────────────────────────────
+    updateDeduplicateTask(task, { detail: `执行合并 (${mergeGroups.length} 组)…` })
+
+    // blockMap: canonical slug (basename) → merged content
+    // MergeGroup.canonical / aliases are now FULL REL-PATHS relative to wikiDir (no .md).
+    // Example: "sources/2024/entities/珠海奥乐医院"
+    const fileBlocks = parseFileBlocks(generation)
+    const blockMap = new Map(fileBlocks.map((b) => [path.basename(b.path, ".md"), b.content]))
+    const deletedFiles: string[] = []
+
+    for (const group of mergeGroups) {
+      const { canonical: canonicalRelPath, aliases: aliasRelPaths } = group
+      const canonicalSlug = path.basename(canonicalRelPath)
+
+      // Write canonical merged content to its exact path
+      const mergedContent = blockMap.get(canonicalSlug)
+      if (mergedContent) {
+        await writeWithMkdir(path.join(wikiDir, `${canonicalRelPath}.md`), mergedContent)
+      }
+
+      // Delete each alias file and update [[aliasSlug]] → [[canonicalSlug]] links
+      for (const aliasRelPath of aliasRelPaths) {
+        const aliasSlug = path.basename(aliasRelPath)
+        const aliasFullPath = path.join(wikiDir, `${aliasRelPath}.md`)
+        try {
+          await fs.unlink(aliasFullPath)
+          deletedFiles.push(`wiki/${aliasRelPath}.md`)
+        } catch { /* ignore if already gone */ }
+
+        // Only replace links when slugs differ (same-slug merges just delete the alias file)
+        if (aliasSlug !== canonicalSlug) {
+          await replaceWikiLinks(wikiDir, aliasSlug, canonicalSlug)
+        }
+      }
+    }
+
+    // ── 6. Rebuild index ─────────────────────────────────────────────────────
+    scheduleIndexRebuild(projectPath)
+
+    updateDeduplicateTask(task, {
+      status: "done",
+      detail: `已合并 ${mergeGroups.length} 组词条，删除 ${deletedFiles.length} 个别名文件`,
+      mergeCount: mergeGroups.length,
+      filesDeleted: deletedFiles,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[deduplicate] Task ${task.id} failed:`, err)
+    updateDeduplicateTask(task, {
+      status: "error",
+      detail: `失败: ${msg.slice(0, 120)}`,
+      error: msg,
+    })
+  }
+}
+
+/**
+ * Replace all [[aliasSlug]] wiki links with [[canonicalSlug]] in every .md
+ * file under wikiDir.
+ */
+async function replaceWikiLinks(wikiDir: string, aliasSlug: string, canonicalSlug: string): Promise<void> {
+  const allMd = await collectMdFiles(wikiDir, wikiDir).catch(() => [])
+  const pattern = new RegExp(`\\[\\[${escapeRegex(aliasSlug)}\\]\\]`, "g")
+  const replacement = `[[${canonicalSlug}]]`
+  for (const relPath of allMd) {
+    const fullPath = path.join(wikiDir, relPath)
+    try {
+      const content = await fs.readFile(fullPath, "utf-8")
+      if (!pattern.test(content)) continue
+      pattern.lastIndex = 0
+      await fs.writeFile(fullPath, content.replace(pattern, replacement), "utf-8")
+    } catch { /* ignore */ }
+  }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }

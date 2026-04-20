@@ -36,15 +36,16 @@ export function MarkdownView({ markdown, onWikilinkClick, sx }: MarkdownViewProp
 
   const handleClick = useCallback(
     (e: MouseEvent<HTMLDivElement>) => {
-      if (!onWikilinkClick) return
       const el = (e.target as HTMLElement).closest("a[href]") as HTMLAnchorElement | null
       if (!el) return
       const href = el.getAttribute("href")
       if (!href) return
       const lower = href.toLowerCase()
       if (!lower.startsWith("wiki:")) return
+      // Always prevent browser from following wiki: links (they are internal-only)
       e.preventDefault()
       e.stopPropagation()
+      if (!onWikilinkClick) return
       const raw = href.slice(href.indexOf(":") + 1)
       onWikilinkClick(decodeURIComponent(raw))
     },

@@ -10,6 +10,8 @@ import AddIcon from "@mui/icons-material/Add"
 import DescriptionIcon from "@mui/icons-material/Description"
 import RefreshIcon from "@mui/icons-material/Refresh"
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome"
+import SummarizeIcon from "@mui/icons-material/Summarize"
+import MergeIcon from "@mui/icons-material/MergeType"
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
 import FolderIcon from "@mui/icons-material/Folder"
 import ChevronRightIcon from "@mui/icons-material/ChevronRight"
@@ -28,7 +30,7 @@ import type { PreprocessStage } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { getFileName, getFileStem } from "@/lib/path-utils"
-import { startServerIngest, subscribeIngestSSE, getAllServerTasks, getServerIngestStatus } from "@/commands/ingest"
+import { startServerIngest, subscribeIngestSSE, getAllServerTasks, getServerIngestStatus, rebuildWikiSummary, getRebuildSummaryStatus, deduplicateWiki, getDeduplicateStatus } from "@/commands/ingest"
 import type { SseCallbacks } from "@/commands/ingest"
 import { useActivityStore } from "@/stores/activity-store"
 import { useMappingCheckStore } from "@/stores/mapping-check-store"
@@ -146,8 +148,13 @@ export function SourcesView() {
   const setIngestStatus = useWikiStore((s) => s.setIngestStatus)
   const serverTaskIds = useWikiStore((s) => s.serverTaskIds)
   const [sources, setSources] = useState<FileNode[]>([])
+  const [sourcesLoading, setSourcesLoading] = useState(true)
   const [importing, setImporting] = useState(false)
   const [preprocessStatuses, setPreprocessStatuses] = useState<Record<string, PreprocessStatus>>({})
+  const [rebuildSummaryState, setRebuildSummaryState] = useState<"idle" | "running" | "done" | "error">("idle")
+  const rebuildSummaryPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [deduplicateState, setDeduplicateState] = useState<"idle" | "running" | "done" | "error">("idle")
+  const deduplicatePollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
   const reconnectRanRef = useRef(false)
@@ -160,15 +167,25 @@ export function SourcesView() {
 
   const loadSources = useCallback(async () => {
     if (!project) return
+    setSourcesLoading(true)
+    // Fetch sources list and full tree independently.
+    // The full-tree call must NOT clear sources on failure — a transient server
+    // error during heavy ingest (e.g. 3 concurrent LLM streams) must not wipe
+    // the source list that was already loaded successfully.
     try {
       const tree = await listDirectory(project.id, "raw/sources")
-      const filtered = filterTree(tree)
-      setSources(filtered)
+      setSources(filterTree(tree))
+    } catch {
+      setSources([])
+    } finally {
+      setSourcesLoading(false)
+    }
+    try {
       const fullTree = await listDirectory(project.id)
       setFileTree(fullTree)
       useWikiStore.getState().bumpDataVersion()
     } catch {
-      setSources([])
+      // Non-critical: file tree update failure should not affect sources display
     }
   }, [project, setFileTree])
 
@@ -792,8 +809,6 @@ export function SourcesView() {
   }
 
   async function handleBatchIngest() {
-    if (!project) return
-    const allFiles = flattenAllFiles(sources)
     for (const file of allFiles) {
       const status = useWikiStore.getState().ingestStatuses[file.relativePath]
       const hasLiveTask = !!useWikiStore.getState().serverTaskIds[file.relativePath]
@@ -816,6 +831,62 @@ export function SourcesView() {
 
       await triggerServerIngest(file, "", true)
       await new Promise<void>((resolve) => setTimeout(resolve, 200))
+    }
+  }
+
+  async function handleRebuildSummary() {
+    if (!project || rebuildSummaryState === "running") return
+    setRebuildSummaryState("running")
+
+    try {
+      const taskId = await rebuildWikiSummary(project.id)
+
+      const poll = async () => {
+        const task = await getRebuildSummaryStatus(taskId)
+        if (!task || task.status === "running" || task.status === "pending") {
+          rebuildSummaryPollRef.current = setTimeout(() => { void poll() }, 1500)
+          return
+        }
+        setRebuildSummaryState(task.status === "done" ? "done" : "error")
+        if (task.status === "done") {
+          try {
+            const tree = await listDirectory(project.id)
+            setFileTree(tree)
+            useWikiStore.getState().bumpDataVersion()
+          } catch { /* non-critical */ }
+        }
+      }
+      void poll()
+    } catch {
+      setRebuildSummaryState("error")
+    }
+  }
+
+  async function handleDeduplicate() {
+    if (!project || deduplicateState === "running") return
+    setDeduplicateState("running")
+
+    try {
+      const taskId = await deduplicateWiki(project.id)
+
+      const poll = async () => {
+        const task = await getDeduplicateStatus(taskId)
+        if (!task || task.status === "running" || task.status === "pending") {
+          deduplicatePollRef.current = setTimeout(() => { void poll() }, 1500)
+          return
+        }
+        setDeduplicateState(task.status === "done" ? "done" : "error")
+        if (task.status === "done") {
+          try {
+            const tree = await listDirectory(project.id)
+            setFileTree(tree)
+            useWikiStore.getState().bumpDataVersion()
+          } catch { /* non-critical */ }
+        }
+      }
+      void poll()
+    } catch {
+      setDeduplicateState("error")
     }
   }
 
@@ -860,6 +931,76 @@ export function SourcesView() {
             </IconButton>
           </Tooltip>
           <Tooltip
+            title={
+              rebuildSummaryState === "running" ? "正在重建中，请稍候…"
+                : rebuildSummaryState === "done" ? "重建完成"
+                : rebuildSummaryState === "error" ? "重建失败，点击重试"
+                : "用 AI 重建 Wiki 摘要（index 和 overview）"
+            }
+            enterDelay={rebuildSummaryState === "running" ? 0 : 600}
+          >
+            <span>
+              <Button
+                size="small"
+                disabled={rebuildSummaryState === "running"}
+                onClick={handleRebuildSummary}
+                startIcon={
+                  rebuildSummaryState === "running"
+                    ? <CircularProgress size={14} thickness={5} sx={{ color: "inherit" }} />
+                    : <SummarizeIcon sx={{ fontSize: 16 }} />
+                }
+                sx={{
+                  fontSize: "0.75rem",
+                  color: rebuildSummaryState === "done" ? "#65a30d"
+                    : rebuildSummaryState === "error" ? "error.main"
+                    : "text.secondary",
+                  border: "1px solid",
+                  borderColor: rebuildSummaryState === "done" ? "rgba(101,163,13,0.4)"
+                    : rebuildSummaryState === "error" ? "error.light"
+                    : "divider",
+                  "&:hover": { bgcolor: "rgba(124,58,237,0.06)", color: "#7c3aed", borderColor: "rgba(124,58,237,0.3)" },
+                }}
+              >
+                重建摘要
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={
+              deduplicateState === "running" ? "正在去重中，请稍候…"
+                : deduplicateState === "done" ? "去重完成"
+                : deduplicateState === "error" ? "去重失败，点击重试"
+                : "用 AI 识别并合并重复/近义词条"
+            }
+            enterDelay={deduplicateState === "running" ? 0 : 600}
+          >
+            <span>
+              <Button
+                size="small"
+                disabled={deduplicateState === "running"}
+                onClick={handleDeduplicate}
+                startIcon={
+                  deduplicateState === "running"
+                    ? <CircularProgress size={14} thickness={5} sx={{ color: "inherit" }} />
+                    : <MergeIcon sx={{ fontSize: 16 }} />
+                }
+                sx={{
+                  fontSize: "0.75rem",
+                  color: deduplicateState === "done" ? "#65a30d"
+                    : deduplicateState === "error" ? "error.main"
+                    : "text.secondary",
+                  border: "1px solid",
+                  borderColor: deduplicateState === "done" ? "rgba(101,163,13,0.4)"
+                    : deduplicateState === "error" ? "error.light"
+                    : "divider",
+                  "&:hover": { bgcolor: "rgba(124,58,237,0.06)", color: "#7c3aed", borderColor: "rgba(124,58,237,0.3)" },
+                }}
+              >
+                去重词条
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip
             title={ingestingPath ? "正在生成中，请稍候" : "重新用 AI 生成所有 Wiki 页面"}
             enterDelay={ingestingPath ? 0 : 600}
           >
@@ -898,7 +1039,11 @@ export function SourcesView() {
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        {sources.length === 0 ? (
+        {sourcesLoading ? (
+          <Stack sx={{ alignItems: "center", justifyContent: "center", p: 4 }}>
+            <CircularProgress size={24} />
+          </Stack>
+        ) : sources.length === 0 ? (
           <Stack
             sx={{
               alignItems: "center",

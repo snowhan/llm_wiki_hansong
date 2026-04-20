@@ -62,16 +62,16 @@ function resolveWikiHref(href: string): string | null {
 
 export function WikiEditor({ content, onSave }: WikiEditorProps) {
   const fileTree = useWikiStore((s) => s.fileTree)
-  const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
+  const openTab = useWikiStore((s) => s.openTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
 
   // Use refs so the editorProps callback always has fresh values
   // (the TipTap editor is only created once; stale closures would use initial values)
   const fileTreeRef = useRef(fileTree)
-  const navigateRef = useRef(navigateInCurrentTab)
+  const openTabRef = useRef(openTab)
   const setActiveViewRef = useRef(setActiveView)
   useEffect(() => { fileTreeRef.current = fileTree }, [fileTree])
-  useEffect(() => { navigateRef.current = navigateInCurrentTab }, [navigateInCurrentTab])
+  useEffect(() => { openTabRef.current = openTab }, [openTab])
   useEffect(() => { setActiveViewRef.current = setActiveView }, [setActiveView])
 
   // Stable ProseMirror-level click handler (created once, uses refs internally)
@@ -85,7 +85,7 @@ export function WikiEditor({ content, onSave }: WikiEditorProps) {
     event.preventDefault()
     const filePath = findWikiFileByName(fileTreeRef.current, pageName)
     if (filePath) {
-      navigateRef.current(filePath, pageName)
+      openTabRef.current(filePath, pageName)
       setActiveViewRef.current("wiki")
     }
     return true
@@ -116,11 +116,11 @@ export function WikiEditor({ content, onSave }: WikiEditorProps) {
       e.stopPropagation()
       const filePath = findWikiFileByName(fileTree, pageName)
       if (filePath) {
-        navigateInCurrentTab(filePath, pageName)
+        openTab(filePath, pageName)
         setActiveView("wiki")
       }
     },
-    [fileTree, navigateInCurrentTab, setActiveView],
+    [fileTree, openTab, setActiveView],
   )
 
   return (

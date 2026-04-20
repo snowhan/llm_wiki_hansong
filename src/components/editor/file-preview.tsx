@@ -13,6 +13,7 @@ import { MarkdownView } from "@/components/ui/markdown-view"
 import { getFileCategory, getCodeLanguage } from "@/lib/file-types"
 import type { FileCategory } from "@/lib/file-types"
 import { getFileName } from "@/lib/path-utils"
+import { useWikilinkNavigation } from "@/hooks/use-wikilink-navigation"
 
 const NO_CACHE = "__NO_CACHE__"
 
@@ -26,6 +27,7 @@ export function FilePreview({ projectId, filePath, textContent }: FilePreviewPro
   const { t } = useTranslation()
   const category = getFileCategory(filePath)
   const fileName = getFileName(filePath)
+  const onWikilinkClick = useWikilinkNavigation()
 
   switch (category) {
     case "image":
@@ -38,18 +40,18 @@ export function FilePreview({ projectId, filePath, textContent }: FilePreviewPro
       if (textContent === NO_CACHE || !textContent) {
         return <ProcessingPlaceholder filePath={filePath} fileName={fileName} />
       }
-      return <TextPreview filePath={filePath} content={textContent} label={t("preview.pdfExtracted")} />
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.pdfExtracted")} onWikilinkClick={onWikilinkClick} />
     case "document":
       if (textContent === NO_CACHE || !textContent) {
         return <ProcessingPlaceholder filePath={filePath} fileName={fileName} />
       }
-      return <TextPreview filePath={filePath} content={textContent} label={t("preview.documentExtracted")} />
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.documentExtracted")} onWikilinkClick={onWikilinkClick} />
     case "code":
       return <CodePreview filePath={filePath} content={textContent} />
     case "data":
       return <CodePreview filePath={filePath} content={textContent} />
     case "text":
-      return <TextPreview filePath={filePath} content={textContent} label={t("preview.text")} />
+      return <TextPreview filePath={filePath} content={textContent} label={t("preview.text")} onWikilinkClick={onWikilinkClick} />
     default:
       return <BinaryPlaceholder filePath={filePath} fileName={fileName} category={category} />
   }
@@ -190,7 +192,17 @@ function CodePreview({ filePath, content }: { filePath: string; content: string 
   )
 }
 
-function TextPreview({ filePath, content, label }: { filePath: string; content: string; label: string }) {
+function TextPreview({
+  filePath,
+  content,
+  label,
+  onWikilinkClick,
+}: {
+  filePath: string
+  content: string
+  label: string
+  onWikilinkClick?: (pageName: string) => void
+}) {
   return (
     <Box sx={{ height: "100%", overflow: "auto", p: 3 }}>
       <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
@@ -213,7 +225,7 @@ function TextPreview({ filePath, content, label }: { filePath: string; content: 
           {label}
         </Typography>
       </Box>
-      <MarkdownView markdown={content} sx={{ fontSize: "0.875rem" }} />
+      <MarkdownView markdown={content} sx={{ fontSize: "0.875rem" }} onWikilinkClick={onWikilinkClick} />
     </Box>
   )
 }

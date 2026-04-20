@@ -90,9 +90,96 @@ export async function getAllServerTasks(): Promise<ServerIngestTask[]> {
 }
 
 /**
- * Subscribe to server-sent events for a task.
- * Returns a cleanup function — call it to close the connection.
+ * Trigger a server-side LLM rebuild of wiki/index.md and wiki/overview.md.
+ * Returns the taskId for status polling.
  */
+export async function rebuildWikiSummary(projectId: string): Promise<string> {
+  const res = await fetch("/api/ingest/rebuild-summary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ projectId }),
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Failed to start rebuild-summary task: ${err}`)
+  }
+  const { taskId } = (await res.json()) as { taskId: string }
+  return taskId
+}
+
+export interface RebuildSummaryStatus {
+  id: string
+  projectId: string
+  status: "pending" | "running" | "done" | "error"
+  detail: string
+  error: string | null
+  filesWritten: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * Poll the status of a rebuild-summary task.
+ */
+export async function getRebuildSummaryStatus(taskId: string): Promise<RebuildSummaryStatus | null> {
+  try {
+    const res = await fetch(`/api/ingest/rebuild-summary/status/${taskId}`, {
+      headers: authHeaders(),
+    })
+    if (!res.ok) return null
+    const { task } = (await res.json()) as { task: RebuildSummaryStatus }
+    return task
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Trigger a server-side LLM deduplication of wiki entities and concepts.
+ * Returns the taskId for status polling.
+ */
+export async function deduplicateWiki(projectId: string): Promise<string> {
+  const res = await fetch("/api/ingest/deduplicate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify({ projectId }),
+  })
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText)
+    throw new Error(`Failed to start deduplicate task: ${err}`)
+  }
+  const { taskId } = (await res.json()) as { taskId: string }
+  return taskId
+}
+
+export interface DeduplicateStatus {
+  id: string
+  projectId: string
+  status: "pending" | "running" | "done" | "error"
+  detail: string
+  error: string | null
+  mergeCount: number
+  filesDeleted: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+/**
+ * Poll the status of a deduplicate task.
+ */
+export async function getDeduplicateStatus(taskId: string): Promise<DeduplicateStatus | null> {
+  try {
+    const res = await fetch(`/api/ingest/deduplicate/status/${taskId}`, {
+      headers: authHeaders(),
+    })
+    if (!res.ok) return null
+    const { task } = (await res.json()) as { task: DeduplicateStatus }
+    return task
+  } catch {
+    return null
+  }
+}
+
 export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () => void {
   const token = getStoredToken()
   const url = token

@@ -65,6 +65,9 @@ function buildExtensions(options: GetEditorExtensionsOptions = {}): Extensions {
     Link.configure({
       autolink: true,
       openOnClick: false,
+      // Allow wiki: internal-link scheme without touching linkifyjs global registration
+      // (avoids "already initialized" warning from registerCustomProtocol in onCreate).
+      isAllowedUri: (url, ctx) => /^wiki:/i.test(url) || ctx.defaultValidate(url),
     }),
     Subscript,
     Superscript,
