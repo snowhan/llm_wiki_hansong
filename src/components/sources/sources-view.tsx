@@ -147,7 +147,12 @@ export function SourcesView() {
     const allFiles = flattenAllFiles(sources)
     for (const file of allFiles) {
       readFile(project.id, file.relativePath + ".cache.txt")
-        .then(() => setFileStatus(file.relativePath, "done"))
+        .then((content) => {
+          const isFallback =
+            content.startsWith("[Binary file:") &&
+            content.includes("markitdown is not installed")
+          setFileStatus(file.relativePath, isFallback ? "idle" : "done")
+        })
         .catch(() => {
           const current = preprocessStatuses[file.relativePath]
           if (current !== "processing") setFileStatus(file.relativePath, "idle")

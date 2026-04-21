@@ -15,6 +15,7 @@ import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import { apiGet } from "@/lib/api-client"
+import { useAuthStore } from "@/stores/auth-store"
 import type { WikiProject } from "@/types/wiki"
 
 interface CreateProjectDialogProps {
@@ -25,6 +26,7 @@ interface CreateProjectDialogProps {
 
 export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: CreateProjectDialogProps) {
   const { t } = useTranslation()
+  const authUser = useAuthStore((s) => s.user)
   const [name, setName] = useState("")
   const [path, setPath] = useState("")
   const [selectedTemplate, setSelectedTemplate] = useState("general")
@@ -35,6 +37,9 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
   const [rootLoading, setRootLoading] = useState(true)
 
   useEffect(() => {
+    // /api/project/root is admin-only. Only fetch when admin opens this dialog.
+    if (!isOpen || authUser?.role !== "admin") return
+    setRootLoading(true)
     apiGet<{ projectsRoot: string }>("/api/project/root")
       .then(({ projectsRoot: root }) => {
         setProjectsRoot(root)
@@ -42,7 +47,7 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
       })
       .catch(() => {})
       .finally(() => setRootLoading(false))
-  }, [])
+  }, [isOpen, authUser?.role])
 
   function handleBrowse() {
     setShowBrowse(true)

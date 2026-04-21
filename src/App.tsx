@@ -41,12 +41,21 @@ function App() {
   // Action to execute automatically once the user logs in
   const [pendingPostLogin, setPendingPostLogin] = useState<null | "open" | "create">(null)
   const [projectsRoot, setProjectsRoot] = useState("")
+  const initializeAuth = useAuthStore((s) => s.initialize)
+  const authUser = useAuthStore((s) => s.user)
+  const isAuthInitializing = useAuthStore((s) => s.isInitializing)
 
   useEffect(() => {
+    // /api/project/root is admin-only. Skip prefetch for guests/members to avoid 401 noise.
+    if (isAuthInitializing) return
+    if (authUser?.role !== "admin") {
+      setProjectsRoot("")
+      return
+    }
     apiGet<{ projectsRoot: string }>("/api/project/root")
       .then(({ projectsRoot: root }) => setProjectsRoot(root))
       .catch(() => {})
-  }, [])
+  }, [isAuthInitializing, authUser?.role])
 
   // Global ⌘K / Ctrl+K shortcut for Command Palette
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -60,10 +69,6 @@ function App() {
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [handleKeyDown])
-
-  const initializeAuth = useAuthStore((s) => s.initialize)
-  const authUser = useAuthStore((s) => s.user)
-  const isAuthInitializing = useAuthStore((s) => s.isInitializing)
 
   useEffect(() => {
     setupAutoSave()

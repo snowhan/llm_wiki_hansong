@@ -93,24 +93,51 @@ export interface PreprocessProgress {
   error?: string
 }
 
-/** Candidate locations where markitdown CLI might live. */
-const MARKITDOWN_CANDIDATES = [
-  "markitdown", // in PATH
-  path.join(os.homedir(), "Library/Python/3.12/bin/markitdown"),
-  path.join(os.homedir(), "Library/Python/3.11/bin/markitdown"),
-  path.join(os.homedir(), "Library/Python/3.10/bin/markitdown"),
-  path.join(os.homedir(), ".local/bin/markitdown"),
-  "/opt/homebrew/bin/markitdown",
-  "/usr/local/bin/markitdown",
+interface MarkitdownCommand {
+  command: string
+  argsPrefix: string[]
+  label: string
+}
+
+/** Candidate commands where markitdown might be available. */
+const MARKITDOWN_CANDIDATES: MarkitdownCommand[] = [
+  { command: "markitdown", argsPrefix: [], label: "markitdown" }, // in PATH
+  // Docker venv (installed via requirements.txt in /opt/venv)
+  { command: "/opt/venv/bin/markitdown", argsPrefix: [], label: "/opt/venv/bin/markitdown" },
+  {
+    command: path.join(os.homedir(), "Library/Python/3.12/bin/markitdown"),
+    argsPrefix: [],
+    label: "~/Library/Python/3.12/bin/markitdown",
+  },
+  {
+    command: path.join(os.homedir(), "Library/Python/3.11/bin/markitdown"),
+    argsPrefix: [],
+    label: "~/Library/Python/3.11/bin/markitdown",
+  },
+  {
+    command: path.join(os.homedir(), "Library/Python/3.10/bin/markitdown"),
+    argsPrefix: [],
+    label: "~/Library/Python/3.10/bin/markitdown",
+  },
+  {
+    command: path.join(os.homedir(), ".local/bin/markitdown"),
+    argsPrefix: [],
+    label: "~/.local/bin/markitdown",
+  },
+  { command: "/opt/homebrew/bin/markitdown", argsPrefix: [], label: "/opt/homebrew/bin/markitdown" },
+  { command: "/usr/local/bin/markitdown", argsPrefix: [], label: "/usr/local/bin/markitdown" },
+  // Fallback: module invocation works even when the CLI script is not on PATH.
+  { command: "/opt/venv/bin/python3", argsPrefix: ["-m", "markitdown"], label: "/opt/venv/bin/python3 -m markitdown" },
+  { command: "python3", argsPrefix: ["-m", "markitdown"], label: "python3 -m markitdown" },
 ]
 
 /**
- * Find the markitdown executable. Returns the path string if found, null otherwise.
+ * Find a runnable markitdown command. Returns null when unavailable.
  */
-async function findMarkitdown(): Promise<string | null> {
+async function findMarkitdown(): Promise<MarkitdownCommand | null> {
   for (const candidate of MARKITDOWN_CANDIDATES) {
     const found = await new Promise<boolean>((resolve) => {
-      const proc = spawn(candidate, ["--help"], { stdio: "pipe" })
+      const proc = spawn(candidate.command, [...candidate.argsPrefix, "--help"], { stdio: "pipe" })
       proc.on("error", () => resolve(false))
       proc.on("close", (code) => resolve(code === 0 || code === 1))
     })
@@ -119,16 +146,16 @@ async function findMarkitdown(): Promise<string | null> {
   return null
 }
 
-let _markitdownPath: string | null | undefined = undefined
+let _markitdownCommand: MarkitdownCommand | null | undefined = undefined
 
 /**
  * Check if markitdown Python CLI is available (cached after first check).
  */
 export async function checkMarkitdown(): Promise<boolean> {
-  if (_markitdownPath === undefined) {
-    _markitdownPath = await findMarkitdown()
+  if (_markitdownCommand === undefined) {
+    _markitdownCommand = await findMarkitdown()
   }
-  return _markitdownPath !== null
+  return _markitdownCommand !== null
 }
 
 /**
@@ -141,9 +168,13 @@ export async function preprocessFile(
 ): Promise<string> {
   const ext = path.extname(filePath).toLowerCase()
   const cachePath = filePath + ".cache.txt"
+  const isFallbackCache = (content: string) =>
+    content.startsWith("[Binary file:") && content.includes("markitdown is not installed")
 
   try {
     const cached = await fs.readFile(cachePath, "utf-8")
+    // A previous fallback cache means extraction never succeeded; retry with current environment.
+    if (isFallbackCache(cached)) throw new Error("stale fallback cache")
     onProgress({ stage: "cached", progress: 1, done: true, content: cached })
     return cached
   } catch { /* no cache */ }
@@ -160,11 +191,11 @@ export async function preprocessFile(
 
   onProgress({ stage: "extracting", progress: 0.1 })
 
-  if (_markitdownPath === undefined) {
-    _markitdownPath = await findMarkitdown()
+  if (_markitdownCommand === undefined) {
+    _markitdownCommand = await findMarkitdown()
   }
-  const markitdownBin = _markitdownPath
-  if (!markitdownBin) {
+  const markitdownCommand = _markitdownCommand
+  if (!markitdownCommand) {
     const fallback = `[Binary file: ${path.basename(filePath)}]\n\n(markitdown is not installed; install it with: pip install markitdown)`
     try { await fs.writeFile(cachePath, fallback, "utf-8") } catch { /* non-critical */ }
     onProgress({ stage: "done", progress: 1, done: true, content: fallback })
@@ -172,7 +203,7 @@ export async function preprocessFile(
   }
 
   return new Promise<string>((resolve, reject) => {
-    const proc = spawn(markitdownBin, [filePath], { stdio: ["pipe", "pipe", "pipe"] })
+    const proc = spawn(markitdownCommand.command, [...markitdownCommand.argsPrefix, filePath], { stdio: ["pipe", "pipe", "pipe"] })
     let stdout = ""
     let stderr = ""
 
@@ -185,9 +216,13 @@ export async function preprocessFile(
     })
     proc.on("close", async (code) => {
       if (code !== 0) {
-        const error = `markitdown failed (code ${code}): ${stderr}`
-        onProgress({ stage: "error", progress: 1, done: true, error })
-        reject(new Error(error))
+        const errMsg = `markitdown failed via ${markitdownCommand.label} (code ${code}): ${stderr}`
+        onProgress({ stage: "error", progress: 1, done: true, error: errMsg })
+        // Resolve with an empty string so the SSE stream closes cleanly.
+        // The caller receives the error via the onProgress "error" event;
+        // rejecting here would propagate to the route and cause a second
+        // response write → ERR_INCOMPLETE_CHUNKED_ENCODING.
+        resolve("")
         return
       }
       try {
@@ -198,7 +233,7 @@ export async function preprocessFile(
     })
     proc.on("error", (err) => {
       onProgress({ stage: "error", progress: 1, done: true, error: err.message })
-      reject(err)
+      resolve("")
     })
   })
 }

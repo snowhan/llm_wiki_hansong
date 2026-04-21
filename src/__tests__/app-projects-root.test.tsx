@@ -6,6 +6,11 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { act } from "react"
 
 // ── Heavy deps that must be mocked first ─────────────────────────────────────
+const mockAuthState = {
+  user: { id: "u1", username: "admin", role: "admin" },
+  isInitializing: false,
+  initialize: vi.fn(),
+}
 
 vi.mock("@/stores/wiki-store", () => ({
   useWikiStore: vi.fn((selector: (s: any) => any) =>
@@ -22,11 +27,7 @@ vi.mock("@/stores/wiki-store", () => ({
 
 vi.mock("@/stores/auth-store", () => ({
   useAuthStore: vi.fn((selector: (s: any) => any) =>
-    selector({
-      user: { id: "u1", username: "admin", role: "admin" },
-      isInitializing: false,
-      initialize: vi.fn(),
-    }),
+    selector(mockAuthState),
   ),
 }))
 
@@ -95,6 +96,8 @@ import App from "../App"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockAuthState.user = { id: "u1", username: "admin", role: "admin" }
+  mockAuthState.isInitializing = false
   vi.mocked(apiGet).mockImplementation((url: string) => {
     if (url === "/api/project/root") return Promise.resolve({ projectsRoot: "/data/projects" })
     return Promise.resolve(null)
@@ -116,5 +119,13 @@ describe("App ServerDirBrowser initialPath", () => {
       const browser = screen.getByTestId("dir-browser")
       expect(browser).toHaveAttribute("data-initial-path", "/data/projects")
     })
+  })
+
+  it("does not request projectsRoot for non-admin users", async () => {
+    mockAuthState.user = { id: "u2", username: "member", role: "member" }
+    await act(async () => {
+      render(<App />)
+    })
+    expect(apiGet).not.toHaveBeenCalledWith("/api/project/root")
   })
 })
