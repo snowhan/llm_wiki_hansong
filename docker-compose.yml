@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: llm-wiki-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-llmwiki}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-llmwiki_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-llmwiki}
+    volumes:
+      - llm-wiki-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llmwiki}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   llm-wiki:
     build:
       context: .
@@ -6,13 +22,18 @@ services:
     image: llm-wiki:latest
     container_name: llm-wiki
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
-      - "${PORT:-3001}:3001"
+      - "127.0.0.1:${PORT:-3001}:3001"
     environment:
-      # Required: set a strong token in your .env file
-      - ACCESS_TOKEN=${ACCESS_TOKEN}
-      # Optional: separate admin token (defaults to ACCESS_TOKEN if unset)
-      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
+      # PostgreSQL connection
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-llmwiki}:${POSTGRES_PASSWORD:-llmwiki_secret}@postgres:5432/${POSTGRES_DB:-llmwiki}
+      # JWT — generate with: openssl rand -hex 32
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}
+      - JWT_REFRESH_EXPIRES_DAYS=${JWT_REFRESH_EXPIRES_DAYS:-30}
       # Root directory for all wiki projects inside the container
       - PROJECTS_ROOT=/data/projects
       # Persistent app state (project registry, LLM config, etc.)
@@ -25,6 +46,8 @@ services:
       - llm-wiki-state:/data/state
 
 volumes:
+  llm-wiki-postgres:
+    driver: local
   llm-wiki-projects:
     driver: local
   llm-wiki-state:

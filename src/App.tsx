@@ -4,6 +4,7 @@ import Box from "@mui/material/Box"
 import Typography from "@mui/material/Typography"
 import i18n from "@/i18n"
 import { useWikiStore } from "@/stores/wiki-store"
+import { useAuthStore } from "@/stores/auth-store"
 import { useChatStore } from "@/stores/chat-store"
 import { listDirectory, openProject } from "@/commands/fs"
 import {
@@ -18,6 +19,7 @@ import { loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
+import { AuthModal } from "@/components/auth/AuthModal"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import type { WikiProject } from "@/types/wiki"
@@ -31,37 +33,39 @@ function App() {
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showBrowseDialog, setShowBrowseDialog] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const initializeAuth = useAuthStore((s) => s.initialize)
+  const authUser = useAuthStore((s) => s.user)
+  const isAuthInitializing = useAuthStore((s) => s.isInitializing)
 
   useEffect(() => {
     setupAutoSave()
-  }, [])
+    initializeAuth()
+  }, [initializeAuth])
 
+  // Load app preferences and last project after auth initializes.
+  // Use authUser?.id (primitive) to avoid re-running on every token refresh
+  // that creates a new user object reference.
   useEffect(() => {
+    if (isAuthInitializing) return
+
     async function init() {
       try {
-        const savedConfig = await loadLlmConfig()
-        if (savedConfig) {
-          useWikiStore.getState().setLlmConfig(savedConfig)
-        }
-        const savedSearchConfig = await loadSearchApiConfig()
-        if (savedSearchConfig) {
-          useWikiStore.getState().setSearchApiConfig(savedSearchConfig)
-        }
-        const savedEmbeddingConfig = await loadEmbeddingConfig()
-        if (savedEmbeddingConfig) {
-          useWikiStore.getState().setEmbeddingConfig(savedEmbeddingConfig)
-        }
-        const savedLang = await loadLanguage()
-        if (savedLang) {
-          await i18n.changeLanguage(savedLang)
-        }
-        const lastProject = await getLastProject()
-        if (lastProject?.id) {
-          try {
-            await handleProjectOpened(lastProject)
-          } catch {
-            // Last project no longer valid
+        const currentUser = useAuthStore.getState().user
+        if (currentUser) {
+          const savedLang = await loadLanguage()
+          if (savedLang) {
+            await i18n.changeLanguage(savedLang)
+          }
+          const lastProject = await getLastProject()
+          if (lastProject?.id) {
+            try {
+              await handleProjectOpened(lastProject)
+            } catch {
+              // Last project no longer valid
+            }
           }
         }
       } catch {
@@ -72,7 +76,26 @@ function App() {
     }
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isAuthInitializing, authUser?.id])
+
+  // Load admin-only configs after auth is confirmed
+  useEffect(() => {
+    if (isAuthInitializing) return
+    if (authUser?.role !== "admin") return
+    async function loadAdminConfigs() {
+      try {
+        const savedConfig = await loadLlmConfig()
+        if (savedConfig) useWikiStore.getState().setLlmConfig(savedConfig)
+        const savedSearchConfig = await loadSearchApiConfig()
+        if (savedSearchConfig) useWikiStore.getState().setSearchApiConfig(savedSearchConfig)
+        const savedEmbeddingConfig = await loadEmbeddingConfig()
+        if (savedEmbeddingConfig) useWikiStore.getState().setEmbeddingConfig(savedEmbeddingConfig)
+      } catch {
+        // ignore — user may have lost admin access
+      }
+    }
+    loadAdminConfigs()
+  }, [isAuthInitializing, authUser])
 
   async function handleProjectOpened(proj: WikiProject) {
     setProject(proj)
@@ -165,7 +188,9 @@ function App() {
           onCreateProject={() => setShowCreateDialog(true)}
           onOpenProject={handleOpenProject}
           onSelectProject={handleSelectRecent}
+          onLogin={() => setShowAuthModal(true)}
         />
+        <AuthModal open={showAuthModal} onClose={() => setShowAuthModal(false)} />
         <CreateProjectDialog
           open={showCreateDialog}
           onOpenChange={setShowCreateDialog}

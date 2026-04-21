@@ -1,29 +1,20 @@
-const TOKEN_KEY = "llm-wiki-access-token"
+/**
+ * Auth token accessor — reads from the in-memory Zustand auth store.
+ * Access tokens are never stored in localStorage to prevent XSS theft.
+ * Refresh tokens are stored in httpOnly cookies by the server.
+ */
+import { useAuthStore } from "@/stores/auth-store"
 
 export function getStoredToken(): string {
-  try {
-    return localStorage.getItem(TOKEN_KEY) ?? ""
-  } catch {
-    return ""
-  }
+  return useAuthStore.getState().accessToken ?? ""
 }
 
-export function setStoredToken(token: string): void {
-  try {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token)
-    } else {
-      localStorage.removeItem(TOKEN_KEY)
-    }
-  } catch {
-    // ignore localStorage errors
-  }
+/** @deprecated No-op: tokens are now managed by the auth store, not localStorage */
+export function setStoredToken(_token: string): void {
+  // Token is managed by auth-store, this is a no-op kept for compatibility
 }
 
+/** @deprecated Use useAuthStore().logout() instead */
 export function clearToken(): void {
-  try {
-    localStorage.removeItem(TOKEN_KEY)
-  } catch {
-    // ignore
-  }
+  useAuthStore.getState().clearAuth()
 }

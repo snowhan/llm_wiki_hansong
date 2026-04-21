@@ -3,6 +3,7 @@ import AddIcon from "@mui/icons-material/Add"
 import CloseIcon from "@mui/icons-material/Close"
 import FolderOpenIcon from "@mui/icons-material/FolderOpen"
 import AutoStoriesIcon from "@mui/icons-material/AutoStories"
+import LoginIcon from "@mui/icons-material/Login"
 import Box from "@mui/material/Box"
 import IconButton from "@mui/material/IconButton"
 import Stack from "@mui/material/Stack"
@@ -13,20 +14,24 @@ import { Button } from "@/components/ui/button"
 import { getRecentProjects, removeFromRecentProjects } from "@/lib/project-store"
 import type { WikiProject } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
+import { useAuthStore } from "@/stores/auth-store"
 
 interface WelcomeScreenProps {
   onCreateProject: () => void
   onOpenProject: () => void
   onSelectProject: (project: WikiProject) => void
+  onLogin: () => void
 }
 
 export function WelcomeScreen({
   onCreateProject,
   onOpenProject,
   onSelectProject,
+  onLogin,
 }: WelcomeScreenProps) {
   const { t } = useTranslation()
   const [recentProjects, setRecentProjects] = useState<WikiProject[]>([])
+  const authUser = useAuthStore((s) => s.user)
 
   useEffect(() => {
     getRecentProjects().then(setRecentProjects).catch(() => {})
@@ -88,6 +93,32 @@ export function WelcomeScreen({
           pointerEvents: "none",
         }}
       />
+
+      {/* Login button — top-right, only when not authenticated */}
+      {!authUser && (
+        <Box sx={{ position: "absolute", top: 16, right: 20, zIndex: 2 }}>
+          <Button
+            onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onLogin() }}
+            startIcon={<LoginIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              color: "rgba(245,243,239,0.55)",
+              fontSize: "0.8rem",
+              px: 1.5,
+              py: 0.6,
+              borderRadius: "10px",
+              border: "1px solid rgba(245,243,239,0.1)",
+              "&:hover": {
+                color: "#F5F3EF",
+                border: "1px solid rgba(245,243,239,0.2)",
+                bgcolor: "rgba(245,243,239,0.05)",
+              },
+              transition: "all 0.2s",
+            }}
+          >
+            {t("auth.login")}
+          </Button>
+        </Box>
+      )}
 
       {/* Content */}
       <Stack

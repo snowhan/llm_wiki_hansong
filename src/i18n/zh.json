@@ -16,7 +16,48 @@
     "mappingCheck": "映射审核",
     "llmDebug": "LLM 调试",
     "admin": "管理员",
+    "settings": "设置",
     "switchProject": "切换项目"
+  },
+  "auth": {
+    "login": "登录",
+    "register": "注册",
+    "logout": "退出登录",
+    "username": "用户名",
+    "password": "密码",
+    "passwordHint": "至少 8 位",
+    "loginButton": "登录",
+    "registerButton": "注册账号",
+    "unknownError": "操作失败，请重试",
+    "registerPendingTitle": "注册申请已提交",
+    "registerPendingDesc": "管理员审批后即可登录，请耐心等待。",
+    "backToLogin": "返回登录",
+    "pendingApproval": "等待管理员审批",
+    "loginToAccess": "登录后使用"
+  },
+  "userMenu": {
+    "role": {
+      "admin": "管理员",
+      "member": "成员"
+    }
+  },
+  "userManagement": {
+    "title": "用户管理",
+    "username": "用户名",
+    "role": "角色",
+    "status": "状态",
+    "createdAt": "注册时间",
+    "actions": "操作",
+    "approve": "审批通过",
+    "suspend": "禁用",
+    "reactivate": "恢复",
+    "promoteAdmin": "提升为管理员",
+    "demoteMember": "设为普通成员",
+    "status_pending": "待审批",
+    "status_active": "已激活",
+    "status_suspended": "已禁用",
+    "pendingCount": "{{count}} 个待审批用户",
+    "noUsers": "暂无用户"
   },
   "welcome": {
     "newProject": "新建项目",

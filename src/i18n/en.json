@@ -16,7 +16,48 @@
     "mappingCheck": "Mapping Review",
     "llmDebug": "LLM Debug",
     "admin": "Admin",
+    "settings": "Settings",
     "switchProject": "Switch Project"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "logout": "Log out",
+    "username": "Username",
+    "password": "Password",
+    "passwordHint": "At least 8 characters",
+    "loginButton": "Login",
+    "registerButton": "Create Account",
+    "unknownError": "Something went wrong, please try again",
+    "registerPendingTitle": "Registration Submitted",
+    "registerPendingDesc": "Your account is pending admin approval. You'll be able to log in once approved.",
+    "backToLogin": "Back to Login",
+    "pendingApproval": "Pending Approval",
+    "loginToAccess": "Login to access"
+  },
+  "userMenu": {
+    "role": {
+      "admin": "Admin",
+      "member": "Member"
+    }
+  },
+  "userManagement": {
+    "title": "User Management",
+    "username": "Username",
+    "role": "Role",
+    "status": "Status",
+    "createdAt": "Registered",
+    "actions": "Actions",
+    "approve": "Approve",
+    "suspend": "Suspend",
+    "reactivate": "Reactivate",
+    "promoteAdmin": "Promote to Admin",
+    "demoteMember": "Set as Member",
+    "status_pending": "Pending",
+    "status_active": "Active",
+    "status_suspended": "Suspended",
+    "pendingCount": "{{count}} pending user(s)",
+    "noUsers": "No users found"
   },
   "welcome": {
     "newProject": "New Project",

@@ -1,5 +1,6 @@
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
+import { useAuthStore } from "@/stores/auth-store"
 import Box from "@mui/material/Box"
 import Button from "@mui/material/Button"
 import TextField from "@mui/material/TextField"
@@ -13,6 +14,8 @@ import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import i18n from "@/i18n"
 import { saveLanguage } from "@/lib/project-store"
+import { UserManagement } from "./user-management"
+import Divider from "@mui/material/Divider"
 
 const PROVIDERS = [
   { value: "openai" as const, label: "OpenAI", models: ["gpt-4o", "gpt-4.1", "gpt-4o-mini"] },
@@ -33,6 +36,7 @@ const HISTORY_OPTIONS = [2, 4, 6, 8, 10, 20]
 
 export function SettingsView() {
   const { t } = useTranslation()
+  const currentUser = useAuthStore((s) => s.user)
   const llmConfig = useWikiStore((s) => s.llmConfig)
   const setLlmConfig = useWikiStore((s) => s.setLlmConfig)
   const searchApiConfig = useWikiStore((s) => s.searchApiConfig)
@@ -404,6 +408,16 @@ export function SettingsView() {
           >
             {saved ? t("settings.saved") : t("settings.save")}
           </Button>
+
+          {/* User Management — admin only */}
+          {currentUser?.role === "admin" && (
+            <>
+              <Divider sx={{ my: 1 }} />
+              <Box sx={{ border: 1, borderColor: "divider", borderRadius: "12px", p: 2.5, bgcolor: "background.paper" }}>
+                <UserManagement />
+              </Box>
+            </>
+          )}
         </Stack>
       </Box>
     </Box>

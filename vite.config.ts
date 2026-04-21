@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react"
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
+  base: "/wiki/",
   plugins: [react()],
 
   resolve: {
@@ -16,7 +17,11 @@ export default defineConfig(async () => ({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://localhost:3001",
+      // Strip /wiki prefix before forwarding to backend (mirrors nginx prod behavior)
+      "/wiki/api": {
+        target: "http://localhost:3001",
+        rewrite: (path) => path.replace(/^\/wiki/, ""),
+      },
     },
   },
 

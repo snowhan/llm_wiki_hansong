@@ -34,6 +34,9 @@ RUN npm ci --omit=dev --ignore-scripts
 # Compiled server (output goes to dist/server/src/ because rootDir is implicit)
 COPY --from=server-builder /app/server/dist ./dist
 
+# DB migration SQL (must be alongside compiled JS)
+COPY server/src/db/migrations ./dist/server/src/db/migrations
+
 # Frontend static files
 COPY --from=frontend-builder /app/dist /app/static
 
@@ -44,7 +47,8 @@ ENV STATIC_DIR=/app/static
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
   CMD wget -qO- http://localhost:3001/ || exit 1
 
+# DB migration runs automatically on startup (in migrate.ts → called from index.ts)
 CMD ["node", "dist/server/src/index.js"]

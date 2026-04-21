@@ -27,12 +27,16 @@ export const config = {
   appStatePath: process.env.APP_STATE_PATH ?? path.join(os.homedir(), ".llm-wiki", "app-state.json"),
   uploadSizeLimit: parseInt(process.env.UPLOAD_SIZE_LIMIT ?? "104857600", 10), // 100MB
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
-  /** Bearer token required for all /api/* requests. If empty, authentication is disabled (dev only). */
-  accessToken: process.env.ACCESS_TOKEN ?? "",
-  /** Admin token required for /api/admin/* requests. Defaults to accessToken if not set. */
-  get adminToken() {
-    return process.env.ADMIN_TOKEN ?? this.accessToken
-  },
+  /** PostgreSQL connection string */
+  databaseUrl: process.env.DATABASE_URL ?? "",
+  /** JWT secret for signing access tokens. Must be set in production. */
+  jwtSecret: process.env.JWT_SECRET ?? "dev-insecure-secret-change-in-production-32chars",
+  /** Access token lifetime (jose format, e.g. '15m', '1h') */
+  jwtAccessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? "15m",
+  /** Refresh token lifetime in days */
+  jwtRefreshExpiresInDays: parseInt(process.env.JWT_REFRESH_EXPIRES_DAYS ?? "30", 10),
+  /** bcrypt rounds for password hashing (lower = faster, use 4 in tests) */
+  bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS ?? "12", 10),
   /** WPS AI Gateway – read from VITE_WPS_GATEWAY_* env vars as fallback */
   wpsGateway: {
     url: process.env.WPS_GATEWAY_URL ?? process.env.VITE_WPS_GATEWAY_URL ?? "",
@@ -43,10 +47,15 @@ export const config = {
   },
 }
 
-if (!config.accessToken) {
+if (!process.env.JWT_SECRET) {
   console.warn(
-    "[llm-wiki-server] WARNING: ACCESS_TOKEN is not set. " +
-    "All API endpoints are publicly accessible. " +
-    "Set ACCESS_TOKEN in your environment or .env file for production use.",
+    "[llm-wiki-server] WARNING: JWT_SECRET is not set. " +
+    "Using insecure default. Set JWT_SECRET in your environment for production.",
+  )
+}
+if (!config.databaseUrl) {
+  console.warn(
+    "[llm-wiki-server] WARNING: DATABASE_URL is not set. " +
+    "PostgreSQL features (auth) will not be available.",
   )
 }
