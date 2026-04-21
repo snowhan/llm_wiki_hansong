@@ -1914,6 +1914,7 @@ export function parseMergePlan(text: string): MergeGroup[] {
 
 /**
  * Build the LLM prompt for deduplicating wiki entities and concepts.
+ * Round 1: identification only — outputs MERGE-PLAN JSON, no file content.
  * @param pageListing - compact listing including full path, slug, title for each page
  */
 export function buildDeduplicatePrompt(pageListing: string): string {
@@ -1942,30 +1943,69 @@ export function buildDeduplicatePrompt(pageListing: string): string {
     "   - Use the canonical page's FULL REL-PATH (without wiki/ prefix, without .md) as the `canonical` value.",
     "   - Use each alias page's FULL REL-PATH (without wiki/ prefix, without .md) as the `aliases` values.",
     "",
-    "3. For each merge group, generate the merged canonical page content.",
-    "   - Use the canonical page's EXACT full path (with wiki/ prefix and .md) as the FILE block path.",
-    "",
     "## Output Format",
     "",
-    "First output the merge plan (use FULL REL-PATHS, not just slugs):",
+    "Output ONLY the merge plan (use FULL REL-PATHS, not just slugs):",
     "",
     "---MERGE-PLAN---",
     '[{"canonical":"sources/2024/entities/example","aliases":["sources/2025/entities/example"]},...]',
     "---END MERGE-PLAN---",
     "",
-    "Then for each merge group output the merged canonical file:",
-    "",
-    "---FILE: wiki/sources/<source-base>/entities/<canonical-slug>.md---",
-    "(complete merged file content with YAML frontmatter)",
-    "---END FILE---",
-    "",
-    "CRITICAL: The `canonical` and `aliases` values in MERGE-PLAN must be the rel-path WITHOUT wiki/ prefix and WITHOUT .md.",
+    "CRITICAL: The `canonical` and `aliases` values must be the rel-path WITHOUT wiki/ prefix and WITHOUT .md.",
     "Example: `sources/2024/entities/珠海奥乐医院`  (NOT just `珠海奥乐医院`)",
     "",
     "If there are no duplicates to merge, output only:",
     "---MERGE-PLAN---",
     "[]",
     "---END MERGE-PLAN---",
+  ].join("\n")
+}
+
+const MERGE_CONTENT_MAX_CHARS = 10000
+
+/**
+ * Build the LLM prompt for merging the full content of duplicate wiki entries.
+ * Round 2: content merging — receives actual file bodies, outputs a single FILE block.
+ * @param entries - {path, content} for each entry being merged; canonical should be first.
+ * @param canonicalPath - Exact wiki path used in the FILE block header (e.g. "wiki/sources/2024/entities/foo.md")
+ */
+export function buildMergeContentPrompt(
+  entries: { path: string; content: string }[],
+  canonicalPath: string,
+): string {
+  const entryBlocks = entries.map((e) => {
+    const body = e.content.length > MERGE_CONTENT_MAX_CHARS
+      ? e.content.slice(0, MERGE_CONTENT_MAX_CHARS) + "\n\n[...truncated]"
+      : e.content
+    return `== Entry: ${e.path} ==\n${body}`
+  })
+
+  return [
+    "You are a wiki editor. Merge the following wiki entries into one high-quality entry.",
+    "",
+    LANGUAGE_RULE,
+    "",
+    "## Merge Rules",
+    "",
+    "1. Preserve ALL non-overlapping factual information from every entry.",
+    "2. The `sources` field in YAML frontmatter must be the union of all entries' sources (no duplicates).",
+    "3. Prefer completeness over brevity — keep details even if slightly redundant.",
+    "4. Use the canonical entry's frontmatter structure as the base.",
+    "5. If entries describe the same fact differently, keep the most detailed version.",
+    "",
+    "## Entries to Merge",
+    "",
+    entryBlocks.join("\n\n"),
+    "",
+    "## Output Format",
+    "",
+    "Output the merged entry as a single FILE block:",
+    "",
+    `---FILE: ${canonicalPath}---`,
+    "(complete merged file content with YAML frontmatter)",
+    "---END FILE---",
+    "",
+    "Output ONLY the FILE block. No explanation or commentary.",
   ].join("\n")
 }
 
@@ -2095,25 +2135,58 @@ async function runDeduplicateTask(task: DeduplicateTask): Promise<void> {
       return
     }
 
-    // ── 5. Execute merges ────────────────────────────────────────────────────
-    updateDeduplicateTask(task, { detail: `执行合并 (${mergeGroups.length} 组)…` })
-
-    // blockMap: canonical slug (basename) → merged content
-    // MergeGroup.canonical / aliases are now FULL REL-PATHS relative to wikiDir (no .md).
+    // ── 5. Execute merges (Round 2: per-group content merge) ─────────────────
+    // MergeGroup.canonical / aliases are FULL REL-PATHS relative to wikiDir (no .md).
     // Example: "sources/2024/entities/珠海奥乐医院"
-    const fileBlocks = parseFileBlocks(generation)
-    const blockMap = new Map(fileBlocks.map((b) => [path.basename(b.path, ".md"), b.content]))
     const deletedFiles: string[] = []
+    const skippedGroups: string[] = []
 
-    for (const group of mergeGroups) {
+    for (let gi = 0; gi < mergeGroups.length; gi++) {
+      const group = mergeGroups[gi]
       const { canonical: canonicalRelPath, aliases: aliasRelPaths } = group
       const canonicalSlug = path.basename(canonicalRelPath)
+      const canonicalWikiPath = `wiki/${canonicalRelPath}.md`
 
-      // Write canonical merged content to its exact path
-      const mergedContent = blockMap.get(canonicalSlug)
-      if (mergedContent) {
-        await writeWithMkdir(path.join(wikiDir, `${canonicalRelPath}.md`), mergedContent)
+      updateDeduplicateTask(task, {
+        detail: `合并词条内容 (${gi + 1}/${mergeGroups.length})：${canonicalSlug}…`,
+      })
+
+      // Read full content for canonical + all aliases
+      const allRelPaths = [canonicalRelPath, ...aliasRelPaths]
+      const entries: { path: string; content: string }[] = []
+      for (const relPath of allRelPaths) {
+        try {
+          const raw = await fs.readFile(path.join(wikiDir, `${relPath}.md`), "utf-8")
+          entries.push({ path: `wiki/${relPath}.md`, content: raw })
+        } catch {
+          // File may not exist (already deleted in a previous run); skip it
+        }
       }
+
+      if (entries.length === 0) {
+        skippedGroups.push(canonicalSlug)
+        continue
+      }
+
+      // Round-2 LLM call: merge actual content
+      let mergedContent = ""
+      try {
+        const mergePrompt = buildMergeContentPrompt(entries, canonicalWikiPath)
+        let gen2 = ""
+        await callLlm(llmConfig, [{ role: "user", content: mergePrompt }], (token: string) => { gen2 += token })
+        const blocks = parseFileBlocks(gen2)
+        mergedContent = blocks[0]?.content ?? ""
+      } catch (mergeErr) {
+        console.warn(`[deduplicate] Round-2 merge failed for ${canonicalSlug}:`, mergeErr)
+      }
+
+      if (!mergedContent) {
+        skippedGroups.push(canonicalSlug)
+        console.warn(`[deduplicate] Skipping group ${canonicalSlug}: no merged content produced`)
+        continue
+      }
+
+      await writeWithMkdir(path.join(wikiDir, `${canonicalRelPath}.md`), mergedContent)
 
       // Delete each alias file and update [[aliasSlug]] → [[canonicalSlug]] links
       for (const aliasRelPath of aliasRelPaths) {
@@ -2124,7 +2197,6 @@ async function runDeduplicateTask(task: DeduplicateTask): Promise<void> {
           deletedFiles.push(`wiki/${aliasRelPath}.md`)
         } catch { /* ignore if already gone */ }
 
-        // Only replace links when slugs differ (same-slug merges just delete the alias file)
         if (aliasSlug !== canonicalSlug) {
           await replaceWikiLinks(wikiDir, aliasSlug, canonicalSlug)
         }
@@ -2134,10 +2206,14 @@ async function runDeduplicateTask(task: DeduplicateTask): Promise<void> {
     // ── 6. Rebuild index ─────────────────────────────────────────────────────
     scheduleIndexRebuild(projectPath)
 
+    const successCount = mergeGroups.length - skippedGroups.length
+    const skipNote = skippedGroups.length > 0
+      ? `；${skippedGroups.length} 组合并失败已跳过（${skippedGroups.join("、")}）`
+      : ""
     updateDeduplicateTask(task, {
       status: "done",
-      detail: `已合并 ${mergeGroups.length} 组词条，删除 ${deletedFiles.length} 个别名文件`,
-      mergeCount: mergeGroups.length,
+      detail: `已合并 ${successCount} 组词条，删除 ${deletedFiles.length} 个别名文件${skipNote}`,
+      mergeCount: successCount,
       filesDeleted: deletedFiles,
     })
   } catch (err) {
