@@ -8,6 +8,7 @@
  */
 
 import fs from "node:fs/promises"
+import type { Dirent } from "node:fs"
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import type { Response } from "express"
@@ -191,7 +192,7 @@ const SHARED_ALLOWED: ReadonlySet<string> = new Set(["wiki/log.md", "wiki/overvi
  */
 async function collectMdFiles(dir: string, baseDir: string): Promise<string[]> {
   const results: string[] = []
-  let entries: fs.Dirent[]
+  let entries: Dirent[]
   try {
     entries = await fs.readdir(dir, { withFileTypes: true })
   } catch { return results }
@@ -296,7 +297,7 @@ export async function rebuildWikiIndex(projectPath: string): Promise<void> {
 export async function rebuildWikiOverview(projectPath: string): Promise<void> {
   const wikiDir = path.join(projectPath, "wiki")
   const sourcesDir = path.join(wikiDir, "sources")
-  let sourceEntries: fs.Dirent[] = []
+  let sourceEntries: Dirent[] = []
   try {
     sourceEntries = await fs.readdir(sourcesDir, { withFileTypes: true })
   } catch {
@@ -523,10 +524,10 @@ async function callLlm(
     llmDebugLogger.append({
       id: randomUUID(),
       timestamp: startMs,
-      source: inferLlmCallSource(messages),
+      source: inferLlmCallSource((messages as unknown) as Array<{ role: string; content: string }>),
       provider: llmConfig.provider,
       model: llmConfig.model ?? "",
-      messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
+      messages: (messages as unknown) as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       output: "",
       durationMs: Date.now() - startMs,
       status: "error",
@@ -568,10 +569,10 @@ async function callLlm(
     llmDebugLogger.append({
       id: randomUUID(),
       timestamp: startMs,
-      source: inferLlmCallSource(messages),
+      source: inferLlmCallSource((messages as unknown) as Array<{ role: string; content: string }>),
       provider: llmConfig.provider,
       model: llmConfig.model ?? "",
-      messages: messages as Array<{ role: "system" | "user" | "assistant"; content: string }>,
+      messages: (messages as unknown) as Array<{ role: "system" | "user" | "assistant"; content: string }>,
       output: outputText,
       durationMs: Date.now() - startMs,
       status: callError ? "error" : "done",
@@ -1599,7 +1600,7 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       durationMs: Date.now() - step1Start,
       status: "done",
       systemPrompt: step1SystemPrompt,
-      userMessage: step1UserMsg,
+      userMessage: typeof step1UserMsg === "string" ? step1UserMsg : "<multimodal content>",
       output: analysis,
     }).catch(() => {})
 
@@ -1646,7 +1647,7 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       durationMs: Date.now() - step2Start,
       status: "done",
       systemPrompt: step2SystemPrompt,
-      userMessage: step2UserMsg,
+      userMessage: typeof step2UserMsg === "string" ? step2UserMsg : "<multimodal content>",
       output: generation,
     }).catch(() => {})
 

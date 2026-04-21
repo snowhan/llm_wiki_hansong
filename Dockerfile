@@ -18,8 +18,8 @@ COPY server/package.json server/package-lock.json ./
 RUN npm ci --ignore-scripts
 
 COPY server/ .
-# Shared types are needed by the server build
-COPY shared/ /shared
+# Shared types: copy relative to WORKDIR so ../../shared resolves correctly
+COPY shared/ ../shared/
 RUN npm run build
 
 # ── Stage 3: Production image ─────────────────────────────────────────────────

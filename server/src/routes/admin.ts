@@ -1,13 +1,12 @@
 import { Router } from "express"
 import type { Request, Response, NextFunction } from "express"
-import { adminAuthMiddleware } from "../middleware/auth.js"
+import { requireAdmin } from "../middleware/auth-guards.js"
 import { getRegistryEntries, deleteProjectFromRegistry } from "../services/project-service.js"
 import { getAllTasks } from "../services/ingest-service.js"
 
 const router = Router()
 
-// All admin routes require the admin token
-router.use(adminAuthMiddleware)
+router.use(requireAdmin)
 
 /**
  * GET /api/admin/status

@@ -276,9 +276,7 @@ export function getProviderConfig(config: LlmConfig): ProviderConfig {
         parseStream: parseOpenAiLine,
       }
 
-    default: {
-      const exhaustive: never = provider
-      throw new Error(`Unknown provider: ${String(exhaustive)}`)
-    }
+    default:
+      throw new Error(`Unknown provider: ${String(provider)}`)
   }
 }
