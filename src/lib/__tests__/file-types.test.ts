@@ -168,7 +168,7 @@ describe("getCodeLanguage", () => {
 
 // ── needsPreprocess ───────────────────────────────────────────────────────
 
-import { needsPreprocess } from "../file-types"
+import { needsPreprocess, needsVisionIngest } from "../file-types"
 
 describe("needsPreprocess", () => {
   it("returns true for pdf", () => {
@@ -213,5 +213,61 @@ describe("needsPreprocess", () => {
 
   it("md file path → not needsPreprocess via getFileCategory", () => {
     expect(needsPreprocess(getFileCategory("notes.md"))).toBe(false)
+  })
+})
+
+// ── needsVisionIngest ─────────────────────────────────────────────────────
+
+describe("needsVisionIngest", () => {
+  it("returns true for image", () => {
+    expect(needsVisionIngest("image")).toBe(true)
+  })
+
+  it("returns false for pdf", () => {
+    expect(needsVisionIngest("pdf")).toBe(false)
+  })
+
+  it("returns false for document", () => {
+    expect(needsVisionIngest("document")).toBe(false)
+  })
+
+  it("returns false for text", () => {
+    expect(needsVisionIngest("text")).toBe(false)
+  })
+
+  it("returns false for code", () => {
+    expect(needsVisionIngest("code")).toBe(false)
+  })
+
+  it("returns false for markdown", () => {
+    expect(needsVisionIngest("markdown")).toBe(false)
+  })
+
+  it("returns false for data", () => {
+    expect(needsVisionIngest("data")).toBe(false)
+  })
+
+  it("returns false for video", () => {
+    expect(needsVisionIngest("video")).toBe(false)
+  })
+
+  it("png file → needsVisionIngest via getFileCategory", () => {
+    expect(needsVisionIngest(getFileCategory("screenshot.png"))).toBe(true)
+  })
+
+  it("jpg file → needsVisionIngest via getFileCategory", () => {
+    expect(needsVisionIngest(getFileCategory("photo.jpg"))).toBe(true)
+  })
+
+  it("webp file → needsVisionIngest via getFileCategory", () => {
+    expect(needsVisionIngest(getFileCategory("image.webp"))).toBe(true)
+  })
+
+  it("gif file → needsVisionIngest via getFileCategory", () => {
+    expect(needsVisionIngest(getFileCategory("anim.gif"))).toBe(true)
+  })
+
+  it("pdf file → NOT needsVisionIngest", () => {
+    expect(needsVisionIngest(getFileCategory("paper.pdf"))).toBe(false)
   })
 })

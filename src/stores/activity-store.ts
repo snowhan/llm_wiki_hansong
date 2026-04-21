@@ -95,29 +95,24 @@ export const useActivityStore = create<ActivityState>()(
       name: "llm-wiki-activity",
       // Only persist items, not actions
       partialize: (state) => ({ items: state.items }),
-      // On rehydration: any "running" item was killed by page refresh; also prune old items.
-      onRehydrateStorage: () => (state) => {
-        if (!state) return
+      // Deduplicate + normalize DURING hydration (before the first React render)
+      // so React never sees duplicate keys in the activity list.
+      merge: (_persisted, current) => {
+        const persisted = _persisted as Partial<typeof current>
         const now = Date.now()
-        // On reload: convert running→error, and DROP all error items
-        // (errors are session-scoped; only done items are worth keeping across refreshes)
-        const normalized = state.items
+        const raw: ActivityItem[] = persisted.items ?? []
+        const normalized = raw
           .map((item) =>
             item.status === "running"
               ? { ...item, status: "error" as const, detail: "任务被页面刷新中断，请重新生成" }
               : item
           )
           .filter((item) =>
-            // Keep done items for 24 hours (useful history)
             item.status === "done"
               ? now - item.createdAt < 24 * 60 * 60 * 1000
-              // Drop ALL error items on page reload — they are stale session artifacts
               : false
           )
-        const deduped = dedupeItemIds(normalized)
-
-        // Use setState to properly notify subscribers (not direct mutation).
-        useActivityStore.setState({ items: deduped })
+        return { ...current, items: dedupeItemIds(normalized) }
       },
     }
   )

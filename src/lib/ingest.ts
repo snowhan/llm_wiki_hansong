@@ -1,7 +1,8 @@
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { streamChat } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
-import { getFileCategory } from "@/lib/file-types"
+import { getFileCategory, needsVisionIngest } from "@/lib/file-types"
+import { supportsVision } from "@/lib/vision-capability"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { useActivityStore } from "@/stores/activity-store"
@@ -89,6 +90,19 @@ export async function autoIngest(
     detail: "Reading source...",
     filesWritten: [],
   })
+
+  // ── Guard: image files require vision-capable LLM ──────────────────────
+  const fileCategory = getFileCategory(sourcePath)
+  if (needsVisionIngest(fileCategory)) {
+    const llmCfg = useWikiStore.getState().llmConfig
+    if (!llmCfg || !supportsVision(llmCfg.provider, llmCfg.model ?? "")) {
+      activity.updateItem(activityId, {
+        status: "error",
+        detail: `[Vision not supported] 当前模型不支持视觉识别，图片文件将被忽略。请切换到支持视觉的模型（如 gpt-4o、claude-3、gemini-1.5-pro）后重试。`,
+      })
+      return []
+    }
+  }
 
   const [sourceContent, schema, purpose, index, overview] = await Promise.all([
     readSourceForIngest(projectId, sourcePath),

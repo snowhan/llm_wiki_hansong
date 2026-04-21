@@ -139,6 +139,14 @@ export function needsPreprocess(category: FileCategory): boolean {
   return category === "pdf" || category === "document"
 }
 
+/**
+ * Files that should be sent to the LLM as multimodal image content parts
+ * instead of text. These are standalone image files uploaded by the user.
+ */
+export function needsVisionIngest(category: FileCategory): boolean {
+  return category === "image"
+}
+
 export function getCodeLanguage(filePath: string): string {
   const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
   const langMap: Record<string, string> = {

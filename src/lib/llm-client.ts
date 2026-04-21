@@ -1,7 +1,4 @@
-export interface ChatMessage {
-  role: "system" | "user" | "assistant"
-  content: string
-}
+export type { ChatMessage, ContentPart } from "./llm-providers"
 
 export interface StreamCallbacks {
   onToken: (token: string) => void

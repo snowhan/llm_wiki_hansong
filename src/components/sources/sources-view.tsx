@@ -30,6 +30,8 @@ import type { PreprocessStage } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 import { getFileName, getFileStem } from "@/lib/path-utils"
+import { getFileCategory, needsVisionIngest } from "@/lib/file-types"
+import { supportsVision } from "@/lib/vision-capability"
 import { startServerIngest, subscribeIngestSSE, getAllServerTasks, getServerIngestStatus, rebuildWikiSummary, getRebuildSummaryStatus, deduplicateWiki, getDeduplicateStatus } from "@/commands/ingest"
 import type { SseCallbacks } from "@/commands/ingest"
 import { useActivityStore } from "@/stores/activity-store"
@@ -752,6 +754,7 @@ export function SourcesView() {
   }
 
   async function handleBatchIngest() {
+    const allFiles = flattenAllFiles(sources)
     for (const file of allFiles) {
       const status = useWikiStore.getState().ingestStatuses[file.relativePath]
       const hasLiveTask = !!useWikiStore.getState().serverTaskIds[file.relativePath]
@@ -1253,6 +1256,9 @@ function SourceTree({
         const isProcessing = ppStatus === "processing"
         const isIngesting = ingestStatus === "ingesting" || !!serverTaskIds[node.relativePath]
         const canIngest = !isIngesting
+        const fileNeedsVision = needsVisionIngest(getFileCategory(node.relativePath))
+        const llmCfg = useWikiStore.getState().llmConfig
+        const visionSupported = !fileNeedsVision || (!!llmCfg && supportsVision(llmCfg.provider, llmCfg.model ?? ""))
 
         return (
           <Stack
@@ -1347,7 +1353,11 @@ function SourceTree({
             </Stack>
 
             <Tooltip
-              title={isIngesting ? "正在生成中，请稍候…" : "提取文本并生成 Wiki"}
+              title={
+                isIngesting ? "正在生成中，请稍候…"
+                  : !visionSupported ? "当前模型不支持视觉识别，图片文件将被忽略。请切换到支持视觉的模型（如 gpt-4o、claude-3）后重试。"
+                  : "提取文本并生成 Wiki"
+              }
               enterDelay={isIngesting ? 0 : 600}
               placement="top"
             >
@@ -1358,10 +1368,11 @@ function SourceTree({
                   onClick={() => { if (canIngest) onIngest(node) }}
                   sx={{
                     color: isIngesting ? "#7c3aed"
+                      : !visionSupported ? "#d97706"
                       : ingestStatus === "done" ? "#65a30d"
                       : "text.secondary",
                     "&:hover": {
-                      color: canIngest ? "#7c3aed" : undefined,
+                      color: canIngest && visionSupported ? "#7c3aed" : canIngest ? "#d97706" : undefined,
                       bgcolor: canIngest ? "rgba(124,58,237,0.06)" : undefined,
                     },
                   }}

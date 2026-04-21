@@ -1,8 +1,14 @@
 import type { LlmConfig } from "@/stores/wiki-store"
 
+// ── Multimodal content types ──────────────────────────────────────────────────
+
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant"
-  content: string
+  content: string | ContentPart[]
 }
 
 interface ProviderConfig {
@@ -13,6 +19,70 @@ interface ProviderConfig {
 }
 
 const JSON_CONTENT_TYPE = "application/json"
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Extract plain string content from a message (for providers that need it).
+ * If content is already a string, returns it. If it's ContentPart[], extracts
+ * all text parts concatenated.
+ */
+function contentToString(content: string | ContentPart[]): string {
+  if (typeof content === "string") return content
+  return content
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("")
+}
+
+/**
+ * Parse a data URI to extract media_type and base64 data.
+ * "data:image/png;base64,abc123" → { media_type: "image/png", data: "abc123" }
+ */
+function parseDataUri(url: string): { media_type: string; data: string } | null {
+  const m = url.match(/^data:([^;]+);base64,(.+)$/)
+  if (!m) return null
+  return { media_type: m[1], data: m[2] }
+}
+
+/**
+ * Convert generic ContentPart[] to Anthropic's native message content format.
+ */
+function toAnthropicContent(content: string | ContentPart[]): unknown {
+  if (typeof content === "string") return content
+  return content.map((part) => {
+    if (part.type === "text") return { type: "text", text: part.text }
+    const parsed = parseDataUri(part.image_url.url)
+    if (parsed) {
+      return {
+        type: "image",
+        source: { type: "base64", media_type: parsed.media_type, data: parsed.data },
+      }
+    }
+    // Fallback: URL reference (Anthropic also supports url source type)
+    return {
+      type: "image",
+      source: { type: "url", url: part.image_url.url },
+    }
+  })
+}
+
+/**
+ * Convert generic ContentPart[] to Google's native parts format.
+ */
+function toGoogleParts(content: string | ContentPart[]): unknown[] {
+  if (typeof content === "string") return [{ text: content }]
+  return content.map((part) => {
+    if (part.type === "text") return { text: part.text }
+    const parsed = parseDataUri(part.image_url.url)
+    if (parsed) {
+      return { inline_data: { mime_type: parsed.media_type, data: parsed.data } }
+    }
+    return { file_data: { file_uri: part.image_url.url } }
+  })
+}
+
+// ── Stream parsers ────────────────────────────────────────────────────────────
 
 function parseOpenAiLine(line: string): string | null {
   if (!line.startsWith("data: ")) return null
@@ -63,17 +133,27 @@ function parseGoogleLine(line: string): string | null {
   }
 }
 
+// ── Body builders ─────────────────────────────────────────────────────────────
+
 function buildOpenAiBody(messages: ChatMessage[]): Record<string, unknown> {
+  // OpenAI natively supports ContentPart[] — pass through as-is
   return { messages, stream: true }
 }
 
 function buildAnthropicBody(messages: ChatMessage[]): Record<string, unknown> {
   const systemMessages = messages.filter((m) => m.role === "system")
   const conversationMessages = messages.filter((m) => m.role !== "system")
-  const system = systemMessages.map((m) => m.content).join("\n") || undefined
+  const system = systemMessages
+    .map((m) => contentToString(m.content))
+    .join("\n") || undefined
+
+  const converted = conversationMessages.map((m) => ({
+    role: m.role,
+    content: toAnthropicContent(m.content),
+  }))
 
   return {
-    messages: conversationMessages,
+    messages: converted,
     ...(system !== undefined ? { system } : {}),
     stream: true,
     max_tokens: 4096,
@@ -86,14 +166,12 @@ function buildGoogleBody(messages: ChatMessage[]): Record<string, unknown> {
 
   const contents = conversationMessages.map((m) => ({
     role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
+    parts: toGoogleParts(m.content),
   }))
 
   const systemInstruction =
     systemMessages.length > 0
-      ? {
-          parts: systemMessages.map((m) => ({ text: m.content })),
-        }
+      ? { parts: systemMessages.map((m) => ({ text: contentToString(m.content) })) }
       : undefined
 
   return {
@@ -101,6 +179,8 @@ function buildGoogleBody(messages: ChatMessage[]): Record<string, unknown> {
     ...(systemInstruction !== undefined ? { systemInstruction } : {}),
   }
 }
+
+// ── Provider config ───────────────────────────────────────────────────────────
 
 export function getProviderConfig(config: LlmConfig): ProviderConfig {
   const { provider, apiKey, model, ollamaUrl, customEndpoint } = config

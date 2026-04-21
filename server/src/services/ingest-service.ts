@@ -16,8 +16,14 @@ import { getProjectRoot } from "./project-service.js"
 import { logLlmCall, logFileChange, nowBeijing } from "./ingest-audit-logger.js"
 import { getState } from "./state-service.js"
 import { getProviderConfig } from "../lib/llm-providers.js"
-import type { ChatMessage } from "../lib/llm-providers.js"
+import type { ChatMessage, ContentPart } from "../lib/llm-providers.js"
 import { llmDebugLogger, inferLlmCallSource } from "./llm-debug-logger.js"
+import { supportsVision } from "../lib/vision-capability.js"
+import {
+  readImageAsBase64DataUri,
+  extractEmbeddedImages,
+  getEmbeddedImageDir,
+} from "./preprocess-service.js"
 
 // ── Task types ────────────────────────────────────────────────────────────
 
@@ -143,6 +149,35 @@ function sha256(text: string): string {
 }
 
 const BINARY_EXTS = new Set(["pdf", "docx", "pptx", "xlsx", "xls", "rtf", "odt", "odp", "ods"])
+const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "avif", "heic", "heif"])
+const MAX_IMAGES_PER_INGEST = 10
+
+/**
+ * Build the user message content for an ingest LLM call.
+ * When images are provided, returns a ContentPart[] (multimodal).
+ * When no images, returns a plain string (backward-compatible).
+ */
+export function buildMultimodalUserContent(
+  textPrompt: string,
+  imageDataUris: string[],
+): string | ContentPart[] {
+  if (imageDataUris.length === 0) return textPrompt
+
+  const capped = imageDataUris.slice(0, MAX_IMAGES_PER_INGEST)
+  const truncationNotice =
+    imageDataUris.length > MAX_IMAGES_PER_INGEST
+      ? `\n\n[Note: ${imageDataUris.length} images found; sending first ${MAX_IMAGES_PER_INGEST} to stay within token limits.]`
+      : ""
+
+  const parts: ContentPart[] = [
+    { type: "text", text: textPrompt + truncationNotice },
+    ...capped.map((url) => ({
+      type: "image_url" as const,
+      image_url: { url, detail: "auto" as const },
+    })),
+  ]
+  return parts
+}
 
 // Paths the shared-files LLM call is allowed to write.
 // wiki/index.md is intentionally excluded — it is rebuilt programmatically after each ingest.
@@ -1378,10 +1413,36 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       return
     }
 
-    // Guard: binary files (PDF, DOCX…) must be preprocessed before ingest.
-    // If the cache.txt is missing or is just a placeholder, abort early so
-    // the LLM doesn't hallucinate content from an empty / binary source.
     const srcExt = path.extname(absSourcePath).toLowerCase().slice(1)
+
+    // ── Handle standalone image files (vision ingest) ─────────────────────
+    const isImageFile = IMAGE_EXTS.has(srcExt)
+    let imageDataUris: string[] = []
+
+    if (isImageFile) {
+      if (!supportsVision(llmConfig.provider, llmConfig.model ?? "")) {
+        updateTask(task, {
+          status: "error",
+          error: "Vision not supported",
+          detail: `当前模型 (${llmConfig.model ?? llmConfig.provider}) 不支持视觉识别，无法处理图片文件。请在设置中切换支持视觉的模型（如 gpt-4o、claude-3、gemini-1.5-pro）。`,
+        })
+        return
+      }
+      try {
+        const dataUri = await readImageAsBase64DataUri(absSourcePath)
+        imageDataUris = [dataUri]
+        updateTask(task, { detail: "Reading image for vision ingest..." })
+      } catch (err) {
+        updateTask(task, {
+          status: "error",
+          error: "Image read failed",
+          detail: `无法读取图片文件: ${String(err)}`,
+        })
+        return
+      }
+    }
+
+    // Guard: binary documents (PDF, DOCX…) must be preprocessed before ingest.
     if (BINARY_EXTS.has(srcExt)) {
       const isEmpty = !sourceContent.trim()
       const isPlaceholder = sourceContent.startsWith("[Binary file:")
@@ -1392,6 +1453,22 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
           detail: "请先预处理此文件（PDF/DOCX 等二进制文件需要提取文本后才能生成 wiki）",
         })
         return
+      }
+
+      // Collect embedded images from document (non-blocking, best-effort)
+      if (supportsVision(llmConfig.provider, llmConfig.model ?? "")) {
+        try {
+          const embeddedPaths = await extractEmbeddedImages(absSourcePath)
+          for (const imgPath of embeddedPaths.slice(0, MAX_IMAGES_PER_INGEST)) {
+            try {
+              const uri = await readImageAsBase64DataUri(imgPath)
+              imageDataUris.push(uri)
+            } catch { /* skip unreadable image */ }
+          }
+          if (imageDataUris.length > 0) {
+            updateTask(task, { detail: `Reading source + ${imageDataUris.length} embedded image(s)...` })
+          }
+        } catch { /* image extraction is non-critical */ }
       }
     }
 
@@ -1416,10 +1493,13 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
     updateTask(task, { detail: "Step 1: Analyzing source..." })
     let analysis = ""
     const step1SystemPrompt = buildAnalysisPrompt(purpose, existingSourcePaths)
-    const step1UserMsg =
+    const step1UserMsgText =
       `Analyze this source document:\n\n**File:** ${fileName}` +
       (folderContext ? `\n**Folder context:** ${folderContext}` : "") +
+      (isImageFile ? "\n\nThis is an image file. Describe its content, extract all visible text, and identify key entities and concepts." : "") +
+      (imageDataUris.length > 0 && !isImageFile ? `\n\n[${imageDataUris.length} embedded image(s) attached below]` : "") +
       `\n\n---\n\n${truncated}`
+    const step1UserMsg = buildMultimodalUserContent(step1UserMsgText, imageDataUris)
     const step1Start = Date.now()
 
     await callLlm(
@@ -1455,7 +1535,7 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
     updateTask(task, { detail: "Step 2/2: Generating wiki pages..." })
     let generation = ""
     const step2SystemPrompt = buildGenerationPrompt(schema, purpose, existingSourcePaths, fileName, overview)
-    const step2UserMsg = [
+    const step2UserMsgText = [
       `Based on the following analysis of **${fileName}**, generate the wiki files.`,
       "",
       "## Source Analysis",
@@ -1466,6 +1546,7 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
       "",
       truncated,
     ].join("\n")
+    const step2UserMsg = buildMultimodalUserContent(step2UserMsgText, imageDataUris)
     const step2Start = Date.now()
 
     await callLlm(

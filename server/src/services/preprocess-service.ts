@@ -3,6 +3,88 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import os from "node:os"
 
+// ── Vision helpers ────────────────────────────────────────────────────────────
+
+const MIME_MAP: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  tiff: "image/tiff",
+  tif: "image/tiff",
+  avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
+}
+
+/**
+ * Read an image file and return a data URI string suitable for multimodal LLM messages.
+ * Format: "data:<mime>;base64,<base64data>"
+ */
+export async function readImageAsBase64DataUri(filePath: string): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase().replace(".", "")
+  const mime = MIME_MAP[ext] ?? "image/png"
+  const data = await fs.readFile(filePath)
+  return `data:${mime};base64,${data.toString("base64")}`
+}
+
+/**
+ * Returns the directory where embedded images extracted from a document are stored.
+ * e.g. "/project/paper.pdf" → "/project/paper.pdf.images"
+ */
+export function getEmbeddedImageDir(sourceFilePath: string): string {
+  return sourceFilePath + ".images"
+}
+
+/** Path to the Python image extraction script. */
+const EXTRACT_IMAGES_SCRIPT = path.join(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../../../scripts/extract_images.py",
+)
+
+/**
+ * Extract embedded images from a PDF/DOCX/PPTX file using the Python script.
+ * Returns the list of extracted image file paths (absolute).
+ * Results are cached in a <file>.images/ directory — won't re-extract if already done.
+ */
+export async function extractEmbeddedImages(filePath: string): Promise<string[]> {
+  const outputDir = getEmbeddedImageDir(filePath)
+
+  // Return cached results if dir already exists and is non-empty
+  try {
+    const entries = await fs.readdir(outputDir)
+    const images = entries
+      .filter((e) => /\.(png|jpg|jpeg|gif|webp|bmp)$/i.test(e))
+      .map((e) => path.join(outputDir, e))
+      .sort()
+    if (images.length > 0) return images
+  } catch { /* dir doesn't exist yet */ }
+
+  // Run Python extraction script
+  return new Promise((resolve) => {
+    const proc = spawn("python3", [EXTRACT_IMAGES_SCRIPT, filePath, outputDir], {
+      stdio: ["pipe", "pipe", "pipe"],
+    })
+    let stdout = ""
+
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString() })
+    proc.on("close", () => {
+      try {
+        const result = JSON.parse(stdout) as { images: string[]; error: string | null }
+        if (result.error) {
+          console.warn(`[preprocess] Image extraction warning: ${result.error}`)
+        }
+        resolve(result.images ?? [])
+      } catch {
+        resolve([])
+      }
+    })
+    proc.on("error", () => resolve([]))
+  })
+}
+
 export interface PreprocessProgress {
   stage: string
   progress: number

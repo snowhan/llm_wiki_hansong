@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest"
 import { getProviderConfig } from "../llm-providers"
 import type { LlmConfig } from "@/stores/wiki-store"
+import type { ContentPart, ChatMessage } from "../llm-providers"
 
 vi.stubGlobal("crypto", {
   getRandomValues: (arr: Uint8Array) => {
@@ -146,5 +147,90 @@ describe("getProviderConfig — Custom", () => {
   it("omits Authorization when no apiKey", () => {
     const cfg = getProviderConfig({ ...baseConfig, provider: "custom", apiKey: "" })
     expect(cfg.headers.Authorization).toBeUndefined()
+  })
+})
+
+// ── Multimodal ContentPart tests ─────────────────────────────────────────────
+
+const imagePartMsg: ChatMessage = {
+  role: "user",
+  content: [
+    { type: "text", text: "Describe this image" },
+    { type: "image_url", image_url: { url: "data:image/png;base64,abc123", detail: "auto" } },
+  ],
+}
+
+describe("Multimodal — OpenAI passes ContentPart[] natively", () => {
+  const cfg = getProviderConfig({ ...baseConfig, provider: "openai", model: "gpt-4o" })
+
+  it("preserves ContentPart[] as-is in messages", () => {
+    const body = cfg.buildBody([imagePartMsg]) as Record<string, unknown>
+    const msgs = body.messages as ChatMessage[]
+    expect(Array.isArray(msgs[0].content)).toBe(true)
+    const parts = msgs[0].content as ContentPart[]
+    expect(parts[0]).toEqual({ type: "text", text: "Describe this image" })
+    expect(parts[1]).toMatchObject({ type: "image_url", image_url: { url: "data:image/png;base64,abc123" } })
+  })
+
+  it("still handles plain string content", () => {
+    const body = cfg.buildBody([{ role: "user", content: "hello" }]) as Record<string, unknown>
+    const msgs = body.messages as ChatMessage[]
+    expect(msgs[0].content).toBe("hello")
+  })
+})
+
+describe("Multimodal — Anthropic converts ContentPart[] to native format", () => {
+  const cfg = getProviderConfig({ ...baseConfig, provider: "anthropic", model: "claude-3-5-sonnet-20241022" })
+
+  it("converts image_url to Anthropic base64 format", () => {
+    const body = cfg.buildBody([imagePartMsg]) as Record<string, unknown>
+    const msgs = body.messages as Array<{ role: string; content: unknown[] }>
+    const parts = msgs[0].content
+    expect(parts[0]).toEqual({ type: "text", text: "Describe this image" })
+    expect(parts[1]).toMatchObject({
+      type: "image",
+      source: { type: "base64", media_type: "image/png", data: "abc123" },
+    })
+  })
+
+  it("still handles plain string content", () => {
+    const body = cfg.buildBody([
+      { role: "system", content: "sys" },
+      { role: "user", content: "hello" },
+    ]) as Record<string, unknown>
+    const msgs = body.messages as Array<{ content: unknown }>
+    expect(msgs[0].content).toBe("hello")
+  })
+})
+
+describe("Multimodal — Google converts ContentPart[] to inline_data format", () => {
+  const cfg = getProviderConfig({ ...baseConfig, provider: "google", model: "gemini-1.5-pro" })
+
+  it("converts image_url to Google inline_data format", () => {
+    const body = cfg.buildBody([imagePartMsg]) as Record<string, unknown>
+    const contents = body.contents as Array<{ role: string; parts: unknown[] }>
+    const parts = contents[0].parts
+    expect(parts[0]).toEqual({ text: "Describe this image" })
+    expect(parts[1]).toMatchObject({
+      inline_data: { mime_type: "image/png", data: "abc123" },
+    })
+  })
+
+  it("still handles plain string content", () => {
+    const body = cfg.buildBody([{ role: "user", content: "hi" }]) as Record<string, unknown>
+    const contents = body.contents as Array<{ parts: unknown[] }>
+    expect(contents[0].parts[0]).toEqual({ text: "hi" })
+  })
+})
+
+describe("Multimodal — ContentPart type exports", () => {
+  it("ContentPart can be text type", () => {
+    const part: ContentPart = { type: "text", text: "hello" }
+    expect(part.type).toBe("text")
+  })
+
+  it("ContentPart can be image_url type", () => {
+    const part: ContentPart = { type: "image_url", image_url: { url: "data:image/jpeg;base64,xyz" } }
+    expect(part.type).toBe("image_url")
   })
 })

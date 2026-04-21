@@ -299,10 +299,26 @@ function ActivityRow({ item }: { item: ActivityItem }) {
             )}
           </Stack>
 
-          {/* Step detail */}
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", display: "block", lineHeight: 1.3, mt: 0.1 }}>
-            {stepInfo ? `${stepInfo.step}/${stepInfo.total} · ${stepInfo.label}` : item.detail}
-          </Typography>
+          {/* Step detail — vision not-supported gets a distinct amber notice */}
+          {item.detail?.startsWith("[Vision not supported]") ? (
+            <Typography
+              variant="caption"
+              sx={{
+                fontSize: "0.65rem",
+                display: "block",
+                lineHeight: 1.3,
+                mt: 0.1,
+                color: "warning.dark",
+                fontWeight: 500,
+              }}
+            >
+              {item.detail.replace("[Vision not supported] ", "")}
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", display: "block", lineHeight: 1.3, mt: 0.1 }}>
+              {stepInfo ? `${stepInfo.step}/${stepInfo.total} · ${stepInfo.label}` : item.detail}
+            </Typography>
+          )}
 
           {/* Step progress dots */}
           {isRunning && stepInfo && (
