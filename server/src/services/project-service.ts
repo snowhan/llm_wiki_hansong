@@ -9,6 +9,21 @@ const REQUIRED_DIRS = ["wiki", "raw", "raw/sources"]
 const PROJECT_MARKER = ".llm-wiki"
 const REGISTRY_KEY = "projectRegistry"
 
+/**
+ * Throw if `targetPath` is not strictly inside `config.projectsRoot`.
+ * Normalizes both paths to prevent traversal attacks (e.g. `../outside`).
+ */
+function assertInsideProjectsRoot(targetPath: string): void {
+  const root = path.normalize(config.projectsRoot)
+  const normalized = path.normalize(targetPath)
+  // Must start with "<root>/" — reject the root itself and any path outside it
+  if (!normalized.startsWith(root + path.sep)) {
+    throw new Error(
+      `Project path must be inside PROJECTS_ROOT (${root}). Got: ${normalized}`,
+    )
+  }
+}
+
 // ── Project registry ──────────────────────────────────────────────────────
 
 interface RegistryEntry {
@@ -67,6 +82,10 @@ export async function getProjectRoot(projectId: string): Promise<string> {
 
 export async function createProject(name: string, parentPath?: string): Promise<WikiProject> {
   const base = parentPath ?? config.projectsRoot
+  // When caller provides an explicit parentPath, ensure it is inside projectsRoot
+  if (parentPath !== undefined) {
+    assertInsideProjectsRoot(path.join(base, name))
+  }
   await fs.mkdir(base, { recursive: true })
   const projectPath = path.join(base, name)
   await fs.mkdir(projectPath, { recursive: true })
@@ -81,6 +100,7 @@ export async function createProject(name: string, parentPath?: string): Promise<
 }
 
 export async function openProject(projectPath: string): Promise<WikiProject> {
+  assertInsideProjectsRoot(projectPath)
   const stat = await fs.stat(projectPath)
   if (!stat.isDirectory()) throw new Error("Not a directory")
 

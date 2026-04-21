@@ -247,6 +247,29 @@ export function ChatPanel() {
   const setStreaming = useChatStore((s) => s.setStreaming)
   const appendStreamToken = useChatStore((s) => s.appendStreamToken)
   const finalizeStream = useChatStore((s) => s.finalizeStream)
+
+  // RAF-based token queue: React 18 batches sync state updates inside the same
+  // event loop tick, so rapid `appendStreamToken` calls from a single SSE chunk
+  // collapse into one render (content appears "all at once").
+  // Queuing tokens and flushing at most once per animation frame (≈16ms / 60fps)
+  // ensures smooth, progressive character-by-character reveal.
+  const tokenQueueRef = useRef("")
+  const rafIdRef     = useRef<number | null>(null)
+
+  const flushTokens = useCallback(() => {
+    rafIdRef.current = null
+    if (tokenQueueRef.current) {
+      appendStreamToken(tokenQueueRef.current)
+      tokenQueueRef.current = ""
+    }
+  }, [appendStreamToken])
+
+  const enqueueToken = useCallback((token: string) => {
+    tokenQueueRef.current += token
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(flushTokens)
+    }
+  }, [flushTokens])
   const createConversation = useChatStore((s) => s.createConversation)
   const removeLastAssistantMessage = useChatStore((s) => s.removeLastAssistantMessage)
   const maxHistoryMessages = useChatStore((s) => s.maxHistoryMessages)
@@ -430,7 +453,7 @@ export function ChatPanel() {
         {
           onToken: (token: string) => {
             accumulated += token
-            appendStreamToken(token)
+            enqueueToken(token)
           },
           onDone: () => {
             finalizeStream(accumulated, queryRefs)
@@ -444,7 +467,7 @@ export function ChatPanel() {
         controller.signal,
       )
     },
-    [addMessage, setStreaming, appendStreamToken, finalizeStream, createConversation, maxHistoryMessages, t, project],
+    [addMessage, setStreaming, enqueueToken, finalizeStream, createConversation, maxHistoryMessages, t, project],
   )
 
   const handleStop = useCallback(() => {
@@ -510,7 +533,7 @@ export function ChatPanel() {
       ) : (
         <>
           <Box ref={scrollContainerRef} sx={{ flex: 1, overflowY: "auto", px: 1.5, py: 1 }}>
-            <Stack spacing={1.5}>
+            <Stack spacing={2.5}>
               {activeMessages.map((msg, idx) => {
                 const isLastAssistant = msg.role === "assistant" &&
                   !activeMessages.slice(idx + 1).some((m) => m.role === "assistant")

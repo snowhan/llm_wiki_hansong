@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import FolderOpenIcon from "@mui/icons-material/FolderOpen"
 import Box from "@mui/material/Box"
@@ -14,6 +14,7 @@ import { createProject, writeFile, createDirectory } from "@/commands/fs"
 import { getTemplate } from "@/lib/templates"
 import { TemplatePicker } from "@/components/project/template-picker"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
+import { apiGet } from "@/lib/api-client"
 import type { WikiProject } from "@/types/wiki"
 
 interface CreateProjectDialogProps {
@@ -30,6 +31,18 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
   const [error, setError] = useState("")
   const [creating, setCreating] = useState(false)
   const [showBrowse, setShowBrowse] = useState(false)
+  const [projectsRoot, setProjectsRoot] = useState("")
+  const [rootLoading, setRootLoading] = useState(true)
+
+  useEffect(() => {
+    apiGet<{ projectsRoot: string }>("/api/project/root")
+      .then(({ projectsRoot: root }) => {
+        setProjectsRoot(root)
+        setPath((prev) => (prev === "" ? root : prev))
+      })
+      .catch(() => {})
+      .finally(() => setRootLoading(false))
+  }, [])
 
   function handleBrowse() {
     setShowBrowse(true)
@@ -94,7 +107,14 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
                   placeholder={t("project.parentDirPlaceholder")}
                 />
               </Box>
-              <Button variant="outline" size="icon" onClick={handleBrowse} type="button" sx={{ flexShrink: 0 }}>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleBrowse}
+                type="button"
+                disabled={rootLoading}
+                sx={{ flexShrink: 0 }}
+              >
                 <FolderOpenIcon sx={{ fontSize: 18 }} />
               </Button>
             </Stack>
@@ -115,6 +135,8 @@ export function CreateProjectDialog({ open: isOpen, onOpenChange, onCreated }: C
         onClose={() => setShowBrowse(false)}
         onSelect={handleBrowseSelect}
         title={t("project.selectParentDir")}
+        initialPath={projectsRoot || undefined}
+        rootConstraint={projectsRoot || undefined}
       />
     </Dialog>
   )

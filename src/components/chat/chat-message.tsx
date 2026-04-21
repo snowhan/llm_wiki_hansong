@@ -92,6 +92,18 @@ const pulseAnim = keyframes`
   50% { opacity: 0.35; }
 `
 
+// S1/S2: three-dot bounce for typing indicator and thinking state
+const dotBounce = keyframes`
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-3px); opacity: 0.9; }
+`
+
+// S3: sharp blinking line caret (step-end = instant on/off, like a real cursor)
+const caretBlink = keyframes`
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+`
+
 export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMessageProps) {
   const { t } = useTranslation()
   const isUser = message.role === "user"
@@ -142,7 +154,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                   color: "primary.contrastText",
                 }
               : {
-                  bgcolor: "rgba(194, 65, 12, 0.06)",
+                  bgcolor: "rgba(35,131,226,0.07)",
                   color: "primary.main",
                 }),
         }}
@@ -155,7 +167,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
             borderRadius: "14px",
             px: 1.75,
             py: 1.25,
-            fontSize: "0.875rem",
+            fontSize: isUser ? "0.875rem" : "0.8125rem",
             ...(isUser
               ? {
                   bgcolor: "primary.main",
@@ -195,8 +207,19 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
           </Typography>
         )}
         {isAssistant && <CitedReferencesPanel content={message.content} savedReferences={message.references} />}
-        {isAssistant && hovered && (
-          <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap", alignItems: "center" }}>
+        {isAssistant && (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            useFlexGap
+            sx={{
+              flexWrap: "wrap",
+              alignItems: "center",
+              opacity: hovered ? 1 : 0,
+              transition: "opacity 0.15s ease",
+              pointerEvents: hovered ? "auto" : "none",
+            }}
+          >
             <CopyButton content={message.content} />
             <SaveToWikiButton content={message.content} visible={true} />
             {isLastAssistant && onRegenerate && (
@@ -214,7 +237,7 @@ export function ChatMessage({ message, isLastAssistant, onRegenerate }: ChatMess
                   color: "text.secondary",
                   "&:hover": {
                     color: "primary.main",
-                    bgcolor: "rgba(194, 65, 12, 0.06)",
+                    bgcolor: "rgba(35,131,226,0.06)",
                   },
                 }}
                 startIcon={<RefreshIcon sx={{ fontSize: 12 }} />}
@@ -261,7 +284,7 @@ function CopyButton({ content }: { content: string }) {
         color: "text.secondary",
         "&:hover": {
           color: "primary.main",
-          bgcolor: "rgba(194, 65, 12, 0.06)",
+          bgcolor: "rgba(35,131,226,0.06)",
         },
       }}
       startIcon={copied ? <CheckIcon sx={{ fontSize: 12 }} /> : <ContentCopyIcon sx={{ fontSize: 12 }} />}
@@ -397,11 +420,11 @@ interface CitedPage {
 const REF_TYPE_CONFIG: Record<string, { Icon: SvgIconComponent; sxColor: Record<string, string> }> = {
   entity: { Icon: GroupIcon, sxColor: { color: "info.main" } },
   concept: { Icon: LightbulbIcon, sxColor: { color: "secondary.main" } },
-  source: { Icon: MenuBookIcon, sxColor: { color: "warning.main" } },
+  source: { Icon: MenuBookIcon, sxColor: { color: "#0891b2" } },
   query: { Icon: HelpOutlineOutlinedIcon, sxColor: { color: "success.main" } },
   synthesis: { Icon: MergeIcon, sxColor: { color: "error.light" } },
   comparison: { Icon: BarChartIcon, sxColor: { color: "success.light" } },
-  overview: { Icon: ViewModuleIcon, sxColor: { color: "warning.light" } },
+  overview: { Icon: ViewModuleIcon, sxColor: { color: "primary.main" } },
   clip: { Icon: PublicIcon, sxColor: { color: "info.light" } },
 }
 
@@ -659,23 +682,54 @@ interface StreamingMessageProps {
 
 export function StreamingMessage({ content }: StreamingMessageProps) {
   const { thinking, answer } = useMemo(() => separateThinking(content), [content])
-  const isThinking = thinking !== null && answer.length === 0
+  // S1: no content yet — bare typing indicator, no bubble wrapper
+  const isWaiting = content.length === 0
+  // S2: thinking in progress — show thinking stream
+  const isThinking = !isWaiting && thinking !== null && answer.length === 0
+  // S3: answer streaming — show content + line caret
 
+  const avatarSx = {
+    display: "flex",
+    height: 28,
+    width: 28,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "10px",
+    bgcolor: "rgba(35,131,226,0.07)",
+    color: "primary.main",
+  } as const
+
+  // S1 — no bubble, just dots floating next to the avatar (iMessage style)
+  if (isWaiting) {
+    return (
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+        <Box sx={avatarSx}>
+          <SmartToyIcon sx={{ fontSize: 14 }} />
+        </Box>
+        <TypingIndicator />
+      </Stack>
+    )
+  }
+
+  // S2 — thinking in progress: minimal, no full bubble border
+  if (isThinking) {
+    return (
+      <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+        <Box sx={avatarSx}>
+          <SmartToyIcon sx={{ fontSize: 14 }} />
+        </Box>
+        <Box sx={{ maxWidth: "80%", pt: 0.5 }}>
+          <StreamingThinkingBlock content={thinking!} />
+        </Box>
+      </Stack>
+    )
+  }
+
+  // S3 — answer streaming: full bubble with content + blinking caret
   return (
     <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
-      <Box
-        sx={{
-          display: "flex",
-          height: 28,
-          width: 28,
-          flexShrink: 0,
-          alignItems: "center",
-          justifyContent: "center",
-          borderRadius: "10px",
-          bgcolor: "rgba(194, 65, 12, 0.06)",
-          color: "primary.main",
-        }}
-      >
+      <Box sx={avatarSx}>
         <SmartToyIcon sx={{ fontSize: 14 }} />
       </Box>
       <Box
@@ -691,25 +745,43 @@ export function StreamingMessage({ content }: StreamingMessageProps) {
           borderColor: "divider",
         }}
       >
-        {isThinking ? (
-          <StreamingThinkingBlock content={thinking} />
-        ) : (
-          <>
-            {thinking && <ThinkingBlock content={thinking} />}
-            <MarkdownContent content={answer} />
-            <Box
-              component="span"
-              sx={{
-                display: "inline-block",
-                animation: `${pulseAnim} 1.5s ease-in-out infinite`,
-              }}
-            >
-              ▊
-            </Box>
-          </>
-        )}
+        {thinking && <ThinkingBlock content={thinking} />}
+        <MarkdownContent content={answer} />
+        <Box
+          component="span"
+          sx={{
+            display: "inline-block",
+            width: "1.5px",
+            height: "0.85em",
+            bgcolor: "text.secondary",
+            verticalAlign: "text-bottom",
+            ml: "1px",
+            animation: `${caretBlink} 1.1s step-end infinite`,
+          }}
+        />
       </Box>
     </Stack>
+  )
+}
+
+/** S1: three bouncing dots — signals "model is thinking, waiting for first token" */
+function TypingIndicator() {
+  return (
+    <Box sx={{ display: "flex", gap: "5px", alignItems: "center", height: "20px" }}>
+      {([0, 0.16, 0.32] as const).map((delay) => (
+        <Box
+          key={delay}
+          sx={{
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            bgcolor: "text.disabled",
+            animation: `${dotBounce} 1.2s ease-in-out infinite`,
+            animationDelay: `${delay}s`,
+          }}
+        />
+      ))}
+    </Box>
   )
 }
 
@@ -721,11 +793,90 @@ function MarkdownContent({ content }: { content: string }) {
   const onWikilinkClick = useWikilinkNavigation()
 
   return (
-    <Box>
+    <Box
+      sx={{
+        // Cascade into TipTap with doubled specificity (&&) to beat MarkdownView's built-in rules
+        "&& .tiptap": {
+          lineHeight: 1.72,
+        },
+        // Headings: differentiated by weight + subtle size, NOT document-scale sizes
+        "&& .tiptap h1": {
+          fontSize: "0.9375rem",
+          fontWeight: 700,
+          letterSpacing: "-0.015em",
+          lineHeight: 1.25,
+          margin: "0.9em 0 0.2em",
+          color: "text.primary",
+        },
+        "&& .tiptap h2": {
+          fontSize: "0.875rem",
+          fontWeight: 700,
+          letterSpacing: "-0.01em",
+          lineHeight: 1.25,
+          margin: "0.8em 0 0.15em",
+          color: "text.primary",
+        },
+        "&& .tiptap h3": {
+          fontSize: "0.8125rem",
+          fontWeight: 600,
+          lineHeight: 1.25,
+          margin: "0.65em 0 0.1em",
+          color: "text.secondary",
+        },
+        "&& .tiptap p": {
+          margin: "0.3em 0",
+          lineHeight: 1.72,
+        },
+        // Remove top margin on first child so content doesn't float away from bubble top
+        "&& .tiptap > *:first-child": {
+          marginTop: "0 !important",
+        },
+        "&& .tiptap ul, && .tiptap ol": {
+          margin: "0.3em 0",
+          paddingLeft: "1.5em",
+        },
+        "&& .tiptap li": {
+          margin: "0.1em 0",
+          lineHeight: 1.65,
+        },
+        // Prevent double margin when a list item wraps in a <p>
+        "&& .tiptap li > p": {
+          margin: 0,
+        },
+        "&& .tiptap code:not(pre code)": {
+          fontSize: "0.75rem",
+          fontFamily: "var(--font-mono, 'JetBrains Mono', monospace)",
+          borderRadius: "3px",
+          px: "0.35em",
+          py: "0.1em",
+          bgcolor: "action.hover",
+        },
+        "&& .tiptap hr": {
+          border: "none",
+          borderTop: "1px solid",
+          borderColor: "divider",
+          margin: "0.65em 0",
+          opacity: 0.5,
+        },
+        "&& .tiptap blockquote": {
+          margin: "0.4em 0",
+          paddingLeft: "0.85em",
+          borderLeft: "2.5px solid",
+          borderColor: "primary.main",
+          opacity: 0.85,
+        },
+        "&& .tiptap pre": {
+          fontSize: "0.75rem",
+          margin: "0.4em 0",
+          borderRadius: "6px",
+          lineHeight: 1.55,
+        },
+      }}
+    >
       {thinking && <ThinkingBlock content={thinking} />}
       <MarkdownView
         markdown={processed}
-        sx={{ fontSize: "0.875rem" }}
+        sx={{ fontSize: "0.75rem" }}
         onWikilinkClick={onWikilinkClick}
       />
     </Box>
@@ -759,67 +910,71 @@ function separateThinking(text: string): { thinking: string | null; answer: stri
   return { thinking, answer }
 }
 
-/** Streaming thinking: shows latest ~5 lines rolling upward with animation */
+/**
+ * S2: Thinking stream — restrained, high-end design.
+ * No bounding box. Left accent line + bouncing dots + last 3 lines fading in from top.
+ */
 function StreamingThinkingBlock({ content }: { content: string }) {
   const { t } = useTranslation()
   const lines = content.split("\n").filter((l) => l.trim())
-  const visibleLines = lines.slice(-5)
+  const visibleLines = lines.slice(-3)
 
   return (
-    <Box
-      sx={{
-        borderRadius: "10px",
-        border: "1px dashed",
-        borderColor: "rgba(194, 65, 12, 0.2)",
-        bgcolor: "rgba(194, 65, 12, 0.03)",
-        px: 1.25,
-        py: 1,
-      }}
-    >
-      <Stack direction="row" spacing={0.75} sx={{ mb: 1, alignItems: "center" }}>
-        <Box
-          component="span"
-          sx={{ fontSize: "0.75rem", animation: `${pulseAnim} 1.5s ease-in-out infinite`, color: "primary.main" }}
+    <Box sx={{ py: 0.25 }}>
+      {/* Header: label + three tiny bouncing dots */}
+      <Stack direction="row" spacing={0.5} sx={{ mb: 0.75, alignItems: "center" }}>
+        <Typography
+          variant="caption"
+          sx={{ fontSize: "0.6875rem", color: "text.disabled", letterSpacing: "0.03em", mr: 0.25 }}
         >
-          &#x25CF;
-        </Box>
-        <Typography variant="caption" sx={{ fontWeight: 600, color: "primary.main" }}>
           {t("chat.thinking")}
         </Typography>
-        <Typography variant="caption" sx={{ fontSize: "0.625rem", color: "text.tertiary" }}>
-          {t("chat.lines", { count: lines.length })}
-        </Typography>
-      </Stack>
-      <Box
-        sx={{
-          height: "5lh",
-          overflow: "hidden",
-          fontSize: "0.75rem",
-          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-          lineHeight: 1.6,
-          color: "#78716C",
-        }}
-      >
-        {visibleLines.map((line, i) => (
+        {([0, 0.2, 0.4] as const).map((delay) => (
           <Box
-            key={lines.length - 5 + i}
+            key={delay}
             sx={{
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              opacity: 0.3 + (i / Math.max(visibleLines.length, 1)) * 0.7,
+              width: 3,
+              height: 3,
+              borderRadius: "50%",
+              bgcolor: "primary.light",
+              animation: `${dotBounce} 1.2s ease-in-out infinite`,
+              animationDelay: `${delay}s`,
             }}
-          >
-            {line}
-          </Box>
+          />
         ))}
+      </Stack>
+
+      {/* Thinking text: left accent + top-to-bottom fade mask */}
+      {visibleLines.length > 0 && (
         <Box
-          component="span"
-          sx={{ color: "primary.main", animation: `${pulseAnim} 1.5s ease-in-out infinite` }}
+          sx={{
+            pl: 1.25,
+            borderLeft: "2px solid",
+            borderColor: "primary.light",
+            WebkitMaskImage:
+              "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 35%, black 100%)",
+            maskImage:
+              "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.5) 35%, black 100%)",
+          }}
         >
-          ▊
+          {visibleLines.map((line, i) => (
+            <Box
+              key={lines.length - 3 + i}
+              sx={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                fontSize: "0.6875rem",
+                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                color: "text.disabled",
+                lineHeight: 1.65,
+              }}
+            >
+              {line}
+            </Box>
+          ))}
         </Box>
-      </Box>
+      )}
     </Box>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
@@ -10,6 +10,7 @@ import ListItemText from "@mui/material/ListItemText"
 import FolderIcon from "@mui/icons-material/Folder"
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward"
 import CircularProgress from "@mui/material/CircularProgress"
+import LockIcon from "@mui/icons-material/Lock"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
@@ -23,6 +24,8 @@ interface ServerDirBrowserProps {
   onSelect: (path: string) => void
   title?: string
   initialPath?: string
+  /** When set, navigation is locked to this directory and its descendants. */
+  rootConstraint?: string
 }
 
 interface BrowseResult {
@@ -36,57 +39,98 @@ export function ServerDirBrowser({
   onSelect,
   title,
   initialPath,
+  rootConstraint,
 }: ServerDirBrowserProps) {
   const { t } = useTranslation()
-  const defaultPath = initialPath || "/"
-  const [currentPath, setCurrentPath] = useState(defaultPath)
+  const [currentPath, setCurrentPath] = useState("")
   const [dirs, setDirs] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [inputPath, setInputPath] = useState(defaultPath)
+  const [inputPath, setInputPath] = useState("")
+  const [inputWarning, setInputWarning] = useState("")
+  // Track whether we're currently open to avoid stale closure updates
+  const isOpenRef = useRef(isOpen)
+  isOpenRef.current = isOpen
 
+  // Each time dialog opens, reset to the constrained root immediately
+  // Do NOT depend on currentPath here — navigation is handled explicitly below
   useEffect(() => {
-    if (isOpen) {
-      const pathToBrowse = currentPath || defaultPath
-      if (!currentPath) {
-        setCurrentPath(pathToBrowse)
-        setInputPath(pathToBrowse)
-      }
-      browse(pathToBrowse)
-    }
-  }, [isOpen, currentPath])
+    if (!isOpen) return
+    const startPath = rootConstraint || initialPath || "/"
+    setCurrentPath(startPath)
+    setInputPath(startPath)
+    setDirs([])
+    setError("")
+    setInputWarning("")
+    void browseDir(startPath)
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function browse(dirPath: string) {
+  async function browseDir(dirPath: string) {
     setLoading(true)
     setError("")
     try {
       const result = await apiGet<BrowseResult>(
         `/api/project/browse?path=${encodeURIComponent(dirPath)}`
       )
+      if (!isOpenRef.current) return // dialog closed while loading
       setDirs(result.dirs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (!isOpenRef.current) return
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(
+        msg.includes("Authentication required") || msg.includes("401")
+          ? "需要管理员身份验证，请先登录"
+          : msg,
+      )
       setDirs([])
     } finally {
-      setLoading(false)
+      if (isOpenRef.current) setLoading(false)
     }
   }
 
+  function norm(p: string) {
+    return p.replace(/\/+$/, "")
+  }
+
+  function isAtConstraintRoot() {
+    if (!rootConstraint) return false
+    return norm(currentPath) === norm(rootConstraint)
+  }
+
   function navigateUp() {
-    const parent = currentPath.replace(/\/[^/]+\/?$/, "") || "/"
+    if (!currentPath || isAtConstraintRoot()) return
+    const parent = currentPath.replace(/\/[^/]+\/?$/, "") || rootConstraint || "/"
     setCurrentPath(parent)
     setInputPath(parent)
+    void browseDir(parent)
   }
 
   function navigateInto(dir: string) {
     setCurrentPath(dir)
     setInputPath(dir)
+    void browseDir(dir)
   }
 
   function handleGoToPath() {
-    if (inputPath.trim()) {
-      setCurrentPath(inputPath.trim())
+    const trimmed = inputPath.trim()
+    if (!trimmed) return
+
+    if (rootConstraint) {
+      const normConstraint = norm(rootConstraint)
+      const normInput = norm(trimmed)
+      if (normInput !== normConstraint && !normInput.startsWith(normConstraint + "/")) {
+        setInputWarning(`只能在持久化目录 ${rootConstraint} 内选择`)
+        const fallback = rootConstraint
+        setInputPath(fallback)
+        setCurrentPath(fallback)
+        void browseDir(fallback)
+        return
+      }
     }
+
+    setInputWarning("")
+    setCurrentPath(trimmed)
+    void browseDir(trimmed)
   }
 
   function handleConfirm() {
@@ -95,6 +139,7 @@ export function ServerDirBrowser({
   }
 
   const dirName = (fullPath: string) => fullPath.split("/").pop() || fullPath
+  const atRoot = isAtConstraintRoot()
 
   return (
     <Dialog open={isOpen} onOpenChange={() => onClose()} maxWidth="sm" fullWidth>
@@ -104,11 +149,35 @@ export function ServerDirBrowser({
         </DialogHeader>
 
         <Stack spacing={1.5} sx={{ py: 1 }}>
+          {rootConstraint && (
+            <Stack
+              direction="row"
+              spacing={0.75}
+              sx={{
+                alignItems: "center",
+                px: 1.5,
+                py: 0.75,
+                bgcolor: "primary.50",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "primary.200",
+              }}
+            >
+              <LockIcon sx={{ fontSize: 14, color: "primary.main", flexShrink: 0 }} />
+              <Typography variant="caption" color="primary.main" sx={{ lineHeight: 1.4 }}>
+                仅显示持久化存储目录，Docker 重启后数据不会丢失
+              </Typography>
+            </Stack>
+          )}
+
           <Stack direction="row" spacing={1} sx={{ alignItems: "stretch" }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Input
                 value={inputPath}
-                onChange={(e) => setInputPath(e.target.value)}
+                onChange={(e) => {
+                  setInputPath(e.target.value)
+                  setInputWarning("")
+                }}
                 placeholder="/path/to/directory"
                 onKeyDown={(e) => e.key === "Enter" && handleGoToPath()}
               />
@@ -117,6 +186,12 @@ export function ServerDirBrowser({
               {t("project.go")}
             </Button>
           </Stack>
+
+          {inputWarning && (
+            <Typography variant="caption" color="warning.main">
+              {inputWarning}
+            </Typography>
+          )}
 
           {error && (
             <Typography variant="body2" color="error">
@@ -139,7 +214,8 @@ export function ServerDirBrowser({
               </Stack>
             ) : (
               <List dense disablePadding>
-                {currentPath && currentPath !== "/" && (
+                {/* Hide ".." when at constraint root or filesystem root */}
+                {currentPath && currentPath !== "/" && !atRoot && (
                   <ListItemButton onClick={navigateUp}>
                     <ListItemIcon sx={{ minWidth: 36 }}>
                       <ArrowUpwardIcon fontSize="small" />
@@ -158,7 +234,7 @@ export function ServerDirBrowser({
                     selected={currentPath === dir}
                   >
                     <ListItemIcon sx={{ minWidth: 36 }}>
-                      <FolderIcon fontSize="small" sx={{ color: "warning.main" }} />
+                      <FolderIcon fontSize="small" sx={{ color: "primary.main" }} />
                     </ListItemIcon>
                     <ListItemText primary={dirName(dir)} />
                   </ListItemButton>

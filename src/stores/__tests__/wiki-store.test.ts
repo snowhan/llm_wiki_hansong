@@ -8,6 +8,7 @@ const RESET_STATE = {
   fileContent: "",
   chatExpanded: false,
   activeView: "wiki" as const,
+  colorScheme: "system" as const,
   dataVersion: 0,
   openTabs: [],
   activeTabId: null,
@@ -225,6 +226,31 @@ describe("Tab management", () => {
       expect(s.openTabs).toHaveLength(2) // no new tab added
       expect(s.activeTabPath).toBe("/wiki/a.md")
     })
+  })
+})
+
+// ── colorScheme ──────────────────────────────────────────────────────────
+
+describe("colorScheme", () => {
+  it("defaults to 'system'", () => {
+    expect(useWikiStore.getState().colorScheme).toBe("system")
+  })
+
+  it("setColorScheme updates to 'dark'", () => {
+    useWikiStore.getState().setColorScheme("dark")
+    expect(useWikiStore.getState().colorScheme).toBe("dark")
+  })
+
+  it("setColorScheme updates to 'light'", () => {
+    useWikiStore.getState().setColorScheme("dark")
+    useWikiStore.getState().setColorScheme("light")
+    expect(useWikiStore.getState().colorScheme).toBe("light")
+  })
+
+  it("setColorScheme updates back to 'system'", () => {
+    useWikiStore.getState().setColorScheme("dark")
+    useWikiStore.getState().setColorScheme("system")
+    expect(useWikiStore.getState().colorScheme).toBe("system")
   })
 })
 

@@ -3,6 +3,7 @@ import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import { alpha, useTheme } from "@mui/material/styles"
 import { useWikiStore } from "@/stores/wiki-store"
+import { useResearchStore } from "@/stores/research-store"
 import { listDirectory } from "@/commands/fs"
 import { IconSidebar } from "./icon-sidebar"
 import { SidebarPanel } from "./sidebar-panel"
@@ -13,6 +14,7 @@ import { MainToolbar } from "./main-toolbar"
 import { TabBar } from "./tab-bar"
 import { EditorArea } from "./editor-area"
 import { ChatPanel } from "@/components/chat/chat-panel"
+import { ResearchPanel } from "./research-panel"
 
 interface AppLayoutProps {
   onSwitchProject: () => void
@@ -24,10 +26,13 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   const activeView = useWikiStore((s) => s.activeView)
   const chatExpanded = useWikiStore((s) => s.chatExpanded)
   const setFileTree = useWikiStore((s) => s.setFileTree)
+  const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const [leftWidth, setLeftWidth] = useState(240)
   const [chatWidth, setChatWidth] = useState(380)
+  const [researchWidth, setResearchWidth] = useState(320)
   const isDraggingLeft = useRef(false)
   const isDraggingChat = useRef(false)
+  const isDraggingResearch = useRef(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   const loadFileTree = useCallback(async () => {
@@ -45,10 +50,11 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
   }, [loadFileTree])
 
   const startDrag = useCallback(
-    (side: "left" | "chat") => (e: React.MouseEvent) => {
+    (side: "left" | "chat" | "research") => (e: React.MouseEvent) => {
       e.preventDefault()
       if (side === "left") isDraggingLeft.current = true
-      else isDraggingChat.current = true
+      else if (side === "chat") isDraggingChat.current = true
+      else isDraggingResearch.current = true
       document.body.style.cursor = "col-resize"
       document.body.style.userSelect = "none"
       document.body.dataset.panelResizing = "true"
@@ -65,11 +71,16 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
           const newWidth = rect.right - e.clientX
           setChatWidth(Math.max(300, Math.min(rect.width * 0.5, newWidth)))
         }
+        if (isDraggingResearch.current) {
+          const newWidth = rect.right - e.clientX
+          setResearchWidth(Math.max(280, Math.min(rect.width * 0.45, newWidth)))
+        }
       }
 
       const handleMouseUp = () => {
         isDraggingLeft.current = false
         isDraggingChat.current = false
+        isDraggingResearch.current = false
         document.body.style.cursor = ""
         document.body.style.userSelect = ""
         delete document.body.dataset.panelResizing
@@ -132,16 +143,17 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
         ref={containerRef}
         sx={{ display: "flex", minWidth: 0, flex: 1, overflow: "hidden" }}
       >
-        {/* Left sidebar column */}
+        {/* Left sidebar column — same background as icon-sidebar for unified chrome */}
         <Stack
           direction="column"
           sx={{
             flexShrink: 0,
             width: leftWidth,
             overflow: "hidden",
-            bgcolor: "background.paper",
+            bgcolor: "background.sidebar",
             borderRight: "1px solid",
             borderColor: "divider",
+            transition: `width var(--duration-base) var(--ease-smooth)`,
           }}
         >
           <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
@@ -196,6 +208,29 @@ export function AppLayout({ onSwitchProject }: AppLayoutProps) {
             >
               <ErrorBoundary>
                 <ChatPanel />
+              </ErrorBoundary>
+            </Box>
+          </>
+        )}
+
+        {/* Deep Research panel – right side, shown when researchPanelOpen */}
+        {researchPanelOpen && (
+          <>
+            <Box onMouseDown={startDrag("research")} sx={resizeHandleSx} />
+            <Box
+              sx={{
+                flexShrink: 0,
+                width: researchWidth,
+                overflow: "hidden",
+                bgcolor: "background.paper",
+                borderLeft: "1px solid",
+                borderColor: "divider",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <ErrorBoundary>
+                <ResearchPanel />
               </ErrorBoundary>
             </Box>
           </>

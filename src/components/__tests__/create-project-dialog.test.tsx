@@ -32,6 +32,17 @@ vi.mock("../project/template-picker", () => ({
   ),
 }))
 
+vi.mock("@/lib/api-client", () => ({
+  apiGet: vi.fn().mockResolvedValue({ projectsRoot: "/data/projects" }),
+  apiPut: vi.fn(),
+}))
+
+// ServerDirBrowser is modal — stub it to expose the initialPath prop for inspection
+vi.mock("../project/server-dir-browser", () => ({
+  ServerDirBrowser: ({ initialPath, open }: { initialPath?: string; open: boolean }) =>
+    open ? <div data-testid="dir-browser" data-initial-path={initialPath} /> : null,
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(createProject).mockResolvedValue({
@@ -71,6 +82,40 @@ describe("CreateProjectDialog", () => {
 
     await waitFor(() => {
       expect(screen.getByText("project.namePathRequired")).toBeInTheDocument()
+    })
+  })
+
+  it("pre-fills path input with projectsRoot fetched from API", async () => {
+    const { apiGet } = await import("@/lib/api-client")
+    vi.mocked(apiGet).mockResolvedValue({ projectsRoot: "/data/projects" })
+
+    render(<CreateProjectDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />)
+
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText("project.parentDirPlaceholder") as HTMLInputElement
+      expect(input.value).toBe("/data/projects")
+    })
+  })
+
+  it("passes projectsRoot as initialPath to ServerDirBrowser when browse is open", async () => {
+    const { apiGet } = await import("@/lib/api-client")
+    vi.mocked(apiGet).mockResolvedValue({ projectsRoot: "/data/projects" })
+
+    render(<CreateProjectDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />)
+
+    // wait for projectsRoot to load
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText("project.parentDirPlaceholder") as HTMLInputElement
+      expect(input.value).toBe("/data/projects")
+    })
+
+    // open the dir browser
+    const browseBtn = screen.getByRole("button", { name: "" })
+    await act(async () => { fireEvent.click(browseBtn) })
+
+    await waitFor(() => {
+      const browser = screen.getByTestId("dir-browser")
+      expect(browser).toHaveAttribute("data-initial-path", "/data/projects")
     })
   })
 })

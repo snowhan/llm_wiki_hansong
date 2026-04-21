@@ -33,13 +33,24 @@ services:
       # JWT — generate with: openssl rand -hex 32
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}
+      # Session duration: how long a user stays logged in without re-authenticating
+      # Default: 30 days. Override in .env: JWT_REFRESH_EXPIRES_DAYS=7
       - JWT_REFRESH_EXPIRES_DAYS=${JWT_REFRESH_EXPIRES_DAYS:-30}
+      # Cookie security: set to "true" only when serving over HTTPS (e.g. behind nginx+TLS)
+      # Keep "false" for plain HTTP local deployments — browser won't send Secure cookies over HTTP
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
       # Root directory for all wiki projects inside the container
       - PROJECTS_ROOT=/data/projects
       # Persistent app state (project registry, LLM config, etc.)
       - APP_STATE_PATH=/data/state/app-state.json
       - PORT=3001
       - NODE_ENV=production
+      # WPS AI Gateway (fallback for LLM config)
+      - VITE_WPS_GATEWAY_URL=${VITE_WPS_GATEWAY_URL:-}
+      - VITE_WPS_GATEWAY_TOKEN=${VITE_WPS_GATEWAY_TOKEN:-}
+      - VITE_WPS_GATEWAY_UID=${VITE_WPS_GATEWAY_UID:-}
+      - VITE_WPS_GATEWAY_PRODUCT_NAME=${VITE_WPS_GATEWAY_PRODUCT_NAME:-}
+      - VITE_WPS_GATEWAY_MODEL=${VITE_WPS_GATEWAY_MODEL:-azure/gpt-5.4}
     volumes:
       # Persist project files and app state across restarts
       - llm-wiki-projects:/data/projects

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { useResearchStore } from "../research-store"
 
 beforeEach(() => {
-  useResearchStore.setState({ tasks: [], panelOpen: false, maxConcurrent: 3 })
+  useResearchStore.setState({ tasks: [], panelOpen: false, maxConcurrent: 3, serverTaskIds: {} })
 })
 
 describe("useResearchStore", () => {
@@ -93,6 +93,46 @@ describe("useResearchStore", () => {
       expect(useResearchStore.getState().panelOpen).toBe(true)
       useResearchStore.getState().setPanelOpen(false)
       expect(useResearchStore.getState().panelOpen).toBe(false)
+    })
+  })
+
+  describe("serverTaskIds — local → server task ID mapping", () => {
+    it("starts with empty serverTaskIds map", () => {
+      expect(useResearchStore.getState().serverTaskIds).toEqual({})
+    })
+
+    it("setServerTaskId stores a mapping", () => {
+      const localId = useResearchStore.getState().addTask("topic")
+      useResearchStore.getState().setServerTaskId(localId, "server-task-001")
+      expect(useResearchStore.getState().serverTaskIds[localId]).toBe("server-task-001")
+    })
+
+    it("setServerTaskId with null removes the mapping", () => {
+      const localId = useResearchStore.getState().addTask("topic")
+      useResearchStore.getState().setServerTaskId(localId, "server-task-001")
+      useResearchStore.getState().setServerTaskId(localId, null)
+      expect(useResearchStore.getState().serverTaskIds[localId]).toBeUndefined()
+    })
+
+    it("multiple tasks can have independent serverTaskIds", () => {
+      const id1 = useResearchStore.getState().addTask("topic 1")
+      const id2 = useResearchStore.getState().addTask("topic 2")
+      useResearchStore.getState().setServerTaskId(id1, "srv-1")
+      useResearchStore.getState().setServerTaskId(id2, "srv-2")
+      const { serverTaskIds } = useResearchStore.getState()
+      expect(serverTaskIds[id1]).toBe("srv-1")
+      expect(serverTaskIds[id2]).toBe("srv-2")
+    })
+
+    it("getServerTaskId returns the mapped server task ID", () => {
+      const localId = useResearchStore.getState().addTask("topic")
+      useResearchStore.getState().setServerTaskId(localId, "srv-abc")
+      expect(useResearchStore.getState().getServerTaskId(localId)).toBe("srv-abc")
+    })
+
+    it("getServerTaskId returns undefined for unmapped tasks", () => {
+      const localId = useResearchStore.getState().addTask("topic")
+      expect(useResearchStore.getState().getServerTaskId(localId)).toBeUndefined()
     })
   })
 })

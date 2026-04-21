@@ -4,6 +4,7 @@ import Stack from "@mui/material/Stack"
 import Tooltip from "@mui/material/Tooltip"
 import IconButton from "@mui/material/IconButton"
 import Badge from "@mui/material/Badge"
+import AutoStoriesIcon from "@mui/icons-material/AutoStories"
 import Description from "@mui/icons-material/Description"
 import FolderOpen from "@mui/icons-material/FolderOpen"
 import Search from "@mui/icons-material/Search"
@@ -20,7 +21,6 @@ import { useWikiStore } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
 import { useAuthStore } from "@/stores/auth-store"
 import { useTranslation } from "react-i18next"
-import logoImg from "@/assets/logo.png"
 import type { WikiState } from "@/stores/wiki-store"
 import { AuthModal } from "@/components/auth/AuthModal"
 
@@ -36,12 +36,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { view: "wiki",      icon: Description,               labelKey: "nav.wiki",     minRole: "anonymous" },
-  { view: "sources",   icon: FolderOpen,                labelKey: "nav.sources",  minRole: "member"    },
-  { view: "search",    icon: Search,                    labelKey: "nav.search",   minRole: "anonymous" },
-  { view: "graph",     icon: AccountTree,               labelKey: "nav.graph",    minRole: "anonymous" },
-  { view: "lint",      icon: CheckCircleOutlineOutlined,  labelKey: "nav.lint",    minRole: "admin"     },
-  { view: "llm-debug", icon: BugReport,                 labelKey: "nav.llmDebug", minRole: "admin"     },
+  { view: "wiki",      icon: Description,                labelKey: "nav.wiki",     minRole: "anonymous" },
+  { view: "sources",   icon: FolderOpen,                 labelKey: "nav.sources",  minRole: "member"    },
+  { view: "search",    icon: Search,                     labelKey: "nav.search",   minRole: "anonymous" },
+  { view: "graph",     icon: AccountTree,                labelKey: "nav.graph",    minRole: "anonymous" },
+  { view: "lint",      icon: CheckCircleOutlineOutlined, labelKey: "nav.lint",     minRole: "admin"     },
+  { view: "llm-debug", icon: BugReport,                  labelKey: "nav.llmDebug", minRole: "admin"     },
 ]
 
 function hasAccess(userRole: string | undefined, minRole: MinRole): boolean {
@@ -71,31 +71,41 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const visibleNavItems = NAV_ITEMS.filter((item) => hasAccess(user?.role, item.minRole))
   const showSettings = hasAccess(user?.role, "admin")
 
-  const navButtonSx = (active: boolean) => ({
+  // Notion-style nav button: minimal, content-first
+  const navBtnSx = (active: boolean) => ({
     position: "relative" as const,
-    width: 36,
-    height: 36,
-    borderRadius: "10px",
-    color: active ? "#F5F3EF" : "rgba(245,243,239,0.4)",
-    bgcolor: active ? "rgba(194, 65, 12, 0.2)" : "transparent",
-    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+    width: 32,
+    height: 32,
+    borderRadius: "6px",
+    color: active ? "text.primary" : "text.secondary",
+    bgcolor: active ? "rgba(35,131,226,0.10)" : "transparent",
+    transition: `background-color var(--duration-fast) ease, color var(--duration-fast) ease`,
+    // Active left-edge indicator
     "&::before": active ? {
       content: '""',
       position: "absolute",
       left: -8,
       top: "50%",
       transform: "translateY(-50%)",
-      width: 3,
-      height: 20,
-      borderRadius: "0 3px 3px 0",
-      bgcolor: "#C2410C",
-      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+      width: 2,
+      height: 16,
+      borderRadius: "0 2px 2px 0",
+      bgcolor: "primary.main",
     } : {},
     "&:hover": {
-      bgcolor: active ? "rgba(194, 65, 12, 0.25)" : "rgba(245,243,239,0.06)",
-      color: "#F5F3EF",
+      bgcolor: active ? "rgba(35,131,226,0.14)" : "background.sidebarHover",
+      color: "text.primary",
     },
   })
+
+  const utilBtnSx = {
+    width: 32,
+    height: 32,
+    borderRadius: "6px",
+    color: "text.secondary",
+    transition: `background-color var(--duration-fast) ease, color var(--duration-fast) ease`,
+    "&:hover": { bgcolor: "background.sidebarHover", color: "text.primary" },
+  }
 
   return (
     <>
@@ -104,56 +114,88 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
         sx={{
           alignItems: "center",
           height: "100%",
-          width: 56,
+          width: 48,
           flexShrink: 0,
-          bgcolor: "#141218",
+          bgcolor: "background.sidebar",
           py: 1.5,
           gap: 0,
+          // Right border matches divider color (subtle 1px line)
+          borderRight: "1px solid",
+          borderColor: "divider",
         }}
       >
-        <Box sx={{ mb: 2.5, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {/* Logo */}
+        <Box sx={{ mb: 2, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Box
-            component="img"
-            src={logoImg}
-            alt="LLM Wiki"
-            sx={{ height: 34, width: 34, borderRadius: "10px", objectFit: "cover" }}
-          />
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: "6px",
+              bgcolor: "primary.main",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(35,131,226,0.3)",
+              flexShrink: 0,
+            }}
+          >
+            <AutoStoriesIcon sx={{ fontSize: 15, color: "#fff" }} />
+          </Box>
         </Box>
 
-        <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", flex: 1, width: "100%" }}>
+        {/* Nav items */}
+        <Stack direction="column" spacing={0.25} sx={{ alignItems: "center", flex: 1, width: "100%" }}>
           {visibleNavItems.map(({ view, icon: Icon, labelKey }) => (
-            <Tooltip key={view} title={t(labelKey)} placement="right" enterDelay={300}>
+            <Tooltip key={view} title={t(labelKey)} placement="right" enterDelay={400}>
               <Box sx={{ position: "relative" }}>
                 <IconButton
                   size="small"
                   onClick={() => setActiveView(view)}
-                  sx={navButtonSx(activeView === view)}
+                  sx={navBtnSx(activeView === view)}
                 >
-                  <Icon sx={{ fontSize: 18 }} />
+                  <Icon sx={{ fontSize: 16 }} />
                 </IconButton>
               </Box>
             </Tooltip>
           ))}
 
-          <Box sx={{ width: 16, height: "1px", bgcolor: "rgba(245,243,239,0.08)", my: 1.5, flexShrink: 0 }} />
+          {/* Divider */}
+          <Box sx={{ width: 14, height: "1px", bgcolor: "divider", my: 1, flexShrink: 0 }} />
 
-          <Tooltip title={t("iconSidebar.deepResearch")} placement="right" enterDelay={300}>
+          {/* Deep Research */}
+          <Tooltip title={t("iconSidebar.deepResearch")} placement="right" enterDelay={400}>
             <Box sx={{ position: "relative" }}>
               <IconButton
                 size="small"
                 onClick={() => toggleResearchPanel(!researchPanelOpen)}
-                sx={navButtonSx(researchPanelOpen)}
+                sx={navBtnSx(researchPanelOpen)}
               >
-                <Explore sx={{ fontSize: 18 }} />
+                <Explore sx={{ fontSize: 16 }} />
               </IconButton>
               {researchActiveCount > 0 && (
-                <Box component="span" sx={{
-                  position: "absolute", top: 0, right: 0,
-                  minWidth: 15, height: 15, px: 0.25, borderRadius: "999px",
-                  bgcolor: "#0369A1", color: "#fff", fontSize: 9, fontWeight: 700,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  lineHeight: 1, pointerEvents: "none", boxShadow: "0 0 0 2px #141218",
-                }}>
+                <Box
+                  component="span"
+                  sx={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    minWidth: 14,
+                    height: 14,
+                    px: 0.25,
+                    borderRadius: "999px",
+                    bgcolor: "primary.main",
+                    color: "#fff",
+                    fontSize: 9,
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1,
+                    pointerEvents: "none",
+                    boxShadow: "0 0 0 2px",
+                    boxShadowColor: "background.sidebar",
+                  }}
+                >
                   {researchActiveCount}
                 </Box>
               )}
@@ -161,73 +203,52 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
           </Tooltip>
         </Stack>
 
-        <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", pb: 0.5, width: "100%" }}>
+        {/* Bottom utilities */}
+        <Stack direction="column" spacing={0.25} sx={{ alignItems: "center", pb: 0.5, width: "100%" }}>
           {showSettings && (
-            <Tooltip title={t("nav.settings")} placement="right" enterDelay={300}>
+            <Tooltip title={t("nav.settings")} placement="right" enterDelay={400}>
               <IconButton
                 size="small"
                 onClick={() => setActiveView("settings")}
-                sx={navButtonSx(activeView === "settings")}
+                sx={navBtnSx(activeView === "settings")}
               >
                 <Badge
                   color="error"
                   variant="dot"
-                  invisible={true}
+                  invisible
                   sx={{ "& .MuiBadge-badge": { right: 2, top: 2 } }}
                 >
-                  <Settings sx={{ fontSize: 18 }} />
+                  <Settings sx={{ fontSize: 16 }} />
                 </Badge>
               </IconButton>
             </Tooltip>
           )}
 
-          {/* Login / User avatar button */}
           {user ? (
             <Tooltip
               title={`${user.username} (${t(`userMenu.role.${user.role}`)}) · ${t("auth.logout")}`}
               placement="right"
-              enterDelay={300}
+              enterDelay={400}
             >
-              <IconButton
-                size="small"
-                onClick={() => logout()}
-                sx={{
-                  width: 36, height: 36, borderRadius: "10px",
-                  color: "rgba(245,243,239,0.6)",
-                  "&:hover": { bgcolor: "rgba(245,243,239,0.06)", color: "#F5F3EF" },
-                }}
-              >
-                <AccountCircleIcon sx={{ fontSize: 18 }} />
+              <IconButton size="small" onClick={() => logout()} sx={utilBtnSx}>
+                <AccountCircleIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
           ) : (
-            <Tooltip title={t("auth.login")} placement="right" enterDelay={300}>
+            <Tooltip title={t("auth.login")} placement="right" enterDelay={400}>
               <IconButton
                 size="small"
                 onClick={(e) => { (e.currentTarget as HTMLElement).blur(); setAuthModalOpen(true) }}
-                sx={{
-                  width: 36, height: 36, borderRadius: "10px",
-                  color: "rgba(245,243,239,0.5)",
-                  "&:hover": { bgcolor: "rgba(245,243,239,0.06)", color: "#F5F3EF" },
-                }}
+                sx={utilBtnSx}
               >
-                <LoginIcon sx={{ fontSize: 18 }} />
+                <LoginIcon sx={{ fontSize: 16 }} />
               </IconButton>
             </Tooltip>
           )}
 
-          <Tooltip title={t("nav.switchProject")} placement="right" enterDelay={300}>
-            <IconButton
-              size="small"
-              onClick={onSwitchProject}
-              sx={{
-                width: 36, height: 36, borderRadius: "10px",
-                color: "rgba(245,243,239,0.4)",
-                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-                "&:hover": { bgcolor: "rgba(245,243,239,0.06)", color: "#F5F3EF" },
-              }}
-            >
-              <SwapHoriz sx={{ fontSize: 18 }} />
+          <Tooltip title={t("nav.switchProject")} placement="right" enterDelay={400}>
+            <IconButton size="small" onClick={onSwitchProject} sx={utilBtnSx}>
+              <SwapHoriz sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
         </Stack>

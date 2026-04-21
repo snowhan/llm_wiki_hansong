@@ -18,6 +18,8 @@ export function isNewTab(path: string) { return path.startsWith(NEW_TAB_PREFIX) 
 let _tabSeq = 0
 function newTabId() { return `tab_${Date.now()}_${++_tabSeq}` }
 
+export type ColorScheme = "light" | "dark" | "system"
+
 interface WikiState {
   project: WikiProject | null
   fileTree: FileNode[]
@@ -25,6 +27,7 @@ interface WikiState {
   fileContent: string
   chatExpanded: boolean
   activeView: "wiki" | "sources" | "search" | "graph" | "lint" | "llm-debug" | "settings"
+  colorScheme: ColorScheme
   llmConfig: LlmConfig
   searchApiConfig: SearchApiConfig
   embeddingConfig: EmbeddingConfig
@@ -48,6 +51,7 @@ interface WikiState {
   setFileContent: (content: string) => void
   setChatExpanded: (expanded: boolean) => void
   setActiveView: (view: WikiState["activeView"]) => void
+  setColorScheme: (scheme: ColorScheme) => void
   setLlmConfig: (config: LlmConfig) => void
   setSearchApiConfig: (config: SearchApiConfig) => void
   setEmbeddingConfig: (config: EmbeddingConfig) => void
@@ -84,6 +88,7 @@ export const useWikiStore = create<WikiState>()(
   fileContent: "",
   chatExpanded: false,
   activeView: "wiki",
+  colorScheme: "system" as ColorScheme,
   llmConfig: {
     provider: "openai",
     apiKey: "",
@@ -129,6 +134,7 @@ export const useWikiStore = create<WikiState>()(
   setFileContent: (fileContent) => set({ fileContent }),
   setChatExpanded: (chatExpanded) => set({ chatExpanded }),
   setActiveView: (activeView) => set({ activeView }),
+  setColorScheme: (colorScheme) => set({ colorScheme }),
 
   setLlmConfig: (llmConfig) => set({ llmConfig }),
   setSearchApiConfig: (searchApiConfig) => set({ searchApiConfig }),
@@ -242,6 +248,7 @@ export const useWikiStore = create<WikiState>()(
   {
     name: "llm-wiki-store",
     partialize: (state) => ({
+      colorScheme: state.colorScheme,
       ingestStatuses: state.ingestStatuses,
       serverTaskIds: state.serverTaskIds,
     }),

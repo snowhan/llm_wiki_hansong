@@ -52,6 +52,7 @@ router.post("/stream", async (req: Request, res: Response, next: NextFunction) =
     res.setHeader("Content-Type", upstream.headers.get("content-type") || "text/event-stream")
     res.setHeader("Cache-Control", "no-cache")
     res.setHeader("Connection", "keep-alive")
+    res.flushHeaders()
 
     if (!upstream.body) {
       res.status(502).send("Upstream response body is null")

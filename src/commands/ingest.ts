@@ -5,6 +5,7 @@
  */
 
 import { getStoredToken } from "@/lib/auth"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
 export interface ServerIngestTask {
   id: string
@@ -29,12 +30,6 @@ export interface SseCallbacks {
   onConnectionLost?: () => void
 }
 
-function authHeaders(): Record<string, string> {
-  const token = getStoredToken()
-  if (!token) return {}
-  return { Authorization: `Bearer ${token}` }
-}
-
 /**
  * Start a server-side ingest task.
  * Returns the taskId for SSE subscription.
@@ -45,9 +40,9 @@ export async function startServerIngest(params: {
   folderContext?: string
   force?: boolean
 }): Promise<string> {
-  const res = await fetch("/api/ingest/start", {
+  const res = await fetchWithAuth("/api/ingest/start", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   })
   if (!res.ok) {
@@ -63,9 +58,7 @@ export async function startServerIngest(params: {
  */
 export async function getServerIngestStatus(taskId: string): Promise<ServerIngestTask | null> {
   try {
-    const res = await fetch(`/api/ingest/status/${taskId}`, {
-      headers: authHeaders(),
-    })
+    const res = await fetchWithAuth(`/api/ingest/status/${taskId}`)
     if (!res.ok) return null
     const { task } = (await res.json()) as { task: ServerIngestTask }
     return task
@@ -80,7 +73,7 @@ export async function getServerIngestStatus(taskId: string): Promise<ServerInges
  */
 export async function getAllServerTasks(): Promise<ServerIngestTask[]> {
   try {
-    const res = await fetch("/api/ingest/tasks", { headers: authHeaders() })
+    const res = await fetchWithAuth("/api/ingest/tasks")
     if (!res.ok) return []
     const { tasks } = (await res.json()) as { tasks: ServerIngestTask[] }
     return tasks
@@ -94,9 +87,9 @@ export async function getAllServerTasks(): Promise<ServerIngestTask[]> {
  * Returns the taskId for status polling.
  */
 export async function rebuildWikiSummary(projectId: string): Promise<string> {
-  const res = await fetch("/api/ingest/rebuild-summary", {
+  const res = await fetchWithAuth("/api/ingest/rebuild-summary", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ projectId }),
   })
   if (!res.ok) {
@@ -123,9 +116,7 @@ export interface RebuildSummaryStatus {
  */
 export async function getRebuildSummaryStatus(taskId: string): Promise<RebuildSummaryStatus | null> {
   try {
-    const res = await fetch(`/api/ingest/rebuild-summary/status/${taskId}`, {
-      headers: authHeaders(),
-    })
+    const res = await fetchWithAuth(`/api/ingest/rebuild-summary/status/${taskId}`)
     if (!res.ok) return null
     const { task } = (await res.json()) as { task: RebuildSummaryStatus }
     return task
@@ -139,9 +130,9 @@ export async function getRebuildSummaryStatus(taskId: string): Promise<RebuildSu
  * Returns the taskId for status polling.
  */
 export async function deduplicateWiki(projectId: string): Promise<string> {
-  const res = await fetch("/api/ingest/deduplicate", {
+  const res = await fetchWithAuth("/api/ingest/deduplicate", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ projectId }),
   })
   if (!res.ok) {
@@ -169,9 +160,7 @@ export interface DeduplicateStatus {
  */
 export async function getDeduplicateStatus(taskId: string): Promise<DeduplicateStatus | null> {
   try {
-    const res = await fetch(`/api/ingest/deduplicate/status/${taskId}`, {
-      headers: authHeaders(),
-    })
+    const res = await fetchWithAuth(`/api/ingest/deduplicate/status/${taskId}`)
     if (!res.ok) return null
     const { task } = (await res.json()) as { task: DeduplicateStatus }
     return task

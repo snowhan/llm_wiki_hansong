@@ -2,6 +2,9 @@ import { create } from "zustand"
 
 export type UserRole = "member" | "admin"
 
+// Must match the calculation in api-client.ts — avoids a circular import.
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 export interface AuthUser {
   id: string
   username: string
@@ -45,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (username: string, password: string) => {
-    const res = await fetch("/api/auth/login", {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -60,7 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   register: async (username: string, password: string) => {
-    const res = await fetch("/api/auth/register", {
+    const res = await fetch(`${BASE_URL}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -76,7 +79,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const { accessToken } = get()
     try {
-      await fetch("/api/auth/logout", {
+      await fetch(`${BASE_URL}/api/auth/logout`, {
         method: "POST",
         headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         credentials: "include",
@@ -89,7 +92,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   refreshToken: async (): Promise<boolean> => {
     try {
-      const res = await fetch("/api/auth/refresh", {
+      const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
         method: "POST",
         credentials: "include",
       })
@@ -98,7 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const data = await res.json() as { accessToken: string }
 
       // Get current user info with the new token
-      const meRes = await fetch("/api/auth/me", {
+      const meRes = await fetch(`${BASE_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${data.accessToken}` },
       })
       if (!meRes.ok) return false

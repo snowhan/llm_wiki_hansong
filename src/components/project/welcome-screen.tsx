@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react"
-import AddIcon from "@mui/icons-material/Add"
-import CloseIcon from "@mui/icons-material/Close"
-import FolderOpenIcon from "@mui/icons-material/FolderOpen"
-import AutoStoriesIcon from "@mui/icons-material/AutoStories"
-import LoginIcon from "@mui/icons-material/Login"
 import Box from "@mui/material/Box"
-import IconButton from "@mui/material/IconButton"
 import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
+import Button from "@mui/material/Button"
 import ButtonBase from "@mui/material/ButtonBase"
-import { alpha } from "@mui/material/styles"
-import { Button } from "@/components/ui/button"
+import IconButton from "@mui/material/IconButton"
+import Chip from "@mui/material/Chip"
+import Divider from "@mui/material/Divider"
+import Add from "@mui/icons-material/Add"
+import FolderOpen from "@mui/icons-material/FolderOpen"
+import Close from "@mui/icons-material/Close"
+import Description from "@mui/icons-material/Description"
+import Login from "@mui/icons-material/Login"
+import AutoStoriesIcon from "@mui/icons-material/AutoStories"
 import { getRecentProjects, removeFromRecentProjects } from "@/lib/project-store"
 import type { WikiProject } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
@@ -20,7 +22,7 @@ interface WelcomeScreenProps {
   onCreateProject: () => void
   onOpenProject: () => void
   onSelectProject: (project: WikiProject) => void
-  onLogin: () => void
+  onLogin?: () => void
 }
 
 export function WelcomeScreen({
@@ -37,340 +39,303 @@ export function WelcomeScreen({
     getRecentProjects().then(setRecentProjects).catch(() => {})
   }, [])
 
-  async function handleRemoveRecent(e: React.MouseEvent, path: string) {
+  async function handleRemoveRecent(e: React.MouseEvent, id: string) {
     e.stopPropagation()
-    await removeFromRecentProjects(path)
-    const updated = await getRecentProjects()
-    setRecentProjects(updated)
+    await removeFromRecentProjects(id)
+    setRecentProjects(await getRecentProjects())
+  }
+
+  function truncateId(id: string) {
+    return id.length > 8 ? id.slice(0, 8) + "…" : id
   }
 
   return (
     <Box
       sx={{
         display: "flex",
-        height: "100%",
-        position: "relative",
-        overflow: "hidden",
-        bgcolor: "#141218",
+        height: "100vh",
+        bgcolor: "background.default",
+        color: "text.primary",
+        fontFamily: "inherit",
       }}
     >
-      {/* Warm atmospheric gradient */}
+      {/* Left panel — brand + actions */}
       <Box
         sx={{
-          position: "absolute",
-          inset: 0,
-          background: `
-            radial-gradient(ellipse 70% 50% at 50% -10%, rgba(194, 65, 12, 0.12), transparent),
-            radial-gradient(ellipse 50% 40% at 80% 100%, rgba(217, 119, 6, 0.05), transparent),
-            radial-gradient(ellipse 40% 50% at 10% 80%, rgba(194, 65, 12, 0.03), transparent)
-          `,
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Subtle dot grid */}
-      <Box
-        sx={{
-          position: "absolute",
-          inset: 0,
-          backgroundImage: `radial-gradient(rgba(245,243,239,0.04) 1px, transparent 1px)`,
-          backgroundSize: "32px 32px",
-          maskImage: "radial-gradient(ellipse 60% 60% at 50% 50%, black 20%, transparent 70%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Decorative copper line */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%) rotate(-12deg)",
-          width: "120%",
-          height: 1,
-          background: "linear-gradient(90deg, transparent, rgba(194, 65, 12, 0.15) 30%, rgba(194, 65, 12, 0.15) 70%, transparent)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Login button — top-right, only when not authenticated */}
-      {!authUser && (
-        <Box sx={{ position: "absolute", top: 16, right: 20, zIndex: 2 }}>
-          <Button
-            onClick={(e) => { (e.currentTarget as HTMLElement).blur(); onLogin() }}
-            startIcon={<LoginIcon sx={{ fontSize: 16 }} />}
-            sx={{
-              color: "rgba(245,243,239,0.55)",
-              fontSize: "0.8rem",
-              px: 1.5,
-              py: 0.6,
-              borderRadius: "10px",
-              border: "1px solid rgba(245,243,239,0.1)",
-              "&:hover": {
-                color: "#F5F3EF",
-                border: "1px solid rgba(245,243,239,0.2)",
-                bgcolor: "rgba(245,243,239,0.05)",
-              },
-              transition: "all 0.2s",
-            }}
-          >
-            {t("auth.login")}
-          </Button>
-        </Box>
-      )}
-
-      {/* Content */}
-      <Stack
-        sx={{
-          position: "relative",
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1,
-          px: 3,
+          width: { xs: "100%", md: 320 },
+          flexShrink: 0,
+          bgcolor: "background.sidebar",
+          borderRight: { md: "1px solid" },
+          borderColor: "divider",
+          display: "flex",
+          flexDirection: "column",
+          px: 4,
+          py: 5,
+          gap: 0,
+          animation: "stagger-in 400ms var(--ease-spring) both",
         }}
       >
-        {/* Logo + Title */}
-        <Stack
-          spacing={1.5}
-          sx={{
-            alignItems: "center",
-            mb: 5,
-            animation: "fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both",
-            "@keyframes fadeInUp": {
-              "0%": { opacity: 0, transform: "translateY(16px)" },
-              "100%": { opacity: 1, transform: "translateY(0)" },
-            },
-          }}
-        >
+        {/* Logo + wordmark */}
+        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 4 }}>
           <Box
             sx={{
-              width: 56,
-              height: 56,
-              borderRadius: "16px",
+              width: 36,
+              height: 36,
+              borderRadius: "8px",
+              bgcolor: "primary.main",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              background: "linear-gradient(145deg, #C2410C 0%, #EA580C 100%)",
-              boxShadow: "0 8px 32px rgba(194, 65, 12, 0.35), 0 0 0 1px rgba(194, 65, 12, 0.1)",
-              mb: 0.5,
+              boxShadow: "0 2px 10px rgba(35,131,226,0.3)",
+              flexShrink: 0,
             }}
           >
-            <AutoStoriesIcon sx={{ fontSize: 28, color: "#fff" }} />
+            <AutoStoriesIcon sx={{ fontSize: 18, color: "#fff" }} />
           </Box>
-          <Typography
-            variant="h4"
-            component="h1"
-            sx={{
-              fontFamily: "'Playfair Display', 'PingFang SC', Georgia, serif",
-              fontWeight: 700,
-              color: "#F5F3EF",
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              fontSize: "2rem",
-            }}
-          >
-            {t("app.title")}
-          </Typography>
-          <Box
-            sx={{
-              width: 40,
-              height: 2,
-              bgcolor: "#C2410C",
-              borderRadius: 1,
-              opacity: 0.6,
-            }}
-          />
-          <Typography
-            sx={{
-              color: "rgba(245,243,239,0.35)",
-              fontSize: "0.9rem",
-              textAlign: "center",
-              maxWidth: 360,
-              lineHeight: 1.7,
-              letterSpacing: "0.01em",
-            }}
-          >
-            {t("app.subtitle")}
-          </Typography>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.01em" }}>
+              LLM Wiki
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+              AI 知识库
+            </Typography>
+          </Box>
         </Stack>
 
-        {/* Action buttons */}
-        <Stack
-          direction="row"
-          spacing={1.5}
-          sx={{
-            mb: 5,
-            animation: "fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both",
-            "@keyframes fadeInUp": {
-              "0%": { opacity: 0, transform: "translateY(16px)" },
-              "100%": { opacity: 1, transform: "translateY(0)" },
-            },
-          }}
-        >
-          <Button
-            onClick={onCreateProject}
-            startIcon={<AddIcon sx={{ fontSize: 18 }} />}
+        {/* Auth status */}
+        {authUser ? (
+          <Box
             sx={{
-              bgcolor: "#C2410C",
-              color: "#fff",
-              px: 3,
+              mb: 3,
+              px: 1.5,
               py: 1,
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              borderRadius: "12px",
-              "&:hover": {
-                bgcolor: "#EA580C",
-                boxShadow: "0 4px 24px rgba(194, 65, 12, 0.35)",
-              },
-              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+              bgcolor: "rgba(35,131,226,0.06)",
+              borderRadius: "8px",
+              border: "1px solid rgba(35,131,226,0.12)",
             }}
+          >
+            <Typography variant="caption" sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
+              已登录为
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {authUser.username}
+            </Typography>
+          </Box>
+        ) : (
+          <ButtonBase
+            onClick={onLogin}
+            sx={{
+              mb: 3,
+              px: 1.5,
+              py: 1,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: "8px",
+              display: "flex",
+              gap: 1,
+              alignItems: "center",
+              textAlign: "left",
+              color: "text.secondary",
+              transition: "background-color var(--duration-fast) ease",
+              "&:hover": { bgcolor: "background.sidebarHover", color: "text.primary" },
+            }}
+          >
+            <Login sx={{ fontSize: 16 }} />
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              {t("auth.login")}
+            </Typography>
+          </ButtonBase>
+        )}
+
+        {/* Primary actions */}
+        <Stack spacing={1}>
+          <Button
+            variant="contained"
+            fullWidth
+            startIcon={<Add />}
+            onClick={onCreateProject}
+            sx={{ borderRadius: "8px", fontWeight: 600, height: 40 }}
           >
             {t("welcome.newProject")}
           </Button>
           <Button
-            variant="outline"
+            variant="outlined"
+            fullWidth
+            startIcon={<FolderOpen />}
             onClick={onOpenProject}
-            startIcon={<FolderOpenIcon sx={{ fontSize: 18 }} />}
-            sx={{
-              borderColor: "rgba(245,243,239,0.1)",
-              color: "rgba(245,243,239,0.6)",
-              px: 3,
-              py: 1,
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              borderRadius: "12px",
-              "&:hover": {
-                borderColor: "rgba(194, 65, 12, 0.4)",
-                bgcolor: "rgba(194, 65, 12, 0.06)",
-                color: "#F5F3EF",
-              },
-              transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            }}
+            sx={{ borderRadius: "8px", fontWeight: 500, height: 40 }}
           >
             {t("welcome.openProject")}
           </Button>
         </Stack>
 
-        {/* Recent projects */}
-        {recentProjects.length > 0 && (
+        {/* Keyboard hint */}
+        <Box sx={{ mt: "auto", pt: 4 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.7rem" }}>
+            使用{" "}
+            <Box component="kbd" sx={{
+              display: "inline",
+              px: 0.5,
+              py: 0.1,
+              border: "1px solid",
+              borderColor: "divider",
+              borderRadius: "4px",
+              fontSize: "0.7rem",
+              fontFamily: "var(--font-mono)",
+            }}>
+              ⌘K
+            </Box>
+            {" "}打开命令面板
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Right panel — recent projects */}
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          px: 6,
+          py: 5,
+          overflow: "auto",
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 700,
+            mb: 1,
+            letterSpacing: "-0.02em",
+            animation: "stagger-in 400ms var(--ease-spring) 80ms both",
+          }}
+        >
+          {t("welcome.recentProjects")}
+        </Typography>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mb: 4, animation: "stagger-in 400ms var(--ease-spring) 120ms both" }}
+        >
+          {t("welcome.selectProject")}
+        </Typography>
+
+        {recentProjects.length === 0 ? (
           <Box
             sx={{
-              width: "100%",
-              maxWidth: 480,
-              animation: "fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both",
-              "@keyframes fadeInUp": {
-                "0%": { opacity: 0, transform: "translateY(16px)" },
-                "100%": { opacity: 1, transform: "translateY(0)" },
-              },
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "column",
+              gap: 2,
+              opacity: 0.5,
+              animation: "notion-fade-in 400ms var(--ease-out) 200ms both",
             }}
           >
-            <Typography
-              variant="caption"
-              sx={{
-                display: "block",
-                mb: 1.5,
-                px: 0.5,
-                color: "rgba(245,243,239,0.25)",
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                fontSize: "0.65rem",
-                fontWeight: 600,
-              }}
-            >
-              {t("welcome.recentProjects")}
+            <Description sx={{ fontSize: 48, color: "text.secondary" }} />
+            <Typography variant="body2" color="text.secondary">
+              还没有最近打开的项目
             </Typography>
-            <Stack spacing={0.5}>
-              {recentProjects.map((proj) => (
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+              gap: 1.5,
+            }}
+          >
+            {recentProjects.map((project, i) => (
+              <Box
+                key={project.id ?? project.name}
+                sx={{
+                  position: "relative",
+                  borderRadius: "10px",
+                  animation: `stagger-in 400ms var(--ease-spring) ${160 + i * 40}ms both`,
+                  "&:hover .recent-remove-btn": { opacity: 0.6 },
+                }}
+              >
                 <ButtonBase
-                  component="div"
-                  role="button"
-                  tabIndex={0}
-                  key={proj.id}
-                  onClick={() => onSelectProject(proj)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      onSelectProject(proj)
-                    }
-                  }}
+                  onClick={() => onSelectProject(project)}
                   sx={{
-                    display: "flex",
+                    display: "block",
                     width: "100%",
-                    alignItems: "center",
-                    gap: 1.5,
-                    px: 2,
-                    py: 1.5,
-                    borderRadius: "12px",
                     textAlign: "left",
-                    border: "1px solid transparent",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                    borderRadius: "10px",
+                    border: "1px solid",
+                    borderColor: "divider",
+                    p: 2,
+                    transition: "background-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease",
                     "&:hover": {
-                      bgcolor: "rgba(245,243,239,0.03)",
-                      borderColor: "rgba(245,243,239,0.06)",
+                      bgcolor: "background.sidebarHover",
+                      boxShadow: 2,
+                      borderColor: "rgba(35,131,226,0.3)",
                     },
-                    "& [data-remove-recent]": { opacity: 0 },
-                    "&:hover [data-remove-recent]": { opacity: 1 },
                   }}
                 >
-                  <Box
-                    sx={{
-                      width: 38,
-                      height: 38,
-                      borderRadius: "10px",
-                      bgcolor: "rgba(194, 65, 12, 0.1)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      border: "1px solid rgba(194, 65, 12, 0.08)",
-                    }}
-                  >
-                    <AutoStoriesIcon sx={{ fontSize: 16, color: "#EA580C" }} />
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="body2"
-                      noWrap
-                      sx={{ fontWeight: 500, color: "rgba(245,243,239,0.8)", fontSize: "0.875rem" }}
+                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                    <Box
+                      sx={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: "8px",
+                        bgcolor: "rgba(35,131,226,0.08)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                      }}
                     >
-                      {proj.name}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      noWrap
-                      sx={{ color: "rgba(245,243,239,0.25)", fontSize: "0.75rem", display: "block" }}
-                    >
-                      {proj.id.slice(0, 8)}…
-                    </Typography>
-                  </Box>
-                  <IconButton
-                    data-remove-recent
-                    size="small"
-                    aria-label={t("common.close")}
-                    onClick={(e) => handleRemoveRecent(e, proj.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleRemoveRecent(e as unknown as React.MouseEvent, proj.id)
-                    }}
-                    sx={{
-                      flexShrink: 0,
-                      color: "rgba(245,243,239,0.2)",
-                      transition: "all 0.2s ease",
-                      "&:hover": {
-                        color: "#B91C1C",
-                        bgcolor: (theme) => alpha(theme.palette.error.main, 0.1),
-                      },
-                    }}
-                  >
-                    <CloseIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
+                      <Description sx={{ fontSize: 18, color: "primary.main" }} />
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 600, fontSize: "0.875rem", mb: 0.25 }}
+                        noWrap
+                      >
+                        {project.name}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontSize: "0.7rem", display: "block" }}
+                        noWrap
+                      >
+                        {project.path ?? truncateId(project.id ?? "")}
+                      </Typography>
+                    </Box>
+                  </Stack>
                 </ButtonBase>
-              ))}
-            </Stack>
+
+                {/* Remove button — sibling of ButtonBase to avoid nested <button> */}
+                <IconButton
+                  size="small"
+                  aria-label={t("common.close")}
+                  className="recent-remove-btn"
+                  onClick={(e) => handleRemoveRecent(e, project.id ?? project.path ?? "")}
+                  sx={{
+                    position: "absolute",
+                    top: 6,
+                    right: 6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: "4px",
+                    opacity: 0,
+                    color: "text.secondary",
+                    transition: "opacity var(--duration-fast) ease",
+                    "&:hover": { bgcolor: "background.sidebarHover", opacity: 1 },
+                  }}
+                >
+                  <Close sx={{ fontSize: 13 }} />
+                </IconButton>
+              </Box>
+            ))}
           </Box>
         )}
-      </Stack>
+      </Box>
     </Box>
   )
 }

@@ -1,7 +1,13 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import Box from "@mui/material/Box"
 import Typography from "@mui/material/Typography"
+import IconButton from "@mui/material/IconButton"
+import InputBase from "@mui/material/InputBase"
+import Tooltip from "@mui/material/Tooltip"
+import Menu from "@mui/material/Menu"
+import MenuItem from "@mui/material/MenuItem"
+import Divider from "@mui/material/Divider"
 import ChevronRight from "@mui/icons-material/ChevronRight"
 import ExpandMore from "@mui/icons-material/ExpandMore"
 import Description from "@mui/icons-material/Description"
@@ -13,6 +19,9 @@ import BarChart from "@mui/icons-material/BarChart"
 import HelpOutlineOutlined from "@mui/icons-material/HelpOutlineOutlined"
 import ViewModule from "@mui/icons-material/ViewModule"
 import Public from "@mui/icons-material/Public"
+import MoreHoriz from "@mui/icons-material/MoreHoriz"
+import DriveFileRenameOutline from "@mui/icons-material/DriveFileRenameOutline"
+import DeleteOutlined from "@mui/icons-material/DeleteOutlined"
 import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
 import { readFile, listDirectory } from "@/commands/fs"
@@ -33,13 +42,13 @@ function canonicalTitleFromFileName(fileName: string): string {
 }
 
 const TYPE_CONFIG: Record<string, { icon: IconComp; labelKey: string; iconColor: string; order: number }> = {
-  overview: { icon: ViewModule, labelKey: "knowledgeTree.overview", iconColor: "warning.main", order: 0 },
-  entity: { icon: PeopleOutlineOutlined, labelKey: "knowledgeTree.entities", iconColor: "info.main", order: 1 },
-  concept: { icon: LightbulbOutlined, labelKey: "knowledgeTree.concepts", iconColor: "#9333ea", order: 2 },
-  source: { icon: MenuBook, labelKey: "knowledgeTree.sources", iconColor: "warning.dark", order: 3 },
-  synthesis: { icon: MergeType, labelKey: "knowledgeTree.synthesis", iconColor: "error.main", order: 4 },
-  comparison: { icon: BarChart, labelKey: "knowledgeTree.comparisons", iconColor: "success.main", order: 5 },
-  query: { icon: HelpOutlineOutlined, labelKey: "knowledgeTree.queries", iconColor: "success.dark", order: 6 },
+  overview:   { icon: ViewModule,               labelKey: "knowledgeTree.overview",    iconColor: "primary.main", order: 0 },
+  entity:     { icon: PeopleOutlineOutlined,    labelKey: "knowledgeTree.entities",    iconColor: "info.main",    order: 1 },
+  concept:    { icon: LightbulbOutlined,        labelKey: "knowledgeTree.concepts",    iconColor: "#9333ea",      order: 2 },
+  source:     { icon: MenuBook,                 labelKey: "knowledgeTree.sources",     iconColor: "#0891b2",      order: 3 },
+  synthesis:  { icon: MergeType,               labelKey: "knowledgeTree.synthesis",   iconColor: "error.main",   order: 4 },
+  comparison: { icon: BarChart,                labelKey: "knowledgeTree.comparisons", iconColor: "success.main", order: 5 },
+  query:      { icon: HelpOutlineOutlined,     labelKey: "knowledgeTree.queries",     iconColor: "success.dark", order: 6 },
 }
 
 const DEFAULT_CONFIG = {
@@ -49,6 +58,202 @@ const DEFAULT_CONFIG = {
   order: 99,
 }
 
+// ── Notion-style tree item ────────────────────────────────────────────────────
+interface TreeItemProps {
+  label: string
+  isSelected: boolean
+  isRenaming: boolean
+  depth: number
+  icon?: React.ReactNode
+  onClick: () => void
+  onDoubleClick: () => void
+  onRenameSubmit: (newTitle: string) => void
+  onContextMenu: (e: React.MouseEvent) => void
+  onMoreClick: (e: React.MouseEvent) => void
+}
+
+function TreeItem({
+  label,
+  isSelected,
+  isRenaming,
+  depth,
+  icon,
+  onClick,
+  onDoubleClick,
+  onRenameSubmit,
+  onContextMenu,
+  onMoreClick,
+}: TreeItemProps) {
+  const [hovered, setHovered] = useState(false)
+  const [renameValue, setRenameValue] = useState(label)
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (isRenaming) {
+      setRenameValue(label)
+      setTimeout(() => {
+        renameInputRef.current?.focus()
+        renameInputRef.current?.select()
+      }, 30)
+    }
+  }, [isRenaming, label])
+
+  return (
+    <Box
+      component="button"
+      type="button"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onContextMenu={onContextMenu}
+      aria-current={isSelected ? "page" : undefined}
+      sx={{
+        font: "inherit",
+        border: "none",
+        background: "none",
+        width: "100%",
+        textAlign: "left",
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        borderRadius: "5px",
+        px: 1,
+        py: 0.4,
+        pl: `${8 + depth * 16}px`,
+        cursor: "pointer",
+        minHeight: 28,
+        bgcolor: isSelected ? "rgba(35,131,226,0.10)" : "transparent",
+        color: isSelected ? "text.primary" : "text.secondary",
+        transition: "background-color var(--duration-fast) ease",
+        "&:hover": {
+          bgcolor: isSelected ? "rgba(35,131,226,0.14)" : "background.sidebarHover",
+          color: "text.primary",
+        },
+      }}
+      onClick={isRenaming ? undefined : onClick}
+      onDoubleClick={isRenaming ? undefined : onDoubleClick}
+    >
+      {/* Hierarchy indent line */}
+      {depth > 0 && (
+        <Box
+          sx={{
+            position: "absolute",
+            left: `${8 + (depth - 1) * 16 + 8}px`,
+            top: 0,
+            bottom: 0,
+            width: "1px",
+            bgcolor: "divider",
+            opacity: 0.6,
+          }}
+        />
+      )}
+
+      {icon && (
+        <Box sx={{ mr: 0.75, display: "flex", flexShrink: 0, opacity: 0.7 }}>
+          {icon}
+        </Box>
+      )}
+
+      {isRenaming ? (
+        <InputBase
+          inputRef={renameInputRef}
+          value={renameValue}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onBlur={() => onRenameSubmit(renameValue)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); onRenameSubmit(renameValue) }
+            if (e.key === "Escape") onRenameSubmit(label) // cancel
+          }}
+          onClick={(e) => e.stopPropagation()}
+          fullWidth
+          inputProps={{ style: { padding: 0, fontSize: "0.8125rem", fontWeight: 500 } }}
+          sx={{ flex: 1, fontSize: "0.8125rem" }}
+        />
+      ) : (
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{ flex: 1, fontSize: "0.8125rem", fontWeight: 500, lineHeight: 1.4 }}
+        >
+          {label}
+        </Typography>
+      )}
+
+      {/* Hover action: three-dot menu */}
+      {hovered && !isRenaming && (
+        <IconButton
+          size="small"
+          onClick={(e) => { e.stopPropagation(); onMoreClick(e) }}
+          sx={{
+            ml: 0.25,
+            width: 20,
+            height: 20,
+            borderRadius: "4px",
+            flexShrink: 0,
+            color: "text.secondary",
+            "&:hover": { bgcolor: "rgba(55,53,47,0.12)", color: "text.primary" },
+          }}
+        >
+          <MoreHoriz sx={{ fontSize: 13 }} />
+        </IconButton>
+      )}
+    </Box>
+  )
+}
+
+// ── Group header ──────────────────────────────────────────────────────────────
+interface GroupHeaderProps {
+  icon: React.ReactNode
+  label: string
+  count: number
+  isExpanded: boolean
+  onToggle: () => void
+}
+
+function GroupHeader({ icon, label, count, isExpanded, onToggle }: GroupHeaderProps) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onToggle}
+      sx={{
+        display: "flex",
+        width: "100%",
+        alignItems: "center",
+        gap: 0.75,
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        font: "inherit",
+        borderRadius: "5px",
+        px: 1,
+        py: 0.5,
+        textAlign: "left",
+        color: "text.secondary",
+        transition: "background-color var(--duration-fast) ease",
+        "&:hover": { bgcolor: "background.sidebarHover", color: "text.primary" },
+      }}
+    >
+      {isExpanded ? (
+        <ExpandMore sx={{ fontSize: 13, flexShrink: 0 }} />
+      ) : (
+        <ChevronRight sx={{ fontSize: 13, flexShrink: 0 }} />
+      )}
+      <Box sx={{ display: "flex", flexShrink: 0 }}>{icon}</Box>
+      <Typography
+        component="span"
+        variant="caption"
+        sx={{ flex: 1, fontWeight: 600, textAlign: "left", fontSize: "0.75rem", color: "inherit" }}
+      >
+        {label}
+      </Typography>
+      <Typography variant="caption" sx={{ fontSize: "0.7rem", color: "text.tertiary" }}>
+        {count}
+      </Typography>
+    </Box>
+  )
+}
+
+// ── Main KnowledgeTree ────────────────────────────────────────────────────────
 export function KnowledgeTree() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
@@ -56,22 +261,29 @@ export function KnowledgeTree() {
   const navigateInCurrentTab = useWikiStore((s) => s.navigateInCurrentTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
   const fileTree = useWikiStore((s) => s.fileTree)
+
   const [pages, setPages] = useState<WikiPageInfo[]>([])
-  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set(["overview", "entity", "concept", "source"]))
+  const [expandedTypes, setExpandedTypes] = useState<Set<string>>(
+    new Set(["overview", "entity", "concept", "source"])
+  )
+  const [renamingPath, setRenamingPath] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{
+    x: number
+    y: number
+    page: WikiPageInfo
+  } | null>(null)
 
   const loadPages = useCallback(async () => {
     if (!project) return
     try {
       const wikiTree = await listDirectory(project.id, "wiki")
       const mdFiles = flattenMdFiles(wikiTree)
-
       const pageInfos: WikiPageInfo[] = []
       for (const file of mdFiles) {
         if (file.name === "index.md" || file.name === "log.md") continue
         try {
           const content = await readFile(project.id, file.relativePath)
-          const info = parsePageInfo(file.relativePath, file.name, content)
-          pageInfos.push(info)
+          pageInfos.push(parsePageInfo(file.relativePath, file.name, content))
         } catch {
           pageInfos.push({
             relativePath: file.relativePath,
@@ -81,31 +293,20 @@ export function KnowledgeTree() {
           })
         }
       }
-
       setPages(pageInfos)
     } catch {
       setPages([])
     }
   }, [project])
 
-  useEffect(() => {
-    loadPages()
-  }, [loadPages, fileTree])
+  useEffect(() => { loadPages() }, [loadPages, fileTree])
 
   if (!project) {
     return (
-      <Box
-        sx={{
-          display: "flex",
-          height: "100%",
-          alignItems: "center",
-          justifyContent: "center",
-          p: 2,
-          typography: "body2",
-          color: "text.secondary",
-        }}
-      >
-        {t("knowledgeTree.noProject")}
+      <Box sx={{ display: "flex", height: "100%", alignItems: "center", justifyContent: "center", p: 2 }}>
+        <Typography variant="body2" color="text.secondary" align="center">
+          {t("knowledgeTree.noProject")}
+        </Typography>
       </Box>
     )
   }
@@ -132,27 +333,51 @@ export function KnowledgeTree() {
     })
   }
 
+  function handleContextMenu(e: React.MouseEvent, page: WikiPageInfo) {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY, page })
+  }
+
+  function handleCloseContextMenu() {
+    setContextMenu(null)
+  }
+
+  function handleRenameSubmit(page: WikiPageInfo, newTitle: string) {
+    setRenamingPath(null)
+    // TODO: write new title to frontmatter via writeFile
+    if (newTitle.trim() && newTitle !== page.title) {
+      setPages((prev) =>
+        prev.map((p) => (p.relativePath === page.relativePath ? { ...p, title: newTitle.trim() } : p))
+      )
+    }
+  }
+
   return (
     <Box sx={{ height: "100%", overflow: "auto" }}>
-      <Box sx={{ p: 1 }}>
+      {/* Project name header */}
+      <Box sx={{ px: 2, pt: 2, pb: 0.5 }}>
         <Typography
           variant="caption"
           sx={{
-            display: "block",
-            mb: 1,
-            px: 1,
             fontWeight: 600,
+            fontSize: "0.6875rem",
             textTransform: "uppercase",
+            letterSpacing: "0.06em",
             color: "text.secondary",
           }}
         >
           {project.name}
         </Typography>
+      </Box>
 
+      <Box sx={{ px: 1, pb: 2 }}>
         {sortedGroups.length === 0 && (
-          <Typography variant="caption" sx={{ display: "block", px: 1, py: 2, textAlign: "center", color: "text.secondary" }}>
-            {t("knowledgeTree.noPages")}
-          </Typography>
+          <Box sx={{ px: 1, py: 4, textAlign: "center" }}>
+            <Typography variant="caption" color="text.secondary">
+              {t("knowledgeTree.noPages")}
+            </Typography>
+          </Box>
         )}
 
         {sortedGroups.map(([type, items]) => {
@@ -161,79 +386,39 @@ export function KnowledgeTree() {
           const isExpanded = expandedTypes.has(type)
 
           return (
-            <Box key={type} sx={{ mb: 0.5 }}>
-              <Box
-                component="button"
-                type="button"
-                onClick={() => toggleType(type)}
-                sx={{
-                  display: "flex",
-                  width: "100%",
-                  alignItems: "center",
-                  gap: 0.75,
-                  border: "none",
-                  background: "none",
-                  cursor: "pointer",
-                  font: "inherit",
-                  borderRadius: 1,
-                  px: 1,
-                  py: 0.75,
-                  textAlign: "left",
-                  "&:hover": { bgcolor: "action.hover" },
-                }}
-              >
-                {isExpanded ? (
-                  <ExpandMore sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
-                ) : (
-                  <ChevronRight sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
-                )}
-                <Icon sx={{ fontSize: 14, flexShrink: 0, color: config.iconColor }} />
-                <Typography component="span" variant="body2" sx={{ flex: 1, fontWeight: 500, textAlign: "left" }}>
-                  {t(config.labelKey)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {items.length}
-                </Typography>
-              </Box>
+            <Box key={type} sx={{ mb: 0.25 }}>
+              <GroupHeader
+                icon={<Icon sx={{ fontSize: 13, color: config.iconColor }} />}
+                label={t(config.labelKey)}
+                count={items.length}
+                isExpanded={isExpanded}
+                onToggle={() => toggleType(type)}
+              />
 
               {isExpanded && (
-                <Box sx={{ ml: 1.5 }}>
-                  {items.map((page) => {
-                    const isSelected = activeTabPath === page.relativePath
-                    return (
-                      <Box
-                        key={page.relativePath}
-                        component="button"
-                        type="button"
-                        aria-current={isSelected ? "page" : undefined}
-                        onClick={() => { navigateInCurrentTab(page.relativePath); setActiveView("wiki") }}
-                        title={page.relativePath}
-                        sx={{
-                          display: "flex",
-                          width: "100%",
-                          alignItems: "center",
-                          gap: 0.75,
-                          border: "none",
-                          borderRadius: 1,
-                          px: 1,
-                          py: 0.5,
-                          background: isSelected ? "action.selected" : "none",
-                          cursor: "pointer",
-                          font: "inherit",
-                          textAlign: "left",
-                          color: isSelected ? "text.primary" : "text.secondary",
-                          "&:hover": { bgcolor: "action.hover", color: "text.primary" },
-                        }}
-                      >
-                        {page.origin === "web-clip" && (
-                          <Public sx={{ fontSize: 12, flexShrink: 0, color: "info.light" }} />
-                        )}
-                        <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                          {page.title}
-                        </Typography>
-                      </Box>
-                    )
-                  })}
+                <Box>
+                  {items.map((page) => (
+                    <TreeItem
+                      key={page.relativePath}
+                      label={page.title}
+                      isSelected={activeTabPath === page.relativePath}
+                      isRenaming={renamingPath === page.relativePath}
+                      depth={1}
+                      icon={
+                        page.origin === "web-clip"
+                          ? <Public sx={{ fontSize: 11, color: "info.light" }} />
+                          : undefined
+                      }
+                      onClick={() => {
+                        navigateInCurrentTab(page.relativePath)
+                        setActiveView("wiki")
+                      }}
+                      onDoubleClick={() => setRenamingPath(page.relativePath)}
+                      onRenameSubmit={(newTitle) => handleRenameSubmit(page, newTitle)}
+                      onContextMenu={(e) => handleContextMenu(e, page)}
+                      onMoreClick={(e) => handleContextMenu(e, page)}
+                    />
+                  ))}
                 </Box>
               )}
             </Box>
@@ -242,10 +427,45 @@ export function KnowledgeTree() {
 
         <RawSourcesSection />
       </Box>
+
+      {/* Context menu */}
+      <Menu
+        open={Boolean(contextMenu)}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={contextMenu ? { top: contextMenu.y, left: contextMenu.x } : undefined}
+        slotProps={{
+          paper: {
+            sx: { minWidth: 180 },
+          },
+        }}
+      >
+        <MenuItem
+          onClick={() => {
+            if (contextMenu) setRenamingPath(contextMenu.page.relativePath)
+            handleCloseContextMenu()
+          }}
+        >
+          <DriveFileRenameOutline sx={{ fontSize: 14, mr: 1.5 }} />
+          重命名
+        </MenuItem>
+        <Divider sx={{ my: 0.25 }} />
+        <MenuItem
+          onClick={() => {
+            // TODO: delete file
+            handleCloseContextMenu()
+          }}
+          sx={{ color: "error.main" }}
+        >
+          <DeleteOutlined sx={{ fontSize: 14, mr: 1.5 }} />
+          删除
+        </MenuItem>
+      </Menu>
     </Box>
   )
 }
 
+// ── Raw Sources section ───────────────────────────────────────────────────────
 function RawSourcesSection() {
   const { t } = useTranslation()
   const project = useWikiStore((s) => s.project)
@@ -265,80 +485,37 @@ function RawSourcesSection() {
   if (sources.length === 0) return null
 
   return (
-    <Box sx={{ mt: 1, borderTop: 1, borderColor: "divider", pt: 1 }}>
-      <Box
-        component="button"
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        sx={{
-          display: "flex",
-          width: "100%",
-          alignItems: "center",
-          gap: 0.75,
-          border: "none",
-          background: "none",
-          cursor: "pointer",
-          font: "inherit",
-          borderRadius: 1,
-          px: 1,
-          py: 0.75,
-          textAlign: "left",
-          "&:hover": { bgcolor: "action.hover" },
-        }}
-      >
-        {expanded ? (
-          <ExpandMore sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
-        ) : (
-          <ChevronRight sx={{ fontSize: 14, flexShrink: 0, color: "text.secondary" }} />
-        )}
-        <MenuBook sx={{ fontSize: 14, flexShrink: 0, color: "warning.dark" }} />
-        <Typography component="span" variant="body2" sx={{ flex: 1, fontWeight: 500, textAlign: "left", color: "text.secondary" }}>
-          {t("knowledgeTree.rawSources")}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {sources.length}
-        </Typography>
-      </Box>
+    <Box sx={{ mt: 0.5, pt: 0.5, borderTop: "1px solid", borderColor: "divider" }}>
+      <GroupHeader
+        icon={<MenuBook sx={{ fontSize: 13, color: "#0891b2" }} />}
+        label={t("knowledgeTree.rawSources")}
+        count={sources.length}
+        isExpanded={expanded}
+        onToggle={() => setExpanded((v) => !v)}
+      />
       {expanded && (
-        <Box sx={{ ml: 1.5 }}>
-          {sources.map((file) => {
-            const isSelected = activeTabPath === file.relativePath
-            return (
-              <Box
-                key={file.relativePath}
-                component="button"
-                type="button"
-                aria-current={isSelected ? "page" : undefined}
-                onClick={() => { navigateInCurrentTab(file.relativePath); setActiveView("wiki") }}
-                sx={{
-                  display: "flex",
-                  width: "100%",
-                  alignItems: "center",
-                  gap: 0.75,
-                  border: "none",
-                  borderRadius: 1,
-                  px: 1,
-                  py: 0.5,
-                  background: isSelected ? "action.selected" : "none",
-                  cursor: "pointer",
-                  font: "inherit",
-                  textAlign: "left",
-                  color: isSelected ? "text.primary" : "text.secondary",
-                  "&:hover": { bgcolor: "action.hover", color: "text.primary" },
-                }}
-              >
-                <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                  {file.name}
-                </Typography>
-              </Box>
-            )
-          })}
+        <Box>
+          {sources.map((file) => (
+            <TreeItem
+              key={file.relativePath}
+              label={file.name}
+              isSelected={activeTabPath === file.relativePath}
+              isRenaming={false}
+              depth={1}
+              onClick={() => { navigateInCurrentTab(file.relativePath); setActiveView("wiki") }}
+              onDoubleClick={() => {}}
+              onRenameSubmit={() => {}}
+              onContextMenu={() => {}}
+              onMoreClick={() => {}}
+            />
+          ))}
         </Box>
       )}
     </Box>
   )
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function parsePageInfo(relativePath: string, fileName: string, content: string): WikiPageInfo {
   let type = "other"
   let title = canonicalTitleFromFileName(fileName)
@@ -364,8 +541,6 @@ function parsePageInfo(relativePath: string, fileName: string, content: string):
     if (originMatch) origin = originMatch[1].trim()
   }
 
-  // Canonical typing is path-first. This prevents incorrect frontmatter type
-  // from mis-grouping pages (e.g. overview.md accidentally marked as source).
   if (fileName === "overview.md") type = "overview"
   else if (relativePath.includes("/entities/")) type = "entity"
   else if (relativePath.includes("/concepts/")) type = "concept"
@@ -375,8 +550,6 @@ function parsePageInfo(relativePath: string, fileName: string, content: string):
   else if (relativePath.includes("/synthesis/")) type = "synthesis"
   else if (frontmatterType) type = frontmatterType
 
-  // Canonical title is path-first for source/entity/concept pages to avoid
-  // dirty frontmatter causing label/path mismatch in sidebar.
   if (type === "overview") {
     if (!title || /^overview$/i.test(title)) title = "Wiki 总览"
   } else if (
@@ -392,11 +565,8 @@ function parsePageInfo(relativePath: string, fileName: string, content: string):
 function flattenMdFiles(nodes: FileNode[]): FileNode[] {
   const files: FileNode[] = []
   for (const node of nodes) {
-    if (node.is_dir && node.children) {
-      files.push(...flattenMdFiles(node.children))
-    } else if (!node.is_dir && node.name.endsWith(".md")) {
-      files.push(node)
-    }
+    if (node.is_dir && node.children) files.push(...flattenMdFiles(node.children))
+    else if (!node.is_dir && node.name.endsWith(".md")) files.push(node)
   }
   return files
 }
@@ -404,11 +574,8 @@ function flattenMdFiles(nodes: FileNode[]): FileNode[] {
 function flattenAllFiles(nodes: FileNode[]): FileNode[] {
   const files: FileNode[] = []
   for (const node of nodes) {
-    if (node.is_dir && node.children) {
-      files.push(...flattenAllFiles(node.children))
-    } else if (!node.is_dir && !node.relativePath.endsWith(".cache.txt")) {
-      files.push(node)
-    }
+    if (node.is_dir && node.children) files.push(...flattenAllFiles(node.children))
+    else if (!node.is_dir && !node.relativePath.endsWith(".cache.txt")) files.push(node)
   }
   return files
 }

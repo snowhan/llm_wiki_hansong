@@ -1,4 +1,5 @@
 export type { ChatMessage, ContentPart } from "./llm-providers"
+import { apiStream } from "@/lib/api-client"
 
 export interface StreamCallbacks {
   onToken: (token: string) => void
@@ -44,19 +45,9 @@ export async function streamChat(
     combinedSignal = timeoutController.signal
   }
 
-  const { getStoredToken } = await import("@/lib/auth")
-  const token = getStoredToken()
-  const headers: Record<string, string> = { "Content-Type": "application/json" }
-  if (token) headers["Authorization"] = `Bearer ${token}`
-
   let response: Response
   try {
-    response = await fetch("/api/llm/stream", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ messages }),
-      signal: combinedSignal,
-    })
+    response = await apiStream("/api/llm/stream", { messages }, combinedSignal)
   } catch (err) {
     if (err instanceof Error && (err.name === "AbortError" || err.message === "Load failed")) {
       if (signal?.aborted) {
@@ -67,18 +58,6 @@ export async function streamChat(
       return
     }
     onError(err instanceof Error ? err : new Error(String(err)))
-    return
-  }
-
-  if (!response.ok) {
-    let errorDetail = `HTTP ${response.status}: ${response.statusText}`
-    try {
-      const body = await response.text()
-      if (body) errorDetail += ` — ${body}`
-    } catch {
-      // ignore body read failure
-    }
-    onError(new Error(errorDetail))
     return
   }
 

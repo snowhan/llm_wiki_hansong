@@ -40,12 +40,12 @@ export function SidebarPanel() {
               borderRadius: "8px",
               fontSize: "0.75rem",
               fontWeight: mode === tab.value ? 600 : 500,
-              color: mode === tab.value ? "#C2410C" : "text.tertiary",
-              bgcolor: mode === tab.value ? "rgba(194, 65, 12, 0.06)" : "transparent",
+              color: mode === tab.value ? "primary.main" : "text.tertiary",
+              bgcolor: mode === tab.value ? "rgba(35,131,226,0.06)" : "transparent",
               transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
               "&:hover": {
-                bgcolor: mode === tab.value ? "rgba(194, 65, 12, 0.08)" : "rgba(28,25,23,0.04)",
-                color: mode === tab.value ? "#C2410C" : "text.secondary",
+                bgcolor: mode === tab.value ? "rgba(35,131,226,0.08)" : "background.sidebarHover",
+                color: mode === tab.value ? "primary.main" : "text.secondary",
               },
             }}
           >

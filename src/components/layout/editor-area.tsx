@@ -369,7 +369,7 @@ export function EditorArea() {
                   fontSize: "0.75rem",
                   borderColor: "rgba(55,53,47,0.15)",
                   color: "text.secondary",
-                  "&:hover": { borderColor: "rgba(194,65,12,0.4)", color: "#C2410C", bgcolor: "rgba(194,65,12,0.04)" },
+                  "&:hover": { borderColor: "primary.main", color: "primary.main", bgcolor: "rgba(35,131,226,0.04)" },
                 }}
               >
                 {t("editor.goToSources")}

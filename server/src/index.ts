@@ -6,24 +6,36 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { config } from "./config.js"
 import { runMigrations } from "./db/migrate.js"
+import { migrateFileStateToDb } from "./services/state-service.js"
 import { errorHandler } from "./middleware/error-handler.js"
 import { requireMember, requireAdmin } from "./middleware/auth-guards.js"
 import authRouter from "./routes/auth.js"
 import adminUsersRouter from "./routes/admin-users.js"
 import fsRouter from "./routes/fs.js"
 import projectRouter from "./routes/project.js"
+import { listProjects } from "./services/project-service.js"
 import stateRouter from "./routes/state.js"
 import mediaRouter from "./routes/media.js"
 import llmRouter from "./routes/llm.js"
 import vectorRouter from "./routes/vector.js"
 import preprocessRouter from "./routes/preprocess.js"
 import ingestRouter from "./routes/ingest.js"
+import researchRouter from "./routes/research.js"
 import adminRouter from "./routes/admin.js"
 import mappingCheckRouter from "./routes/mapping-check.js"
 import llmDebugRouter from "./routes/llm-debug.js"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
+
+// Strip the /wiki base-path prefix so that API routes and static files resolve
+// correctly in production (mirrors what the Vite dev-server proxy does in dev).
+app.use((req, _res, next) => {
+  if (req.url === "/wiki" || req.url.startsWith("/wiki/")) {
+    req.url = req.url.slice(5) || "/"
+  }
+  next()
+})
 
 app.use(cors({ origin: config.corsOrigin, credentials: true }))
 app.use(express.json({ limit: "50mb" }))
@@ -48,12 +60,21 @@ function wikiReadPublicGuard(req: Request, res: Response, next: NextFunction): v
 }
 app.use("/api/fs", wikiReadPublicGuard, fsRouter)
 
-// ── 4. Project listing — public (needed to show wiki without login) ───────────
-app.get("/api/project", projectRouter)
-app.use("/api/project", requireMember, projectRouter)
+// ── 4. Project routes ─────────────────────────────────────────────────────────
+//    Public  : GET /api/project/list  (guests can see the project list)
+//    Admin+  : GET /api/project/browse, POST /api/project/create, POST /api/project/open
+//              (these access raw server filesystem paths — admin-only for security)
+app.get("/api/project/list", async (_req, res, next) => {
+  try {
+    const projects = await listProjects()
+    res.json(projects)
+  } catch (err) { next(err) }
+})
+app.use("/api/project", requireAdmin, projectRouter)
 
 // ── 5. Member routes ──────────────────────────────────────────────────────────
 app.use("/api/ingest", requireMember, ingestRouter)
+app.use("/api/research", requireMember, researchRouter)
 app.use("/api/preprocess", requireMember, preprocessRouter)
 app.use("/api/vector", requireMember, vectorRouter)
 
@@ -94,6 +115,7 @@ process.on("SIGINT", () => {
 })
 
 runMigrations()
+  .then(() => migrateFileStateToDb())
   .then(() => {
     app.listen(config.port, () => {
       console.log(`[llm-wiki-server] running on http://localhost:${config.port}`)

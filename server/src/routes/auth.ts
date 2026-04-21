@@ -8,18 +8,28 @@ const router = Router()
 
 const REFRESH_TOKEN_COOKIE = "refresh_token"
 
+// COOKIE_SECURE=true  → only send cookie over HTTPS (recommended for production behind nginx/TLS)
+// COOKIE_SECURE=false → send cookie over HTTP too (required for local HTTP deployments)
+// unset              → auto-detect: true in production, false in development
+function isCookieSecure(): boolean {
+  const env = process.env.COOKIE_SECURE
+  if (env === "true") return true
+  if (env === "false") return false
+  return process.env.NODE_ENV === "production"
+}
+
 function setCookieRefreshToken(res: Response, token: string, expiresInDays: number): void {
   res.cookie(REFRESH_TOKEN_COOKIE, token, {
     httpOnly: true,
     sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    secure: isCookieSecure(),
     maxAge: expiresInDays * 24 * 60 * 60 * 1000,
-    path: "/api/auth",
+    path: "/",
   })
 }
 
 function clearCookieRefreshToken(res: Response): void {
-  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/api/auth" })
+  res.clearCookie(REFRESH_TOKEN_COOKIE, { path: "/", secure: isCookieSecure(), sameSite: "strict" })
 }
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────

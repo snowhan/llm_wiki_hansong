@@ -1,11 +1,19 @@
+import { useState } from "react"
 import Box from "@mui/material/Box"
 import Stack from "@mui/material/Stack"
 import Typography from "@mui/material/Typography"
 import Tooltip from "@mui/material/Tooltip"
 import IconButton from "@mui/material/IconButton"
 import SmartToyOutlined from "@mui/icons-material/SmartToyOutlined"
+import LightMode from "@mui/icons-material/LightMode"
+import DarkMode from "@mui/icons-material/DarkMode"
+import SettingsBrightness from "@mui/icons-material/SettingsBrightness"
+import KeyboardOutlined from "@mui/icons-material/KeyboardOutlined"
+import { useColorScheme } from "@mui/material/styles"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useTranslation } from "react-i18next"
+import { KeyboardShortcutsOverlay } from "@/components/keyboard-shortcuts-overlay"
+import type { ColorScheme } from "@/stores/wiki-store"
 
 const VIEW_LABELS: Record<string, string> = {
   sources: "nav.sources",
@@ -15,6 +23,14 @@ const VIEW_LABELS: Record<string, string> = {
   settings: "nav.settings",
 }
 
+const COLOR_SCHEME_ICONS: Record<ColorScheme, typeof LightMode> = {
+  light:  LightMode,
+  dark:   DarkMode,
+  system: SettingsBrightness,
+}
+
+const COLOR_SCHEME_CYCLE: ColorScheme[] = ["light", "dark", "system"]
+
 export function MainToolbar() {
   const { t } = useTranslation()
   const activeView = useWikiStore((s) => s.activeView)
@@ -22,6 +38,21 @@ export function MainToolbar() {
   const project = useWikiStore((s) => s.project)
   const chatExpanded = useWikiStore((s) => s.chatExpanded)
   const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
+  const colorScheme = useWikiStore((s) => s.colorScheme)
+  const setColorScheme = useWikiStore((s) => s.setColorScheme)
+  const { setMode } = useColorScheme()
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+
+  function cycleColorScheme() {
+    const idx = COLOR_SCHEME_CYCLE.indexOf(colorScheme)
+    const next = COLOR_SCHEME_CYCLE[(idx + 1) % COLOR_SCHEME_CYCLE.length]
+    // Update wiki-store (for icon sync + persistence) AND MUI directly (for immediate visual effect)
+    setColorScheme(next)
+    setMode(next)
+  }
+
+  const ColorSchemeIcon = COLOR_SCHEME_ICONS[colorScheme]
+  const colorSchemeLabel = { light: "浅色", dark: "深色", system: "系统" }[colorScheme]
 
   // Build breadcrumb from activeTabPath (already relative)
   const buildBreadcrumb = (): string[] => {
@@ -89,30 +120,60 @@ export function MainToolbar() {
         )}
       </Stack>
 
-      {/* Right: AI Chat toggle */}
-      <Tooltip title={chatExpanded ? t("chat.hidePanel") : t("chat.showPanel")} placement="bottom" enterDelay={400}>
-        <IconButton
-          size="small"
-          onClick={() => setChatExpanded(!chatExpanded)}
-          sx={{
-            flexShrink: 0,
-            width: 28,
-            height: 28,
-            borderRadius: "8px",
-            color: chatExpanded ? "primary.main" : "text.secondary",
-            bgcolor: chatExpanded ? "rgba(194, 65, 12, 0.08)" : "transparent",
-            border: chatExpanded ? "1px solid" : "1px solid transparent",
-            borderColor: chatExpanded ? "rgba(194, 65, 12, 0.25)" : "transparent",
-            transition: "all 0.2s ease",
-            "&:hover": {
-              bgcolor: chatExpanded ? "rgba(194, 65, 12, 0.12)" : "action.hover",
-              color: chatExpanded ? "primary.main" : "text.primary",
-            },
-          }}
-        >
-          <SmartToyOutlined sx={{ fontSize: 16 }} />
-        </IconButton>
-      </Tooltip>
+      {/* Right: actions */}
+      <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0, alignItems: "center" }}>
+        {/* Theme toggle */}
+        <Tooltip title={`主题: ${colorSchemeLabel} (点击切换)`} placement="bottom" enterDelay={400}>
+          <IconButton
+            size="small"
+            onClick={cycleColorScheme}
+            sx={{
+              width: 28, height: 28, borderRadius: "6px",
+              color: "text.secondary",
+              transition: "background-color var(--duration-fast) ease, color var(--duration-fast) ease",
+              "&:hover": { bgcolor: "background.sidebarHover", color: "text.primary" },
+            }}
+          >
+            <ColorSchemeIcon sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* Keyboard shortcuts help */}
+        <Tooltip title="键盘快捷键 (⌘/)" placement="bottom" enterDelay={400}>
+          <IconButton
+            size="small"
+            onClick={() => setShortcutsOpen(true)}
+            sx={{
+              width: 28, height: 28, borderRadius: "6px",
+              color: "text.secondary",
+              "&:hover": { bgcolor: "background.sidebarHover", color: "text.primary" },
+            }}
+          >
+            <KeyboardOutlined sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+
+        {/* AI Chat toggle */}
+        <Tooltip title={chatExpanded ? t("chat.hidePanel") : t("chat.showPanel")} placement="bottom" enterDelay={400}>
+          <IconButton
+            size="small"
+            onClick={() => setChatExpanded(!chatExpanded)}
+            sx={{
+              width: 28,
+              height: 28,
+              borderRadius: "6px",
+              color: chatExpanded ? "primary.main" : "text.secondary",
+              bgcolor: chatExpanded ? "rgba(35,131,226,0.10)" : "transparent",
+              transition: "background-color var(--duration-fast) ease",
+              "&:hover": { bgcolor: chatExpanded ? "rgba(35,131,226,0.14)" : "background.sidebarHover" },
+            }}
+          >
+            <SmartToyOutlined sx={{ fontSize: 15 }} />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      <KeyboardShortcutsOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
     </Box>
   )
 }

@@ -6,10 +6,14 @@ import ExpandMore from "@mui/icons-material/ExpandMore"
 import InsertDriveFileOutlined from "@mui/icons-material/InsertDriveFileOutlined"
 import FolderOutlined from "@mui/icons-material/FolderOutlined"
 import { useWikiStore } from "@/stores/wiki-store"
+import { useAuthStore } from "@/stores/auth-store"
 import type { FileNode } from "@/types/wiki"
 import { useTranslation } from "react-i18next"
 
-function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
+/** Folders visible only to admin users. */
+const ADMIN_ONLY_FOLDERS = new Set(["logs", "深度研究"])
+
+function TreeNode({ node, depth, isAdmin }: { node: FileNode; depth: number; isAdmin: boolean }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(depth < 1)
   const activeTabPath = useWikiStore((s) => s.activeTabPath)
@@ -21,6 +25,9 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
 
   // Hide internal cache sidecar files
   if (!node.is_dir && node.relativePath.endsWith(".cache.txt")) return null
+
+  // Hide admin-only folders from non-admin users
+  if (node.is_dir && ADMIN_ONLY_FOLDERS.has(node.name) && !isAdmin) return null
 
   if (node.is_dir) {
     return (
@@ -56,7 +63,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
           </Typography>
         </Box>
         {expanded && node.children?.filter(c => !c.relativePath.endsWith(".cache.txt")).map((child) => (
-          <TreeNode key={child.relativePath} node={child} depth={depth + 1} />
+          <TreeNode key={child.relativePath} node={child} depth={depth + 1} isAdmin={isAdmin} />
         ))}
       </Box>
     )
@@ -96,6 +103,8 @@ export function FileTree() {
   const { t } = useTranslation()
   const fileTree = useWikiStore((s) => s.fileTree)
   const project = useWikiStore((s) => s.project)
+  const user = useAuthStore((s) => s.user)
+  const isAdmin = user?.role === "admin"
 
   if (!project) {
     return (
@@ -138,7 +147,7 @@ export function FileTree() {
           {project.name}
         </Typography>
         {fileTree.map((node) => (
-          <TreeNode key={node.relativePath} node={node} depth={0} />
+          <TreeNode key={node.relativePath} node={node} depth={0} isAdmin={isAdmin} />
         ))}
       </Box>
     </Box>

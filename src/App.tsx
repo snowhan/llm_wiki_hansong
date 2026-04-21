@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import Box from "@mui/material/Box"
 import Typography from "@mui/material/Typography"
@@ -22,6 +22,8 @@ import { WelcomeScreen } from "@/components/project/welcome-screen"
 import { AuthModal } from "@/components/auth/AuthModal"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
+import { CommandPalette } from "@/components/command-palette/command-palette"
+import { apiGet } from "@/lib/api-client"
 import type { WikiProject } from "@/types/wiki"
 
 function App() {
@@ -34,7 +36,30 @@ function App() {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showBrowseDialog, setShowBrowseDialog] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
+  const [showCommandPalette, setShowCommandPalette] = useState(false)
   const [loading, setLoading] = useState(true)
+  // Action to execute automatically once the user logs in
+  const [pendingPostLogin, setPendingPostLogin] = useState<null | "open" | "create">(null)
+  const [projectsRoot, setProjectsRoot] = useState("")
+
+  useEffect(() => {
+    apiGet<{ projectsRoot: string }>("/api/project/root")
+      .then(({ projectsRoot: root }) => setProjectsRoot(root))
+      .catch(() => {})
+  }, [])
+
+  // Global ⌘K / Ctrl+K shortcut for Command Palette
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      e.preventDefault()
+      setShowCommandPalette((prev) => !prev)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [handleKeyDown])
 
   const initializeAuth = useAuthStore((s) => s.initialize)
   const authUser = useAuthStore((s) => s.user)
@@ -132,8 +157,30 @@ function App() {
     }
   }
 
+  // After a successful login, automatically open the dialog the user originally requested
+  useEffect(() => {
+    if (!authUser || !pendingPostLogin) return
+    const action = pendingPostLogin
+    setPendingPostLogin(null)
+    if (action === "open") setShowBrowseDialog(true)
+    else if (action === "create") setShowCreateDialog(true)
+  }, [authUser, pendingPostLogin])
+
+  function requireAdminThen(action: "open" | "create") {
+    if (!authUser) {
+      setPendingPostLogin(action)
+      setShowAuthModal(true)
+      return false
+    }
+    return true
+  }
+
   function handleOpenProject() {
-    setShowBrowseDialog(true)
+    if (requireAdminThen("open")) setShowBrowseDialog(true)
+  }
+
+  function handleCreateProject() {
+    if (requireAdminThen("create")) setShowCreateDialog(true)
   }
 
   async function handleBrowseSelect(selectedPath: string) {
@@ -158,23 +205,23 @@ function App() {
         height: "100vh",
         alignItems: "center",
         justifyContent: "center",
-        bgcolor: "#141218",
-        color: "rgba(245,243,239,0.5)",
+        bgcolor: "background.default",
+        color: "text.secondary",
         flexDirection: "column",
         gap: 2,
       }}>
         <Box sx={{
           width: 48,
           height: 2,
-          bgcolor: "#C2410C",
+          bgcolor: "primary.main",
           borderRadius: 1,
-          animation: "loadPulse 2s ease-in-out infinite",
+          animation: "loadPulse 1.6s ease-in-out infinite",
           "@keyframes loadPulse": {
             "0%, 100%": { opacity: 0.3, width: 48 },
             "50%": { opacity: 1, width: 72 },
           },
         }} />
-        <Typography sx={{ fontSize: "0.8rem", letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>
+        <Typography variant="caption" sx={{ letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 500 }}>
           {t("app.loading")}
         </Typography>
       </Box>
@@ -185,7 +232,7 @@ function App() {
     return (
       <>
         <WelcomeScreen
-          onCreateProject={() => setShowCreateDialog(true)}
+          onCreateProject={handleCreateProject}
           onOpenProject={handleOpenProject}
           onSelectProject={handleSelectRecent}
           onLogin={() => setShowAuthModal(true)}
@@ -201,6 +248,7 @@ function App() {
           onClose={() => setShowBrowseDialog(false)}
           onSelect={handleBrowseSelect}
           title={t("app.openWikiProject")}
+          initialPath={projectsRoot || undefined}
         />
       </>
     )
@@ -219,7 +267,9 @@ function App() {
         onClose={() => setShowBrowseDialog(false)}
         onSelect={handleBrowseSelect}
         title={t("app.openWikiProject")}
+        initialPath={projectsRoot || undefined}
       />
+      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
     </>
   )
 }

@@ -73,57 +73,54 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
       slotProps={{
         backdrop: {
           sx: {
-            bgcolor: "rgba(8, 7, 12, 0.75)",
-            backdropFilter: "blur(8px)",
+            bgcolor: "rgba(55,53,47,0.45)",
+            backdropFilter: "blur(6px)",
           },
         },
         paper: {
           sx: {
-            width: 380,
-            borderRadius: "20px",
-            bgcolor: "#0F0D14",
+            width: 360,
+            borderRadius: "16px",
+            bgcolor: "background.paper",
             backgroundImage: "none",
-            border: "1px solid rgba(255,255,255,0.07)",
-            boxShadow: "0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
+            border: "1px solid",
+            borderColor: "divider",
+            boxShadow: 4,
             overflow: "hidden",
-            animation: "modalIn 0.35s cubic-bezier(0.16,1,0.3,1) both",
-            "@keyframes modalIn": {
-              "0%": { opacity: 0, transform: "translateY(24px) scale(0.97)" },
-              "100%": { opacity: 1, transform: "translateY(0) scale(1)" },
-            },
+            animation: "notion-scale-in 0.2s var(--ease-spring) both",
           },
         },
       }}
     >
-      {/* Copper accent bar at top */}
+      {/* Notion blue accent bar */}
       <Box sx={{
         height: 3,
-        background: "linear-gradient(90deg, transparent 0%, #C2410C 30%, #EA580C 60%, transparent 100%)",
-        opacity: 0.9,
+        background: "linear-gradient(90deg, transparent 0%, #2383E2 30%, #4B9FEA 60%, transparent 100%)",
+        opacity: 0.8,
       }} />
 
       <Box sx={{ px: 3.5, pt: 3.5, pb: 4 }}>
-        {/* Logo + Title */}
+        {/* Logo + title */}
         <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", mb: 3.5 }}>
           <Box sx={{
             width: 34,
             height: 34,
             borderRadius: "10px",
-            background: "linear-gradient(145deg, #C2410C, #EA580C)",
+            bgcolor: "primary.main",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            boxShadow: "0 4px 16px rgba(194,65,12,0.35)",
+            boxShadow: "0 4px 12px rgba(35,131,226,0.3)",
             flexShrink: 0,
           }}>
             <AutoStoriesIcon sx={{ fontSize: 17, color: "#fff" }} />
           </Box>
           <Box>
             <Typography sx={{
-              fontFamily: "'Playfair Display', Georgia, serif",
-              fontSize: "1.05rem",
+              fontFamily: "inherit",
+              fontSize: "1rem",
               fontWeight: 700,
-              color: "#F5F3EF",
+              color: "text.primary",
               letterSpacing: "-0.01em",
               lineHeight: 1.2,
             }}>
@@ -131,10 +128,9 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
             </Typography>
             <Typography sx={{
               fontSize: "0.7rem",
-              color: "rgba(245,243,239,0.3)",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
+              color: "text.secondary",
               lineHeight: 1,
+              mt: 0.25,
             }}>
               {tab === "login" ? t("auth.signInToContinue") : t("auth.createAccount")}
             </Typography>
@@ -148,14 +144,16 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
           />
         ) : (
           <>
-            {/* Custom tab switcher */}
+            {/* Tab switcher */}
             <Box sx={{
               display: "flex",
               position: "relative",
               mb: 3.5,
-              bgcolor: "rgba(255,255,255,0.04)",
+              bgcolor: "background.sidebar",
               borderRadius: "10px",
               p: "3px",
+              border: "1px solid",
+              borderColor: "divider",
             }}>
               {/* Sliding pill */}
               <Box sx={{
@@ -164,11 +162,12 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 left: tab === "login" ? 3 : "calc(50% + 1.5px)",
                 width: "calc(50% - 4.5px)",
                 height: "calc(100% - 6px)",
-                borderRadius: "8px",
-                bgcolor: "#1C1926",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                transition: "left 0.25s cubic-bezier(0.4,0,0.2,1)",
+                borderRadius: "7px",
+                bgcolor: "background.paper",
+                border: "1px solid",
+                borderColor: "divider",
+                boxShadow: 1,
+                transition: "left 0.22s cubic-bezier(0.4,0,0.2,1)",
               }} />
               {(["login", "register"] as AuthTab[]).map((v) => (
                 <Box
@@ -176,18 +175,17 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   onClick={() => handleTabChange(v)}
                   sx={{
                     flex: 1,
-                    py: 0.8,
+                    py: 0.75,
                     textAlign: "center",
                     cursor: "pointer",
                     position: "relative",
                     zIndex: 1,
                     fontSize: "0.8rem",
                     fontWeight: tab === v ? 600 : 400,
-                    color: tab === v ? "#F5F3EF" : "rgba(245,243,239,0.35)",
-                    letterSpacing: "0.04em",
+                    color: tab === v ? "text.primary" : "text.secondary",
                     transition: "color 0.2s",
                     userSelect: "none",
-                    borderRadius: "8px",
+                    borderRadius: "7px",
                   }}
                 >
                   {v === "login" ? t("auth.login") : t("auth.register")}
@@ -202,11 +200,11 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 px: 1.5,
                 py: 1,
                 borderRadius: "8px",
-                bgcolor: "rgba(239,68,68,0.08)",
-                border: "1px solid rgba(239,68,68,0.2)",
-                borderLeft: "3px solid rgba(239,68,68,0.7)",
+                bgcolor: "rgba(235,87,87,0.06)",
+                border: "1px solid rgba(235,87,87,0.2)",
+                borderLeft: "3px solid rgba(235,87,87,0.6)",
               }}>
-                <Typography sx={{ fontSize: "0.78rem", color: "rgba(252,165,165,0.9)", lineHeight: 1.5 }}>
+                <Typography sx={{ fontSize: "0.78rem", color: "error.main", lineHeight: 1.5 }}>
                   {error}
                 </Typography>
               </Box>
@@ -244,29 +242,27 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   sx={{
                     mt: 3.5,
                     width: "100%",
-                    py: 1.2,
+                    py: 1.1,
                     border: "none",
                     outline: "none",
                     borderRadius: "10px",
                     cursor: loading || !username || !password ? "not-allowed" : "pointer",
-                    background: loading || !username || !password
-                      ? "rgba(194,65,12,0.25)"
-                      : "linear-gradient(135deg, #C2410C 0%, #EA580C 100%)",
-                    color: loading || !username || !password ? "rgba(245,243,239,0.3)" : "#fff",
+                    bgcolor: loading || !username || !password ? "rgba(35,131,226,0.15)" : "primary.main",
+                    color: loading || !username || !password ? "text.disabled" : "#fff",
                     fontSize: "0.875rem",
                     fontWeight: 600,
-                    letterSpacing: "0.05em",
+                    letterSpacing: "0.01em",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 1,
-                    transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)",
+                    transition: "all 0.15s ease",
                     boxShadow: loading || !username || !password
                       ? "none"
-                      : "0 4px 20px rgba(194,65,12,0.3)",
+                      : "0 4px 14px rgba(35,131,226,0.25)",
                     "&:hover:not(:disabled)": {
-                      background: "linear-gradient(135deg, #B33A0A 0%, #D95208 100%)",
-                      boxShadow: "0 6px 28px rgba(194,65,12,0.45)",
+                      bgcolor: "primary.dark",
+                      boxShadow: "0 6px 20px rgba(35,131,226,0.35)",
                       transform: "translateY(-1px)",
                     },
                     "&:active:not(:disabled)": {
@@ -275,7 +271,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                   }}
                 >
                   {loading
-                    ? <CircularProgress size={16} sx={{ color: "rgba(245,243,239,0.5)" }} />
+                    ? <CircularProgress size={15} sx={{ color: "rgba(255,255,255,0.6)" }} />
                     : tab === "login" ? t("auth.loginButton") : t("auth.registerButton")
                   }
                 </Box>
@@ -290,38 +286,27 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
 function RegisterSuccess({ onBackToLogin, t }: { onBackToLogin: () => void; t: (k: string) => string }) {
   return (
-    <Stack spacing={2.5} sx={{ alignItems: "center",
+    <Stack spacing={2.5} sx={{
+      alignItems: "center",
       py: 2,
-      animation: "fadeIn 0.4s ease both",
-      "@keyframes fadeIn": { from: { opacity: 0, transform: "translateY(8px)" }, to: { opacity: 1, transform: "none" } },
+      animation: "notion-fade-in 0.4s ease both",
     }}>
-      {/* Animated check ring */}
       <Box sx={{
-        width: 56,
-        height: 56,
+        width: 52,
+        height: 52,
         borderRadius: "50%",
-        border: "2px solid rgba(34,197,94,0.4)",
+        border: "2px solid",
+        borderColor: "success.main",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        position: "relative",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          inset: -4,
-          borderRadius: "50%",
-          border: "1px solid rgba(34,197,94,0.15)",
-        },
+        opacity: 0.85,
       }}>
         <Box sx={{
-          fontSize: "1.5rem",
+          fontSize: "1.4rem",
           lineHeight: 1,
-          color: "#22C55E",
-          animation: "popIn 0.5s cubic-bezier(0.16,1,0.3,1) 0.1s both",
-          "@keyframes popIn": {
-            "0%": { transform: "scale(0)", opacity: 0 },
-            "100%": { transform: "scale(1)", opacity: 1 },
-          },
+          color: "success.main",
+          animation: "notion-scale-in 0.35s var(--ease-spring) 0.1s both",
         }}>
           ✓
         </Box>
@@ -329,17 +314,17 @@ function RegisterSuccess({ onBackToLogin, t }: { onBackToLogin: () => void; t: (
 
       <Box sx={{ textAlign: "center" }}>
         <Typography sx={{
-          fontFamily: "'Playfair Display', Georgia, serif",
-          fontSize: "1.1rem",
+          fontSize: "1rem",
           fontWeight: 700,
-          color: "#F5F3EF",
+          color: "text.primary",
           mb: 0.75,
+          letterSpacing: "-0.01em",
         }}>
           {t("auth.registerPendingTitle")}
         </Typography>
         <Typography sx={{
           fontSize: "0.8rem",
-          color: "rgba(245,243,239,0.4)",
+          color: "text.secondary",
           lineHeight: 1.6,
           maxWidth: 260,
         }}>
@@ -353,19 +338,19 @@ function RegisterSuccess({ onBackToLogin, t }: { onBackToLogin: () => void; t: (
         sx={{
           mt: 0.5,
           px: 3,
-          py: 0.8,
-          border: "1px solid rgba(255,255,255,0.1)",
+          py: 0.75,
+          border: "1px solid",
+          borderColor: "divider",
           borderRadius: "8px",
           bgcolor: "transparent",
-          color: "rgba(245,243,239,0.6)",
+          color: "text.secondary",
           fontSize: "0.78rem",
-          letterSpacing: "0.04em",
           cursor: "pointer",
-          transition: "all 0.2s",
+          transition: "all 0.15s ease",
           "&:hover": {
-            borderColor: "rgba(255,255,255,0.2)",
-            color: "#F5F3EF",
-            bgcolor: "rgba(255,255,255,0.04)",
+            borderColor: "primary.main",
+            color: "primary.main",
+            bgcolor: "rgba(35,131,226,0.04)",
           },
         }}
       >
@@ -378,46 +363,43 @@ function RegisterSuccess({ onBackToLogin, t }: { onBackToLogin: () => void; t: (
 const inputSx = {
   width: "100%",
   "& .MuiInput-root": {
-    color: "#1A1726",
-    fontSize: "0.95rem",
-    letterSpacing: "0.01em",
+    fontSize: "0.9rem",
+    color: "text.primary",
     "&::before": {
-      borderBottomColor: "rgba(26,23,38,0.18)",
+      borderBottomColor: "divider",
       transition: "border-color 0.2s",
     },
     "&:hover:not(.Mui-disabled)::before": {
-      borderBottomColor: "rgba(26,23,38,0.35)",
+      borderBottomColor: "text.secondary",
     },
     "&::after": {
-      borderBottomColor: "#C2410C",
-      transition: "transform 0.2s cubic-bezier(0.4,0,0.2,1)",
+      borderBottomColor: "primary.main",
     },
   },
   "& .MuiInput-input": {
-    color: "#1A1726",
-    caretColor: "#C2410C",
+    color: "text.primary",
+    caretColor: "#2383E2",
     "&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus": {
-      WebkitBoxShadow: "0 0 0 100px #fff inset",
-      WebkitTextFillColor: "#1A1726",
-      caretColor: "#C2410C",
+      WebkitBoxShadow: "0 0 0 100px transparent inset",
+      WebkitTextFillColor: "inherit",
+      caretColor: "#2383E2",
       transition: "background-color 9999s ease-in-out 0s",
     },
   },
   "& .MuiInputLabel-root": {
-    color: "rgba(26,23,38,0.4)",
+    color: "text.secondary",
     fontSize: "0.78rem",
-    letterSpacing: "0.1em",
-    textTransform: "uppercase",
+    letterSpacing: "0.04em",
     fontWeight: 500,
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#C2410C",
+    color: "primary.main",
   },
   "& .MuiInputLabel-shrink": {
-    color: "rgba(26,23,38,0.5)",
+    color: "text.secondary",
   },
   "& .MuiFormHelperText-root": {
-    color: "rgba(245,243,239,0.25)",
+    color: "text.disabled",
     fontSize: "0.7rem",
     mt: 0.5,
   },

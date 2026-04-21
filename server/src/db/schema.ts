@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, uuid, text, timestamp, jsonb } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -20,7 +20,14 @@ export const refreshTokens = pgTable("refresh_tokens", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
 export type RefreshToken = typeof refreshTokens.$inferSelect
 export type NewRefreshToken = typeof refreshTokens.$inferInsert
+export type AppSetting = typeof appSettings.$inferSelect

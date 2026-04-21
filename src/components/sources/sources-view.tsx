@@ -1188,7 +1188,7 @@ function SourceTree({
                 ) : (
                   <ExpandMoreIcon sx={{ fontSize: 14, flexShrink: 0 }} />
                 )}
-                <FolderIcon sx={{ fontSize: 18, flexShrink: 0, color: "warning.main" }} />
+                <FolderIcon sx={{ fontSize: 18, flexShrink: 0, color: "primary.main" }} />
                 <Typography variant="body2" sx={{ flex: 1, minWidth: 0, textAlign: "left" }} noWrap>
                   {t(`folderNames.${node.name}`, { defaultValue: node.name })}
                 </Typography>
@@ -1203,7 +1203,7 @@ function SourceTree({
                       sx={{
                         fontSize: "10px",
                         fontWeight: 500,
-                        color: ppProcessing > 0 ? "#C2410C"
+                        color: ppProcessing > 0 ? "#2383E2"
                           : ppDone === total && total > 0 ? "#65a30d"
                           : "text.secondary",
                         opacity: 0.75,
@@ -1310,7 +1310,7 @@ function SourceTree({
                 sx={{
                   fontSize: 18,
                   flexShrink: 0,
-                  color: isProcessing ? "#C2410C" : "inherit",
+                  color: isProcessing ? "#2383E2" : "inherit",
                   opacity: isProcessing ? 0.8 : 1,
                   animation: isProcessing ? "preprocess-pulse 1.4s ease-in-out infinite" : "none",
                 }}
@@ -1419,7 +1419,7 @@ function StatusDot({ status }: { status: PreprocessStatus | IngestStatus | undef
   }
 
   const colorMap: Record<string, string> = {
-    processing: "#C2410C",
+    processing: "#2383E2",
     ingesting: "#7c3aed",
     interrupted: "#d97706",
     done: "#65a30d",

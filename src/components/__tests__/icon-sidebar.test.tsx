@@ -3,6 +3,16 @@ import { render, screen, fireEvent } from "@testing-library/react"
 import { IconSidebar } from "../layout/icon-sidebar"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useResearchStore } from "@/stores/research-store"
+import { useAuthStore } from "@/stores/auth-store"
+
+const ADMIN_USER = {
+  id: "u1",
+  username: "admin",
+  role: "admin" as const,
+  status: "active",
+  createdAt: "2024-01-01",
+  updatedAt: "2024-01-01",
+}
 
 describe("IconSidebar", () => {
   beforeEach(() => {
@@ -26,14 +36,24 @@ describe("IconSidebar", () => {
       embeddingConfig: { enabled: false, endpoint: "", apiKey: "", model: "" },
     } as any)
     useResearchStore.setState({ panelOpen: false, tasks: [] })
+    // Explicitly set admin user so access rules are deterministic
+    useAuthStore.setState({ user: ADMIN_USER, accessToken: "tok", isInitializing: false })
   })
 
-  it("renders nav buttons for all views", () => {
+  it("renders nav buttons for all views (admin user)", () => {
     render(<IconSidebar onSwitchProject={() => {}} />)
     const buttons = screen.getAllByRole("button")
-    // 6 main nav + 1 research + 1 settings + 1 switch project = 9
-    expect(buttons.length).toBe(9)
-    expect(buttons.slice(0, 6).every((b) => b.className.includes("MuiIconButton"))).toBe(true)
+    // admin: 6 nav + 1 research + 1 settings + 1 account + 1 switch-project = 10
+    expect(buttons.length).toBe(10)
+    expect(buttons.every((b) => b.className.includes("MuiIconButton"))).toBe(true)
+  })
+
+  it("renders fewer nav buttons for anonymous user", () => {
+    useAuthStore.setState({ user: null, accessToken: null, isInitializing: false })
+    render(<IconSidebar onSwitchProject={() => {}} />)
+    const buttons = screen.getAllByRole("button")
+    // anonymous: 3 nav (wiki, search, graph) + 1 research + 1 login + 1 switch = 6
+    expect(buttons.length).toBe(6)
   })
 
   it("active view has highlighted style", () => {
