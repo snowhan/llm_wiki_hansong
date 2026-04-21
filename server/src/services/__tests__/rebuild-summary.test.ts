@@ -7,6 +7,7 @@ import { describe, it, expect } from "vitest"
 import {
   startRebuildSummaryTask,
   getRebuildSummaryTask,
+  buildRebuildSummaryPrompt,
   type RebuildSummaryTask,
 } from "../ingest-service.js"
 
@@ -56,5 +57,21 @@ describe("getRebuildSummaryTask", () => {
   it("未知 taskId 返回 undefined", () => {
     const task = getRebuildSummaryTask("non-existent-id-xyz")
     expect(task).toBeUndefined()
+  })
+})
+
+// ── OPT-05: buildRebuildSummaryPrompt 带 description 字段 ────────────────────
+
+describe("OPT-05: buildRebuildSummaryPrompt 带 description", () => {
+  it("pageListing 中包含 desc: 字段时，prompt 原样传入该内容", () => {
+    const listing = "[entity] [[珠海奥乐医院]] — 珠海奥乐医院 | desc: 珠海体检机构"
+    const prompt = buildRebuildSummaryPrompt(listing)
+    expect(prompt).toContain("珠海体检机构")
+    expect(prompt).toContain("desc:")
+  })
+
+  it("prompt 说明 desc 字段是页面描述，供 LLM 理解内容", () => {
+    const prompt = buildRebuildSummaryPrompt("[entity] [[foo]] — foo | desc: bar description")
+    expect(prompt).toMatch(/desc.*description|description.*desc/i)
   })
 })

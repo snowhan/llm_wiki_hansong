@@ -311,15 +311,29 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
 
   const allWikiFiles = await collectMdFiles(wikiDir, wikiDir)
   const stats = { source: 0, entity: 0, concept: 0, other: 0 }
+  const entitySlugs: string[] = []
+  const conceptSlugs: string[] = []
+
   for (const relPath of allWikiFiles) {
     if (INDEX_SKIP.has(path.basename(relPath))) continue
     const content = await tryRead(path.join(wikiDir, relPath))
     const type = extractFmField(content, "type")
     if (type === "source") stats.source += 1
-    else if (type === "entity") stats.entity += 1
-    else if (type === "concept") stats.concept += 1
-    else stats.other += 1
+    else if (type === "entity") {
+      stats.entity += 1
+      const slug = path.basename(relPath, ".md")
+      entitySlugs.push(slug)
+    } else if (type === "concept") {
+      stats.concept += 1
+      const slug = path.basename(relPath, ".md")
+      conceptSlugs.push(slug)
+    } else {
+      stats.other += 1
+    }
   }
+
+  entitySlugs.sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
+  conceptSlugs.sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
 
   const lines: string[] = [
     "# Wiki Overview",
@@ -344,11 +358,38 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
       const relPath = `sources/${fileName}`
       const content = await tryRead(path.join(wikiDir, relPath))
       const title = extractFmField(content, "title") || fileName.replace(/\.md$/, "")
-      const body = extractMarkdownBody(content)
-      const firstLine = body.split("\n").find((line) => line.trim().length > 0) ?? ""
-      const preview = firstLine.replace(/^#\s+/, "").slice(0, 90)
+      // OPT-04: prefer description field over first body line
+      const description = extractFmField(content, "description")
+      let preview: string
+      if (description && description.trim().length > 0) {
+        preview = description.trim().slice(0, 120)
+      } else {
+        const body = extractMarkdownBody(content)
+        const firstLine = body.split("\n").find((line) => line.trim().length > 0) ?? ""
+        preview = firstLine.replace(/^#\s+/, "").slice(0, 90)
+      }
       const slug = fileName.replace(/\.md$/, "")
       lines.push(`- [[${slug}]] — ${title}${preview ? `: ${preview}` : ""}`)
+    }
+    lines.push("")
+  }
+
+  // OPT-04: Key Entities section (top 10)
+  if (entitySlugs.length > 0) {
+    lines.push("## Key Entities", "")
+    const top10 = entitySlugs.slice(0, 10)
+    for (const slug of top10) {
+      lines.push(`- [[${slug}]]`)
+    }
+    lines.push("")
+  }
+
+  // OPT-04: Key Concepts section (top 10)
+  if (conceptSlugs.length > 0) {
+    lines.push("## Key Concepts", "")
+    const top10 = conceptSlugs.slice(0, 10)
+    for (const slug of top10) {
+      lines.push(`- [[${slug}]]`)
     }
     lines.push("")
   }
@@ -919,7 +960,7 @@ const LANGUAGE_RULE =
   "If the source is in Chinese, write in Chinese. If in English, write in English. " +
   "Wiki page titles, content, and descriptions should all be in the same language as the source material."
 
-function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): string {
+export function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): string {
   return [
     "You are an expert research analyst. Read the source document and produce a structured analysis.",
     "",
@@ -931,6 +972,7 @@ function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): stri
     "List people, organizations, products, datasets, tools mentioned. For each:",
     "- Name and type",
     "- Role in the source (central vs. peripheral)",
+    "- Common aliases or alternative names (e.g. abbreviations, short forms)",
     "- Whether it likely already exists as a page for this source (check existing pages below)",
     "",
     "## Key Concepts",
@@ -965,12 +1007,13 @@ function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): stri
   ].filter(Boolean).join("\n")
 }
 
-function buildGenerationPrompt(
+export function buildGenerationPrompt(
   schema: string,
   purpose: string,
   existingSourcePaths: string,
   sourceFileName: string,
-  overview?: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _overview?: string,
 ): string {
   const base = sourceFileName.replace(/\.[^.]+$/, "")
   return [
@@ -996,7 +1039,6 @@ function buildGenerationPrompt(
     `2. Entity pages in **wiki/sources/${base}/entities/** for key entities identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/entities/entity-name.md)`,
     `3. Concept pages in **wiki/sources/${base}/concepts/** for key concepts identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/concepts/concept-name.md)`,
     "4. A log entry for wiki/log.md (just the new entry to append, format: ## [YYYY-MM-DD] ingest | Title)",
-    "5. An updated wiki/overview.md — a high-level summary of what the entire wiki covers, updated to reflect the newly ingested source.",
     "",
     "## Frontmatter Rules (CRITICAL)",
     "",
@@ -1005,6 +1047,8 @@ function buildGenerationPrompt(
     "---",
     "type: source | entity | concept | comparison | query | synthesis",
     "title: Human-readable title",
+    "description: \"One-sentence summary of this page (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
@@ -1015,11 +1059,17 @@ function buildGenerationPrompt(
     "",
     `The \`sources\` field MUST always contain "${sourceFileName}".`,
     "",
+    "## Frontmatter Field Guidelines",
+    "- `description`: one sentence describing the page content (≤80 chars)",
+    "- `aliases`: list of alternative names or abbreviations for this entity/concept",
+    "- `tags`: 2-5 descriptive tags relevant to the content (e.g. [\"医疗\", \"体检\", \"珠海\"])",
+    "- `related`: slugs of related pages already in this wiki (e.g. [\"高尿酸血症\", \"珠海奥乐医院\"])",
+    "",
     "Other rules:",
-    "- Use [[wikilink]] syntax for cross-references between pages",
+    "- Use [[wikilink]] syntax for cross-references between pages — available pages are listed in the Existing pages section below",
+    "- Link to existing pages using [[slug]] — use the Existing pages list as the source for cross-reference wikilinks",
     "- Filenames MUST follow source language. If the source is Chinese, use Chinese filenames directly (DO NOT transliterate to pinyin). If the source is English, use readable English filenames.",
     "- Follow the analysis recommendations on what to emphasize",
-    "- If the analysis found connections to existing pages, add cross-references",
     "",
     "## Page Type Rules (CRITICAL — read before writing each FILE block)",
     "",
@@ -1028,12 +1078,23 @@ function buildGenerationPrompt(
     "- Content MUST describe: who/what this entity is, their background, their role in this source",
     "- ❌ DO NOT write about medical conditions, abstract concepts, or techniques in entity pages",
     "- ✅ Example correct: a page about '韩松' describes this person's identity and role in the source",
+    "- Required sections:",
+    "  ## {title}",
+    "  ## 背景 / Background",
+    "  ## 在本源中的角色 / Role in Source",
+    "  ## 相关 / Related",
     "",
     `### Concept Pages  (path must be under wiki/sources/${base}/concepts/)`,
     "- A concept page is about an ABSTRACT IDEA, MEDICAL CONDITION, METHODOLOGY, or TECHNIQUE",
     "- Content MUST describe: definition, clinical/technical significance, how it appears in this source",
     "- ❌ DO NOT write about specific people, organizations, or products in concept pages",
     "- ✅ Example correct: a page about '高尿酸血症' explains what this medical condition is",
+    "- Required sections:",
+    "  ## {title}",
+    "  ## 定义 / Definition",
+    "  ## 意义 / Significance",
+    "  ## 在本源中的体现 / In This Source",
+    "  ## 相关 / Related",
     "",
     "### SELF-CHECK before writing each FILE block:",
     "- Path contains /entities/ → content MUST be about a specific person/org/product/tool",
@@ -1058,8 +1119,7 @@ function buildGenerationPrompt(
     "",
     purpose ? `## Wiki Purpose\n${purpose}` : "",
     schema ? `## Wiki Schema\n${schema}` : "",
-    existingSourcePaths ? `## Existing pages for this source (use [[wikilink]] syntax to reference them; skip regenerating if content is already correct)\n${existingSourcePaths}` : "",
-    overview ? `## Current Overview (update this to reflect the new source)\n${overview}` : "",
+    existingSourcePaths ? `## Existing pages for this source (use [[wikilink]] cross-references to link to these pages)\n${existingSourcePaths}` : "",
   ].filter(Boolean).join("\n")
 }
 
@@ -1215,7 +1275,7 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[/\\:*?"<>|]/g, "-").trim()
 }
 
-function buildSourceSummaryPrompt(
+export function buildSourceSummaryPrompt(
   sourceFileName: string,
   purpose: string,
   schema: string,
@@ -1242,6 +1302,8 @@ function buildSourceSummaryPrompt(
     "---",
     "type: source",
     `title: "${base}"`,
+    "description: \"One-sentence summary of this source (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
@@ -1260,7 +1322,7 @@ function buildSourceSummaryPrompt(
   ].filter(Boolean).join("\n")
 }
 
-function buildSingleFilePrompt(
+export function buildSingleFilePrompt(
   filePath: string,
   fileType: "entity" | "concept",
   title: string,
@@ -1275,12 +1337,23 @@ function buildSingleFilePrompt(
           `- Content MUST describe who/what "${title}" is and their role in the source`,
           "- DO NOT write about abstract ideas, medical conditions, or techniques in this page",
           "- Focus on: identity, background, significance, role in the source document",
+          "- Required sections:",
+          "  ## {title}",
+          "  ## 背景 / Background",
+          "  ## 在本源中的角色 / Role in Source",
+          "  ## 相关 / Related",
         ]
       : [
           `- This is a CONCEPT page about an abstract idea, medical condition, or technique: "${title}"`,
           `- Content MUST explain what "${title}" means and why it matters`,
           "- DO NOT write about specific people or organizations in this page",
           "- Focus on: definition, clinical/technical significance, how it appears in the source",
+          "- Required sections:",
+          "  ## {title}",
+          "  ## 定义 / Definition",
+          "  ## 意义 / Significance",
+          "  ## 在本源中的体现 / In This Source",
+          "  ## 相关 / Related",
         ]
 
   return [
@@ -1306,6 +1379,8 @@ function buildSingleFilePrompt(
     "---",
     `type: ${fileType}`,
     `title: "${title}"`,
+    "description: \"One-sentence summary (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
@@ -1608,8 +1683,16 @@ async function runIngest(task: ServerIngestTask): Promise<void> {
 
     // ── Parse review items ─────────────────────────────────────────────────
     const reviewBlocks = parseReviewBlocksText(generation, sourcePath)
-    if (reviewBlocks.length > 0) {
-      pushEvent(task.id, { type: "review", items: reviewBlocks })
+
+    // OPT-10: detect cross-source duplicates among newly written entity/concept pages
+    const crossDupItems = await detectCrossSourceDuplicates(
+      path.join(projectPath, "wiki"),
+      writtenPaths,
+    )
+
+    const allReviewItems = [...reviewBlocks, ...crossDupItems]
+    if (allReviewItems.length > 0) {
+      pushEvent(task.id, { type: "review", items: allReviewItems })
     }
 
     if (writtenPaths.length > 0) {
@@ -1713,7 +1796,8 @@ function updateRebuildSummaryTask(task: RebuildSummaryTask, updates: Partial<Reb
 
 /**
  * Build the LLM prompt for rebuilding wiki/index.md and wiki/overview.md.
- * @param pageListing - compact listing of all wiki pages (type, slug, title)
+ * @param pageListing - compact listing of all wiki pages, each entry may include
+ *   a `desc:` suffix with the page's one-sentence description
  */
 export function buildRebuildSummaryPrompt(pageListing: string): string {
   return [
@@ -1722,6 +1806,9 @@ export function buildRebuildSummaryPrompt(pageListing: string): string {
     LANGUAGE_RULE,
     "",
     "## Existing Wiki Pages",
+    "",
+    "Each line is formatted as: `[type] [[slug]] — Title | desc: one-sentence page description`",
+    "Use the `desc:` description field to better understand the page content when writing the overview.",
     "",
     pageListing,
     "",
@@ -1784,7 +1871,7 @@ async function runRebuildSummaryTask(task: RebuildSummaryTask): Promise<void> {
       return
     }
 
-    // ── 2. Build compact page listing ────────────────────────────────────────
+    // ── 2. Build compact page listing (OPT-05: include description) ──────────
     const lines: string[] = []
     for (const relPath of relevantFiles) {
       const fullPath = path.join(wikiDir, relPath)
@@ -1792,8 +1879,10 @@ async function runRebuildSummaryTask(task: RebuildSummaryTask): Promise<void> {
       try { content = await fs.readFile(fullPath, "utf-8") } catch { continue }
       const typeVal = extractFmField(content, "type") || "other"
       const titleVal = extractFmField(content, "title") || relPath.replace(/\.md$/, "")
+      const descVal = extractFmField(content, "description")
       const slug = path.basename(relPath, ".md")
-      lines.push(`[${typeVal}] [[${slug}]] — ${titleVal}`)
+      const descSuffix = descVal ? ` | desc: ${descVal}` : ""
+      lines.push(`[${typeVal}] [[${slug}]] — ${titleVal}${descSuffix}`)
     }
 
     const pageListing = lines.join("\n")
@@ -1992,6 +2081,8 @@ export function buildMergeContentPrompt(
     "3. Prefer completeness over brevity — keep details even if slightly redundant.",
     "4. Use the canonical entry's frontmatter structure as the base.",
     "5. If entries describe the same fact differently, keep the most detailed version.",
+    "6. The `tags` field must be the union of all entries' tags (deduplicated, no duplicates).",
+    "7. The `related` field must be the union of all entries' related slugs (deduplicated, no duplicates).",
     "",
     "## Entries to Merge",
     "",
@@ -2248,4 +2339,74 @@ async function replaceWikiLinks(wikiDir: string, aliasSlug: string, canonicalSlu
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/**
+ * OPT-10: Scan the wiki directory for entity/concept pages that share a slug
+ * across different source directories. Returns duplicate review items for any
+ * newly written paths whose slug already exists under a different source.
+ *
+ * @param wikiDir - absolute path to the wiki/ directory
+ * @param newlyWrittenPaths - wiki-relative paths that were just written (e.g. "wiki/sources/A/entities/foo.md")
+ */
+export async function detectCrossSourceDuplicates(
+  wikiDir: string,
+  newlyWrittenPaths: string[],
+): Promise<Array<{ type: string; title: string; description: string; sourcePath: string; affectedPages?: string[]; options: Array<{ label: string; action: string }> }>> {
+  const results: Array<{ type: string; title: string; description: string; sourcePath: string; affectedPages?: string[]; options: Array<{ label: string; action: string }> }> = []
+
+  // Filter to only entity/concept paths
+  const entityConceptPattern = /\/sources\/[^/]+\/(entities|concepts)\/[^/]+\.md$/
+  const newEntCon = newlyWrittenPaths
+    .map((p) => p.replace(/^wiki\//, ""))
+    .filter((p) => entityConceptPattern.test(`/${p}`))
+
+  if (newEntCon.length === 0) return results
+
+  // Collect all existing entity/concept files indexed by [subtype][slug] -> [sourceDirs]
+  const allMd = await collectMdFiles(wikiDir, wikiDir)
+  const slugToSources = new Map<string, Set<string>>()
+
+  for (const relPath of allMd) {
+    const m = relPath.match(/^sources\/([^/]+)\/(entities|concepts)\/([^/]+)\.md$/)
+    if (!m) continue
+    const [, sourceDir, , slugName] = m
+    const key = slugName
+    if (!slugToSources.has(key)) slugToSources.set(key, new Set())
+    slugToSources.get(key)!.add(sourceDir)
+  }
+
+  // Check newly written paths
+  for (const relPath of newEntCon) {
+    const m = relPath.match(/^sources\/([^/]+)\/(entities|concepts)\/([^/]+)\.md$/)
+    if (!m) continue
+    const [, newSource, , slugName] = m
+    const existing = slugToSources.get(slugName)
+    if (!existing) continue
+
+    const otherSources = [...existing].filter((s) => s !== newSource)
+    if (otherSources.length === 0) continue
+
+    const affectedPages = [
+      `wiki/${relPath}`,
+      ...otherSources.map((s) => {
+        const subtype = relPath.includes("/entities/") ? "entities" : "concepts"
+        return `wiki/sources/${s}/${subtype}/${slugName}.md`
+      }),
+    ]
+
+    results.push({
+      type: "duplicate",
+      title: `Cross-source duplicate: ${slugName}`,
+      description: `"${slugName}" exists in multiple sources: ${[newSource, ...otherSources].join(", ")}. Consider deduplicating.`,
+      sourcePath: `wiki/${relPath}`,
+      affectedPages,
+      options: [
+        { label: "Deduplicate", action: "Deduplicate" },
+        { label: "Skip", action: "Skip" },
+      ],
+    })
+  }
+
+  return results
 }

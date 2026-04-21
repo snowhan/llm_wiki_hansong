@@ -317,7 +317,7 @@ async function writeFileBlocks(projectId: string, text: string): Promise<string[
  * Step 1 prompt: AI reads the source and produces a structured analysis.
  * This is the "discussion" step — the AI reasons about the source before writing wiki pages.
  */
-function buildAnalysisPrompt(purpose: string, index: string): string {
+export function buildAnalysisPrompt(purpose: string, index: string): string {
   return [
     "You are an expert research analyst. Read the source document and produce a structured analysis.",
     "",
@@ -329,6 +329,7 @@ function buildAnalysisPrompt(purpose: string, index: string): string {
     "List people, organizations, products, datasets, tools mentioned. For each:",
     "- Name and type",
     "- Role in the source (central vs. peripheral)",
+    "- Common aliases or alternative names (e.g. abbreviations, short forms)",
     "- Whether it likely already exists in the wiki (check the index)",
     "",
     "## Key Concepts",
@@ -367,7 +368,7 @@ function buildAnalysisPrompt(purpose: string, index: string): string {
 /**
  * Step 2 prompt: AI takes its own analysis and generates wiki files + review items.
  */
-function buildGenerationPrompt(schema: string, purpose: string, index: string, sourceFileName: string, overview?: string): string {
+export function buildGenerationPrompt(schema: string, purpose: string, index: string, sourceFileName: string, overview?: string): string {
   // Use original filename (without extension) as the source summary page name
   const sourceBaseName = sourceFileName.replace(/\.[^.]+$/, "")
 
@@ -404,6 +405,8 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "---",
     "type: source | entity | concept | comparison | query | synthesis",
     "title: Human-readable title",
+    "description: \"One-sentence summary of this page (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
@@ -414,11 +417,17 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "",
     `The \`sources\` field MUST always contain "${sourceFileName}" — this links the wiki page back to the original uploaded document.`,
     "",
+    "## Frontmatter Field Guidelines",
+    "- `description`: one sentence describing the page content (≤80 chars)",
+    "- `aliases`: list of alternative names or abbreviations for this entity/concept",
+    "- `tags`: 2-5 descriptive tags relevant to the content (e.g. [\"医疗\", \"体检\", \"珠海\"])",
+    "- `related`: slugs of related pages already in this wiki (e.g. [\"高尿酸血症\", \"珠海奥乐医院\"])",
+    "",
     "Other rules:",
-    "- Use [[wikilink]] syntax for cross-references between pages",
+    "- Use [[wikilink]] syntax for cross-references between pages — available pages are listed in the wiki index below",
+    "- Link to existing pages using [[slug]] — use the Existing pages list as the source for cross-reference wikilinks",
     "- Filenames MUST follow source language. If the source is Chinese, use Chinese filenames directly (DO NOT transliterate to pinyin). If the source is English, use readable English filenames.",
     "- Follow the analysis recommendations on what to emphasize",
-    "- If the analysis found connections to existing pages, add cross-references",
     "",
     "## Page Type Rules (CRITICAL — read before writing each FILE block)",
     "",
@@ -427,12 +436,23 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "- Content MUST describe: who/what this entity is, their background, their role in this source",
     "- ❌ DO NOT write about medical conditions, abstract concepts, or techniques in entity pages",
     "- ✅ Example correct: a page about '韩松' describes this person's identity and role in the source",
+    "- Required sections:",
+    "  ## {title}",
+    "  ## 背景 / Background",
+    "  ## 在本源中的角色 / Role in Source",
+    "  ## 相关 / Related",
     "",
     `### Concept Pages  (path must be under wiki/sources/${sourceBaseName}/concepts/)`,
     "- A concept page is about an ABSTRACT IDEA, MEDICAL CONDITION, METHODOLOGY, or TECHNIQUE",
     "- Content MUST describe: definition, clinical/technical significance, how it appears in this source",
     "- ❌ DO NOT write about specific people, organizations, or products in concept pages",
     "- ✅ Example correct: a page about '高尿酸血症' explains what this medical condition is",
+    "- Required sections:",
+    "  ## {title}",
+    "  ## 定义 / Definition",
+    "  ## 意义 / Significance",
+    "  ## 在本源中的体现 / In This Source",
+    "  ## 相关 / Related",
     "",
     "### SELF-CHECK before writing each FILE block:",
     "- Path contains /entities/ → content MUST be about a specific person/org/product/tool",
@@ -478,7 +498,7 @@ function buildGenerationPrompt(schema: string, purpose: string, index: string, s
     "",
     purpose ? `## Wiki Purpose\n${purpose}` : "",
     schema ? `## Wiki Schema\n${schema}` : "",
-    index ? `## Current Wiki Index (preserve all existing entries, add new ones)\n${index}` : "",
+    index ? `## Current Wiki Index (preserve all existing entries, add new ones — use [[slug]] wikilinks for cross-reference)\n${index}` : "",
     overview ? `## Current Overview (update this to reflect the new source)\n${overview}` : "",
   ].filter(Boolean).join("\n")
 }
@@ -518,7 +538,7 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[/\\:*?"<>|]/g, "-").trim()
 }
 
-function buildSourceSummaryPrompt(
+export function buildSourceSummaryPrompt(
   sourceFileName: string,
   purpose: string,
   schema: string,
@@ -544,6 +564,8 @@ function buildSourceSummaryPrompt(
     "---",
     "type: source",
     `title: "${base}"`,
+    "description: \"One-sentence summary of this source (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
@@ -562,7 +584,7 @@ function buildSourceSummaryPrompt(
   ].filter(Boolean).join("\n")
 }
 
-function buildSingleFilePrompt(
+export function buildSingleFilePrompt(
   filePath: string,
   fileType: "entity" | "concept",
   title: string,
@@ -577,12 +599,23 @@ function buildSingleFilePrompt(
           `- Content MUST describe who/what "${title}" is and their role in the source`,
           "- DO NOT write about abstract ideas, medical conditions, or techniques in this page",
           "- Focus on: identity, background, significance, role in the source document",
+          "- Required sections:",
+          "  ## {title}",
+          "  ## 背景 / Background",
+          "  ## 在本源中的角色 / Role in Source",
+          "  ## 相关 / Related",
         ]
       : [
           `- This is a CONCEPT page about an abstract idea, medical condition, or technique: "${title}"`,
           `- Content MUST explain what "${title}" means and why it matters`,
           "- DO NOT write about specific people or organizations in this page",
           "- Focus on: definition, clinical/technical significance, how it appears in the source",
+          "- Required sections:",
+          "  ## {title}",
+          "  ## 定义 / Definition",
+          "  ## 意义 / Significance",
+          "  ## 在本源中的体现 / In This Source",
+          "  ## 相关 / Related",
         ]
 
   return [
@@ -608,6 +641,8 @@ function buildSingleFilePrompt(
     "---",
     `type: ${fileType}`,
     `title: "${title}"`,
+    "description: \"One-sentence summary (≤80 chars)\"",
+    "aliases: []",
     "created: YYYY-MM-DD",
     "updated: YYYY-MM-DD",
     "tags: []",
