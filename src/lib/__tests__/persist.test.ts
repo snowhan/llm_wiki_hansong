@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { saveReviewItems, loadReviewItems, saveChatHistory, loadChatHistory } from "../persist"
+import { saveChatHistory, loadChatHistory } from "../persist"
 
 const mockReadFile = vi.fn()
 const mockWriteFile = vi.fn()
@@ -15,44 +15,6 @@ beforeEach(() => {
   mockReadFile.mockReset()
   mockWriteFile.mockReset()
   mockCreateDirectory.mockResolvedValue(undefined)
-})
-
-describe("saveReviewItems", () => {
-  it("writes review items to file", async () => {
-    mockWriteFile.mockResolvedValue(undefined)
-    const items = [
-      {
-        id: "r-1",
-        type: "suggestion" as const,
-        title: "Test",
-        description: "Desc",
-        options: [],
-        resolved: false,
-        createdAt: 123,
-      },
-    ]
-    await saveReviewItems("proj-uuid", items)
-    expect(mockWriteFile).toHaveBeenCalledTimes(1)
-    // writeFile(projectId, relativePath, data)
-    const [_projectId, relativePath, data] = mockWriteFile.mock.calls[0]
-    expect(relativePath).toContain("review.json")
-    expect(JSON.parse(data)).toEqual(items)
-  })
-})
-
-describe("loadReviewItems", () => {
-  it("returns empty array when file missing", async () => {
-    mockReadFile.mockRejectedValue(new Error("Not found"))
-    const result = await loadReviewItems("proj-uuid")
-    expect(result).toEqual([])
-  })
-
-  it("returns parsed items", async () => {
-    const items = [{ id: "r-1", type: "suggestion", title: "T" }]
-    mockReadFile.mockResolvedValue(JSON.stringify(items))
-    const result = await loadReviewItems("proj-uuid")
-    expect(result).toEqual(items)
-  })
 })
 
 describe("saveChatHistory", () => {

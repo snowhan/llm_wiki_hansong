@@ -4,7 +4,6 @@ import Box from "@mui/material/Box"
 import Typography from "@mui/material/Typography"
 import i18n from "@/i18n"
 import { useWikiStore } from "@/stores/wiki-store"
-import { useReviewStore } from "@/stores/review-store"
 import { useChatStore } from "@/stores/chat-store"
 import { listDirectory, openProject } from "@/commands/fs"
 import {
@@ -15,7 +14,7 @@ import {
   loadSearchApiConfig,
   loadEmbeddingConfig,
 } from "@/lib/project-store"
-import { loadReviewItems, loadChatHistory } from "@/lib/persist"
+import { loadChatHistory } from "@/lib/persist"
 import { setupAutoSave } from "@/lib/auto-save"
 import { AppLayout } from "@/components/layout/app-layout"
 import { WelcomeScreen } from "@/components/project/welcome-screen"
@@ -86,14 +85,6 @@ function App() {
       setFileTree(tree)
     } catch (err) {
       console.error("Failed to load file tree:", err)
-    }
-    try {
-      const savedReview = await loadReviewItems(proj.id)
-      if (savedReview.length > 0) {
-        useReviewStore.getState().setItems(savedReview)
-      }
-    } catch {
-      // ignore, start fresh
     }
     try {
       const savedChat = await loadChatHistory(proj.id)

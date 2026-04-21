@@ -12,9 +12,6 @@ vi.mock("../settings/settings-view", () => ({
 vi.mock("../sources/sources-view", () => ({
   SourcesView: () => <div data-testid="sources" />,
 }))
-vi.mock("../review/review-view", () => ({
-  ReviewView: () => <div data-testid="review" />,
-}))
 vi.mock("../lint/lint-view", () => ({
   LintView: () => <div data-testid="lint" />,
 }))
@@ -24,9 +21,8 @@ vi.mock("../search/search-view", () => ({
 vi.mock("../graph/graph-view", () => ({
   GraphView: () => <div data-testid="graph" />,
 }))
-
-vi.mock("../admin/admin-view", () => ({
-  AdminView: () => <div data-testid="admin" />,
+vi.mock("../debug/llm-debug-view", () => ({
+  LlmDebugView: () => <div data-testid="llm-debug" />,
 }))
 
 beforeEach(() => {
@@ -70,12 +66,6 @@ describe("ContentArea", () => {
     expect(screen.getByTestId("sources")).toBeTruthy()
   })
 
-  it("renders ReviewView when activeView is review", () => {
-    useWikiStore.setState({ activeView: "review" } as any)
-    render(<ContentArea />)
-    expect(screen.getByTestId("review")).toBeTruthy()
-  })
-
   it("renders LintView when activeView is lint", () => {
     useWikiStore.setState({ activeView: "lint" } as any)
     render(<ContentArea />)
@@ -92,5 +82,11 @@ describe("ContentArea", () => {
     useWikiStore.setState({ activeView: "graph" } as any)
     render(<ContentArea />)
     expect(screen.getByTestId("graph")).toBeTruthy()
+  })
+
+  it("renders LlmDebugView when activeView is llm-debug", () => {
+    useWikiStore.setState({ activeView: "llm-debug" } as any)
+    render(<ContentArea />)
+    expect(screen.getByTestId("llm-debug")).toBeTruthy()
   })
 })

@@ -17,7 +17,6 @@ import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { useActivityStore } from "@/stores/activity-store"
-import { useReviewStore } from "@/stores/review-store"
 import { LANGUAGE_RULE } from "../ingest"
 
 const { streamChat } = await import("../llm-client")
@@ -56,7 +55,6 @@ describe("ingest", () => {
     } as any)
 
     useActivityStore.setState({ items: [] })
-    useReviewStore.setState({ items: [] })
   })
 
   it("exports LANGUAGE_RULE as a non-empty string", () => {

@@ -12,9 +12,7 @@ const VIEW_LABELS: Record<string, string> = {
   search: "nav.search",
   graph: "nav.graph",
   lint: "nav.lint",
-  review: "nav.review",
   settings: "nav.settings",
-  admin: "nav.admin",
 }
 
 export function MainToolbar() {

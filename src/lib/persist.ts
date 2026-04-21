@@ -1,24 +1,9 @@
 import { writeFile, readFile, createDirectory } from "@/commands/fs"
-import type { ReviewItem } from "@/stores/review-store"
 import type { DisplayMessage, Conversation } from "@/stores/chat-store"
 
 async function ensureDir(projectId: string): Promise<void> {
   await createDirectory(projectId, ".llm-wiki").catch(() => {})
   await createDirectory(projectId, ".llm-wiki/chats").catch(() => {})
-}
-
-export async function saveReviewItems(projectId: string, items: ReviewItem[]): Promise<void> {
-  await ensureDir(projectId)
-  await writeFile(projectId, ".llm-wiki/review.json", JSON.stringify(items, null, 2))
-}
-
-export async function loadReviewItems(projectId: string): Promise<ReviewItem[]> {
-  try {
-    const content = await readFile(projectId, ".llm-wiki/review.json")
-    return JSON.parse(content) as ReviewItem[]
-  } catch {
-    return []
-  }
 }
 
 interface PersistedChatData {

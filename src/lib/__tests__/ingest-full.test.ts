@@ -36,7 +36,6 @@ import { readFile, writeFile, listDirectory } from "@/commands/fs"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { useActivityStore } from "@/stores/activity-store"
-import { useReviewStore } from "@/stores/review-store"
 
 const { streamChat } = await import("../llm-client")
 const { checkIngestCache, saveIngestCache } = await import("../ingest-cache")
@@ -115,7 +114,6 @@ function resetStores() {
   } as never)
 
   useActivityStore.setState({ items: [] })
-  useReviewStore.setState({ items: [] } as never)
 }
 
 beforeEach(() => {

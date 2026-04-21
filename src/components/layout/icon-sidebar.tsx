@@ -7,18 +7,13 @@ import FolderOpen from "@mui/icons-material/FolderOpen"
 import Search from "@mui/icons-material/Search"
 import AccountTree from "@mui/icons-material/AccountTree"
 import CheckCircleOutlineOutlined from "@mui/icons-material/CheckCircleOutlineOutlined"
-import FormatListBulleted from "@mui/icons-material/FormatListBulleted"
-import FactCheck from "@mui/icons-material/FactCheck"
 import BugReport from "@mui/icons-material/BugReport"
 import Explore from "@mui/icons-material/Explore"
 import Settings from "@mui/icons-material/Settings"
 import SwapHoriz from "@mui/icons-material/SwapHoriz"
-import AdminPanelSettings from "@mui/icons-material/AdminPanelSettings"
 import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
-import { useReviewStore } from "@/stores/review-store"
 import { useResearchStore } from "@/stores/research-store"
-import { useHighRiskMappingCount } from "@/stores/mapping-check-store"
 import { useTranslation } from "react-i18next"
 import logoImg from "@/assets/logo.png"
 import type { WikiState } from "@/stores/wiki-store"
@@ -33,8 +28,6 @@ const NAV_ITEMS: { view: NavView; icon: NavIcon; labelKey: string }[] = [
   { view: "search", icon: Search, labelKey: "nav.search" },
   { view: "graph", icon: AccountTree, labelKey: "nav.graph" },
   { view: "lint", icon: CheckCircleOutlineOutlined, labelKey: "nav.lint" },
-  { view: "review", icon: FormatListBulleted, labelKey: "nav.review" },
-  { view: "mapping-check", icon: FactCheck, labelKey: "nav.mappingCheck" },
   { view: "llm-debug", icon: BugReport, labelKey: "nav.llmDebug" },
 ]
 
@@ -46,8 +39,6 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
   const { t } = useTranslation()
   const activeView = useWikiStore((s) => s.activeView)
   const setActiveView = useWikiStore((s) => s.setActiveView)
-  const pendingCount = useReviewStore((s) => s.items.filter((i) => !i.resolved).length)
-  const highRiskMappingCount = useHighRiskMappingCount()
   const researchPanelOpen = useResearchStore((s) => s.panelOpen)
   const researchActiveCount = useResearchStore((s) => s.tasks.filter((t) => t.status !== "done" && t.status !== "error").length)
   const toggleResearchPanel = useResearchStore((s) => s.setPanelOpen)
@@ -76,26 +67,6 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
       bgcolor: active ? "rgba(194, 65, 12, 0.25)" : "rgba(245,243,239,0.06)",
       color: "#F5F3EF",
     },
-  })
-
-  const badgeSx = (color: string) => ({
-    position: "absolute" as const,
-    top: 0,
-    right: 0,
-    minWidth: 15,
-    height: 15,
-    px: 0.25,
-    borderRadius: "999px",
-    bgcolor: color,
-    color: "#fff",
-    fontSize: 9,
-    fontWeight: 700,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    lineHeight: 1,
-    pointerEvents: "none" as const,
-    boxShadow: "0 0 0 2px #141218",
   })
 
   return (
@@ -129,13 +100,7 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
         {NAV_ITEMS.map(({ view, icon: Icon, labelKey }) => (
           <Tooltip
             key={view}
-            title={
-              <>
-                {t(labelKey)}
-                {view === "review" && pendingCount > 0 ? ` (${pendingCount})` : ""}
-                {view === "mapping-check" && highRiskMappingCount > 0 ? ` (${highRiskMappingCount})` : ""}
-              </>
-            }
+            title={t(labelKey)}
             placement="right"
             enterDelay={300}
           >
@@ -147,21 +112,18 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               >
                 <Icon sx={{ fontSize: 18 }} />
               </IconButton>
-              {view === "review" && pendingCount > 0 && (
-                <Box component="span" sx={badgeSx("#B91C1C")}>
-                  {pendingCount > 99 ? "99+" : pendingCount}
-                </Box>
-              )}
-              {view === "mapping-check" && highRiskMappingCount > 0 && (
-                <Box component="span" sx={badgeSx("#D97706")}>
-                  {highRiskMappingCount > 99 ? "99+" : highRiskMappingCount}
-                </Box>
-              )}
             </Box>
           </Tooltip>
         ))}
 
-        <Box sx={{ width: 20, height: 1, bgcolor: "rgba(245,243,239,0.06)", my: 1, borderRadius: 1 }} />
+        {/* Hairline divider — visually separates utility from navigation */}
+        <Box sx={{
+          width: 16,
+          height: "1px",
+          bgcolor: "rgba(245,243,239,0.08)",
+          my: 1.5,
+          flexShrink: 0,
+        }} />
 
         <Tooltip title={t("iconSidebar.deepResearch")} placement="right" enterDelay={300}>
           <Box sx={{ position: "relative" }}>
@@ -173,7 +135,25 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
               <Explore sx={{ fontSize: 18 }} />
             </IconButton>
             {researchActiveCount > 0 && (
-              <Box component="span" sx={badgeSx("#0369A1")}>
+              <Box component="span" sx={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                minWidth: 15,
+                height: 15,
+                px: 0.25,
+                borderRadius: "999px",
+                bgcolor: "#0369A1",
+                color: "#fff",
+                fontSize: 9,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
+                pointerEvents: "none",
+                boxShadow: "0 0 0 2px #141218",
+              }}>
                 {researchActiveCount}
               </Box>
             )}
@@ -182,16 +162,6 @@ export function IconSidebar({ onSwitchProject }: IconSidebarProps) {
       </Stack>
 
       <Stack direction="column" spacing={0.5} sx={{ alignItems: "center", pb: 0.5, width: "100%" }}>
-        <Tooltip title={t("nav.admin")} placement="right" enterDelay={300}>
-          <IconButton
-            size="small"
-            onClick={() => setActiveView("admin")}
-            sx={navButtonSx(activeView === "admin")}
-          >
-            <AdminPanelSettings sx={{ fontSize: 18 }} />
-          </IconButton>
-        </Tooltip>
-
         <Tooltip title={t("nav.settings")} placement="right" enterDelay={300}>
           <IconButton
             size="small"

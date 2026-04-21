@@ -5,7 +5,6 @@ import { getFileCategory } from "@/lib/file-types"
 import { useWikiStore } from "@/stores/wiki-store"
 import { useChatStore } from "@/stores/chat-store"
 import { useActivityStore } from "@/stores/activity-store"
-import { useReviewStore, type ReviewItem } from "@/stores/review-store"
 import { getFileName } from "@/lib/path-utils"
 import { checkIngestCache, saveIngestCache } from "@/lib/ingest-cache"
 import { needsPreprocess } from "@/lib/file-types"
@@ -225,18 +224,12 @@ export async function autoIngest(
     }).catch(() => { /* non-critical */ })
   }
 
-  // ── Step 4: Parse review items ────────────────────────────────
-  const reviewItems = parseReviewBlocks(generation, sourcePath)
-  if (reviewItems.length > 0) {
-    useReviewStore.getState().addItems(reviewItems)
-  }
-
-  // ── Step 5: Save to cache ───────────────────────────────────
+  // ── Step 4: Save to cache ───────────────────────────────────
   if (writtenPaths.length > 0) {
     await saveIngestCache(projectId, fileName, sourceContent, writtenPaths)
   }
 
-  // ── Step 6: Generate embeddings (if enabled) ───────────────
+  // ── Step 5: Generate embeddings (if enabled) ───────────────
   const embCfg = useWikiStore.getState().embeddingConfig
   if (embCfg.enabled && embCfg.model && writtenPaths.length > 0) {
     try {
@@ -259,7 +252,7 @@ export async function autoIngest(
   }
 
   const detail = writtenPaths.length > 0
-    ? `${writtenPaths.length} files written${reviewItems.length > 0 ? `, ${reviewItems.length} review item(s)` : ""}`
+    ? `${writtenPaths.length} files written`
     : "No files generated"
 
   activity.updateItem(activityId, {
@@ -304,71 +297,6 @@ async function writeFileBlocks(projectId: string, text: string): Promise<string[
   }
 
   return writtenPaths
-}
-
-const REVIEW_BLOCK_REGEX = /---REVIEW:\s*(\w[\w-]*)\s*\|\s*(.+?)\s*---\n([\s\S]*?)---END REVIEW---/g
-
-function parseReviewBlocks(
-  text: string,
-  sourcePath: string,
-): Omit<ReviewItem, "id" | "resolved" | "createdAt">[] {
-  const items: Omit<ReviewItem, "id" | "resolved" | "createdAt">[] = []
-  const matches = text.matchAll(REVIEW_BLOCK_REGEX)
-
-  for (const match of matches) {
-    const rawType = match[1].trim().toLowerCase()
-    const title = match[2].trim()
-    const body = match[3].trim()
-
-    const type = (
-      ["contradiction", "duplicate", "missing-page", "suggestion"].includes(rawType)
-        ? rawType
-        : "confirm"
-    ) as ReviewItem["type"]
-
-    // Parse OPTIONS line
-    const optionsMatch = body.match(/^OPTIONS:\s*(.+)$/m)
-    const options = optionsMatch
-      ? optionsMatch[1].split("|").map((o) => {
-          const label = o.trim()
-          return { label, action: label }
-        })
-      : [
-          { label: "Approve", action: "Approve" },
-          { label: "Skip", action: "Skip" },
-        ]
-
-    // Parse PAGES line
-    const pagesMatch = body.match(/^PAGES:\s*(.+)$/m)
-    const affectedPages = pagesMatch
-      ? pagesMatch[1].split(",").map((p) => p.trim())
-      : undefined
-
-    // Parse SEARCH line (optimized search queries for Deep Research)
-    const searchMatch = body.match(/^SEARCH:\s*(.+)$/m)
-    const searchQueries = searchMatch
-      ? searchMatch[1].split("|").map((q) => q.trim()).filter((q) => q.length > 0)
-      : undefined
-
-    // Description is the body minus OPTIONS, PAGES, and SEARCH lines
-    const description = body
-      .replace(/^OPTIONS:.*$/m, "")
-      .replace(/^PAGES:.*$/m, "")
-      .replace(/^SEARCH:.*$/m, "")
-      .trim()
-
-    items.push({
-      type,
-      title,
-      description,
-      sourcePath,
-      affectedPages,
-      searchQueries,
-      options,
-    })
-  }
-
-  return items
 }
 
 /**

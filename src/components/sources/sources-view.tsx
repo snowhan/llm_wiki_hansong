@@ -33,14 +33,6 @@ import { getFileName, getFileStem } from "@/lib/path-utils"
 import { startServerIngest, subscribeIngestSSE, getAllServerTasks, getServerIngestStatus, rebuildWikiSummary, getRebuildSummaryStatus, deduplicateWiki, getDeduplicateStatus } from "@/commands/ingest"
 import type { SseCallbacks } from "@/commands/ingest"
 import { useActivityStore } from "@/stores/activity-store"
-import { useMappingCheckStore } from "@/stores/mapping-check-store"
-import type { MappingCheckItem } from "@/stores/mapping-check-store"
-import {
-  checkMappingRisk,
-  parseFrontmatterFields,
-  extractContentPreview,
-  getPathType,
-} from "@/lib/mapping-check"
 
 export type PreprocessStatus = "idle" | "processing" | "done" | "error"
 export type IngestStatus = "idle" | "ingesting" | "interrupted" | "done" | "error"
@@ -90,53 +82,6 @@ export function __resetSourcesViewTestState() {
   }
   _activeSse.clear()
 }
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * After a successful ingest, scan the generated entity/concept files,
- * assess mapping risk, and persist the results for human review.
- */
-async function triggerMappingCheck(projectId: string, filesWritten: string[]) {
-  const wikiFiles = filesWritten.filter(
-    (f) => f.endsWith(".md") && (f.includes("/entities/") || f.includes("/concepts/")),
-  )
-  if (wikiFiles.length === 0) return
-
-  const session = Date.now().toString()
-  const items: MappingCheckItem[] = []
-
-  await Promise.allSettled(
-    wikiFiles.map(async (filePath) => {
-      try {
-        const content = await readFile(projectId, filePath)
-        const { type, title } = parseFrontmatterFields(content)
-        const risk = checkMappingRisk(filePath, type)
-        const pathType = getPathType(filePath)
-        items.push({
-          id: `mc-${session}-${filePath}`,
-          projectId,
-          filePath,
-          pathType,
-          frontmatterType: type,
-          frontmatterTitle: (title || filePath.split("/").pop()?.replace(".md", "")) ?? filePath,
-          contentPreview: extractContentPreview(content),
-          riskLevel: risk.riskLevel,
-          riskReason: risk.reason,
-          status: "pending",
-          ingestSession: session,
-          createdAt: Date.now(),
-        })
-      } catch {
-        // Non-critical: skip file if unreadable
-      }
-    }),
-  )
-
-  if (items.length === 0) return
-
-  await useMappingCheckStore.getState().saveItems(projectId, items, session)
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SourcesView() {
@@ -303,7 +248,6 @@ export function SourcesView() {
                 useWikiStore.getState().setFileTree(tree)
                 useWikiStore.getState().bumpDataVersion()
               } catch { /* non-critical */ }
-              triggerMappingCheck(currentProjectId, task.filesWritten).catch(() => {})
             }
           },
           onError: (_msg) => {
@@ -540,7 +484,6 @@ export function SourcesView() {
             setFileTree(tree)
             useWikiStore.getState().bumpDataVersion()
           } catch { /* non-critical */ }
-          triggerMappingCheck(currentProject.id, task.filesWritten).catch(() => {})
         }
       },
       onError: (msg) => {

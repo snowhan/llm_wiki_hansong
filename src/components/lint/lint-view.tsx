@@ -17,7 +17,6 @@ import BuildIcon from "@mui/icons-material/Build"
 import DeleteOutlineOutlinedIcon from "@mui/icons-material/DeleteOutlineOutlined"
 import type { SvgIconComponent } from "@mui/icons-material"
 import { useWikiStore } from "@/stores/wiki-store"
-import { useReviewStore } from "@/stores/review-store"
 import { runStructuralLint, runSemanticLint, type LintResult } from "@/lib/lint"
 import { readFile, writeFile, deleteFile, listDirectory } from "@/commands/fs"
 import { keyframes } from "@mui/material/styles"
@@ -118,47 +117,16 @@ export function LintView() {
         }
 
         case "broken-link": {
-          useReviewStore.getState().addItem({
-            type: "confirm",
-            title: t("lint.fixBrokenLink", { page: result.page }),
-            description: result.detail,
-            affectedPages: [result.page],
-            options: [
-              { label: t("lint.openEdit"), action: `open:${result.page}` },
-              { label: t("lint.deletePage"), action: `delete:wiki/${result.page}` },
-              { label: t("lint.skip"), action: "Skip" },
-            ],
-          })
           setResults((prev) => prev.filter((_, i) => i !== index))
           break
         }
 
         case "no-outlinks": {
-          useReviewStore.getState().addItem({
-            type: "suggestion",
-            title: t("lint.addCrossRefs", { page: result.page }),
-            description: t("lint.addCrossRefsDesc"),
-            affectedPages: [result.page],
-            options: [
-              { label: t("lint.openEdit"), action: `open:${result.page}` },
-              { label: t("lint.skip"), action: "Skip" },
-            ],
-          })
           setResults((prev) => prev.filter((_, i) => i !== index))
           break
         }
 
         default: {
-          useReviewStore.getState().addItem({
-            type: "confirm",
-            title: result.detail.slice(0, 80),
-            description: result.detail,
-            affectedPages: result.affectedPages ?? [result.page],
-            options: [
-              { label: t("lint.openEdit"), action: `open:${result.page}` },
-              { label: t("lint.skip"), action: "Skip" },
-            ],
-          })
           setResults((prev) => prev.filter((_, i) => i !== index))
           break
         }
