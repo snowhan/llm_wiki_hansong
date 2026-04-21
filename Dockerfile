@@ -23,7 +23,7 @@ COPY shared/ ../shared/
 RUN npm run build
 
 # ── Stage 3: Production image ─────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 
@@ -31,11 +31,29 @@ WORKDIR /app
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 
+# Python runtime for file preprocessing (markitdown + embedded image extraction)
+COPY server/requirements.txt ./requirements.txt
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends python3 python3-venv python3-pip wget && \
+  rm -rf /var/lib/apt/lists/* && \
+  python3 -m venv /opt/venv && \
+  /opt/venv/bin/pip install --upgrade pip && \
+  /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+ENV PATH="/opt/venv/bin:${PATH}"
+
+# Build-time dependency validation (fail fast if preprocessing stack is broken)
+RUN python3 -c "import fitz, docx, pptx, PIL" && \
+  markitdown --help >/dev/null
+
 # Compiled server (output goes to dist/server/src/ because rootDir is implicit)
 COPY --from=server-builder /app/server/dist ./dist
 
 # DB migration SQL (must be alongside compiled JS)
 COPY server/src/db/migrations ./dist/server/src/db/migrations
+
+# Python helper scripts used at runtime by preprocess-service
+COPY server/scripts ./dist/server/scripts
+RUN test -f ./dist/server/scripts/extract_images.py
 
 # Frontend static files
 COPY --from=frontend-builder /app/dist /app/static

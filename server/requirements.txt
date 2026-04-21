@@ -1,0 +1,5 @@
+markitdown
+pymupdf
+python-docx
+python-pptx
+Pillow
