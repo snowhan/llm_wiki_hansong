@@ -6,6 +6,8 @@
 import { getStoredToken } from "@/lib/auth"
 import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 export interface ServerResearchTask {
   id: string
   projectId: string
@@ -88,8 +90,8 @@ export function subscribeResearchTask(
 ): () => void {
   const token = getStoredToken()
   const url = token
-    ? `/api/research/stream/${taskId}?token=${encodeURIComponent(token)}`
-    : `/api/research/stream/${taskId}`
+    ? `${BASE_URL}/api/research/stream/${taskId}?token=${encodeURIComponent(token)}`
+    : `${BASE_URL}/api/research/stream/${taskId}`
 
   const es = new EventSource(url)
 

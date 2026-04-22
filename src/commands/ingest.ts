@@ -7,6 +7,8 @@
 import { getStoredToken } from "@/lib/auth"
 import { fetchWithAuth } from "@/lib/fetch-with-auth"
 
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 export interface ServerIngestTask {
   id: string
   projectId: string
@@ -172,8 +174,8 @@ export async function getDeduplicateStatus(taskId: string): Promise<DeduplicateS
 export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () => void {
   const token = getStoredToken()
   const url = token
-    ? `/api/ingest/stream/${taskId}?token=${encodeURIComponent(token)}`
-    : `/api/ingest/stream/${taskId}`
+    ? `${BASE_URL}/api/ingest/stream/${taskId}?token=${encodeURIComponent(token)}`
+    : `${BASE_URL}/api/ingest/stream/${taskId}`
 
   const es = new EventSource(url)
   let intentionallyClosed = false
