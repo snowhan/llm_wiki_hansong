@@ -73,6 +73,7 @@
     "react-dom": "^19.0.0",
     "react-i18next": "^17.0.2",
     "sigma": "^3.0.2",
+    "tippy.js": "^6.3.7",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { BubbleMenu } from "@tiptap/react"
+import { BubbleMenu } from "@tiptap/extension-bubble-menu"
 import type { Editor } from "@tiptap/react"
 import Box from "@mui/material/Box"
 import IconButton from "@mui/material/IconButton"
