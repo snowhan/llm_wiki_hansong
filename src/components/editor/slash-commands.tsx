@@ -14,7 +14,6 @@ const GROUP_LABELS: Record<SlashItem["group"], string> = {
   heading:  "标题",
   list:     "列表",
   block:    "块元素",
-  media:    "媒体",
   advanced: "高级",
 }
 

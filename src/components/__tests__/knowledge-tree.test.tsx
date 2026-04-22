@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { render, screen, fireEvent, waitFor } from "@testing-library/react"
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react"
 import { KnowledgeTree } from "../layout/knowledge-tree"
 import { useWikiStore } from "@/stores/wiki-store"
-import { listDirectory, readFile } from "@/commands/fs"
+import { listDirectory, readFile, writeFile } from "@/commands/fs"
 
 describe("KnowledgeTree", () => {
   beforeEach(() => {
@@ -32,6 +32,21 @@ describe("KnowledgeTree", () => {
   it("no project shows empty state", () => {
     render(<KnowledgeTree />)
     expect(screen.getByText("knowledgeTree.noProject")).toBeTruthy()
+  })
+
+  it("T-009: shows TreeSkeleton while pages are loading (project set but no pages yet)", async () => {    useWikiStore.setState({
+      project: { id: "demo-uuid", name: "Demo", path: "/projects/demo" },
+      fileTree: [],
+    } as any)
+    // Make listDirectory hang to simulate loading
+    let resolve: (v: unknown[]) => void
+    vi.mocked(listDirectory).mockImplementation(() => new Promise((r) => { resolve = r }))
+
+    render(<KnowledgeTree />)
+    // While loading, skeleton should be visible
+    expect(document.querySelector(".MuiSkeleton-root")).toBeTruthy()
+    // Resolve to stop loading
+    resolve!([])
   })
 
   it("loads pages and groups by type", async () => {
@@ -348,5 +363,107 @@ describe("KnowledgeTree", () => {
     render(<KnowledgeTree />)
     await screen.findByText("knowledgeTree.overview")
     expect(screen.getByText("Wiki 总览")).toBeTruthy()
+  })
+
+  // ── T-001: Rename persists to frontmatter ──────────────────────────────────
+
+  it("T-001: renaming a page calls writeFile with updated frontmatter title", async () => {
+    useWikiStore.setState({
+      project: { id: "demo-uuid", name: "Demo", path: "/projects/demo" },
+      fileTree: [],
+      selectedFile: null,
+      activeTabPath: null,
+    } as any)
+
+    const originalContent = "---\ntype: concept\ntitle: Old Title\n---\n\n# Old Title\n"
+    vi.mocked(listDirectory).mockImplementation(async (_projectId: string, dir?: string) => {
+      if (dir === "wiki" || dir?.endsWith("/wiki")) {
+        return [{
+          name: "concepts",
+          relativePath: "wiki/concepts",
+          is_dir: true,
+          children: [{ name: "my-page.md", relativePath: "wiki/concepts/my-page.md", is_dir: false }],
+        }]
+      }
+      return []
+    })
+    vi.mocked(readFile).mockResolvedValue(originalContent)
+    vi.mocked(writeFile).mockResolvedValue(undefined)
+
+    render(<KnowledgeTree />)
+    await screen.findByText("Old Title")
+
+    // Right-click to open context menu
+    const pageBtn = screen.getByText("Old Title").closest("button")!
+    fireEvent.contextMenu(pageBtn)
+
+    // Click rename
+    await waitFor(() => screen.getByText("重命名"))
+    fireEvent.click(screen.getByText("重命名"))
+
+    // Find the rename input and submit new title
+    await waitFor(() => screen.getByDisplayValue("Old Title"))
+    const renameInput = screen.getByDisplayValue("Old Title")
+    fireEvent.change(renameInput, { target: { value: "New Title" } })
+    fireEvent.keyDown(renameInput, { key: "Enter" })
+
+    // writeFile should have been called with updated frontmatter
+    await waitFor(() => {
+      expect(vi.mocked(writeFile)).toHaveBeenCalledWith(
+        "demo-uuid",
+        "wiki/concepts/my-page.md",
+        expect.stringContaining("title: New Title"),
+      )
+    })
+  })
+
+  // ── T-002: Delete file ──────────────────────────────────────────────────────
+
+  it("T-002: deleting a page calls deleteFile and removes it from the list", async () => {
+    const { deleteFile } = await import("@/commands/fs")
+    useWikiStore.setState({
+      project: { id: "demo-uuid", name: "Demo", path: "/projects/demo" },
+      fileTree: [],
+      selectedFile: null,
+      activeTabPath: null,
+      openTabs: [],
+      activeTabId: null,
+    } as any)
+
+    vi.mocked(listDirectory).mockImplementation(async (_projectId: string, dir?: string) => {
+      if (dir === "wiki" || dir?.endsWith("/wiki")) {
+        return [{
+          name: "concepts",
+          relativePath: "wiki/concepts",
+          is_dir: true,
+          children: [{ name: "deletable.md", relativePath: "wiki/concepts/deletable.md", is_dir: false }],
+        }]
+      }
+      return []
+    })
+    vi.mocked(readFile).mockResolvedValue("---\ntype: concept\ntitle: Deletable Page\n---\n")
+    vi.mocked(deleteFile).mockResolvedValue(undefined)
+
+    render(<KnowledgeTree />)
+    await screen.findByText("Deletable Page")
+
+    const pageBtn = screen.getByText("Deletable Page").closest("button")!
+    fireEvent.contextMenu(pageBtn)
+
+    await waitFor(() => screen.getByText("删除"))
+    fireEvent.click(screen.getByText("删除"))
+
+    // Should call deleteFile
+    await waitFor(() => {
+      expect(vi.mocked(deleteFile)).toHaveBeenCalledWith(
+        "demo-uuid",
+        "wiki/concepts/deletable.md",
+      )
+    })
+
+    // Page should be removed from the list
+    await waitFor(() => {
+      expect(screen.queryByText("Deletable Page")).not.toBeInTheDocument()
+    })
   })
 })

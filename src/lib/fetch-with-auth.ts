@@ -12,6 +12,8 @@
 
 import { useAuthStore } from "@/stores/auth-store"
 
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 function buildHeaders(
   token: string,
   incoming: HeadersInit | undefined,
@@ -43,8 +45,9 @@ export async function fetchWithAuth(
   init: RequestInit = {},
 ): Promise<Response> {
   const { accessToken, refreshToken, clearAuth } = useAuthStore.getState()
+  const url = input.startsWith("http") ? input : `${BASE_URL}${input}`
 
-  const firstResponse = await fetch(input, {
+  const firstResponse = await fetch(url, {
     ...init,
     headers: buildHeaders(accessToken ?? "", init.headers),
   })
@@ -70,7 +73,7 @@ export async function fetchWithAuth(
   const { accessToken: newToken } = useAuthStore.getState()
 
   // Retry once with the new token; do NOT recurse to prevent infinite loops
-  return fetch(input, {
+  return fetch(url, {
     ...init,
     headers: buildHeaders(newToken ?? "", init.headers),
   })

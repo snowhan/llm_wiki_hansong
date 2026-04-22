@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom"
 import { vi } from "vitest"
 
+// ── Peer dependency stubs ─────────────────────────────────────────────────────
+// tippy.js and @tiptap/suggestion are peer dependencies not installed in dev.
+// They are used only by SlashCommandsExtension at runtime; mock them globally
+// so all test files can import from editor-extensions without bundler errors.
+vi.mock("tippy.js", () => ({ default: vi.fn(() => ({ setProps: vi.fn(), destroy: vi.fn() })) }))
+vi.mock("@tiptap/suggestion", () => ({ default: {} }))
+
 // ── localStorage stub for Zustand persist middleware ──────────────────────
 // Zustand's persist middleware caches the storage reference at module-init
 // time, before any beforeAll() hooks run.  Override synchronously here so

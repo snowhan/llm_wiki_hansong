@@ -54,4 +54,10 @@ describe("PageHeader", () => {
     // Cover button should be present (add cover)
     expect(screen.getByRole("button", { name: /封面|cover/i })).toBeInTheDocument()
   })
+
+  it("T-006: root element has className='page-header' for hover CSS selector to work", () => {
+    render(<PageHeader {...defaultProps} />)
+    const header = document.querySelector("header")
+    expect(header).toHaveClass("page-header")
+  })
 })

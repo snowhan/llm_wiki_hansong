@@ -32,7 +32,6 @@ vi.mock("../commands", async (importOriginal) => {
     buildCommands: vi.fn(() => MOCK_COMMANDS),
   }
 })
-
 const RESET_STORE = {
   activeView: "wiki" as const,
   project: null,
@@ -104,24 +103,76 @@ describe("CommandPalette", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
-  it("navigates list with ArrowDown/ArrowUp", async () => {
+  it("T-012: search input uses i18n key for placeholder (not hardcoded text)", () => {
     render(<CommandPalette open={true} onClose={vi.fn()} />)
     const input = screen.getByRole("textbox")
-    fireEvent.keyDown(input, { key: "ArrowDown" })
-    // First item should be highlighted — check aria-selected on listitem
+    // The placeholder must be the i18n key (t() stub returns the key as-is in tests)
+    expect(input).toHaveAttribute("placeholder", "commandPalette.searchPlaceholder")
+  })
+
+  it("T-012: search input aria-label uses i18n key", () => {
+    render(<CommandPalette open={true} onClose={vi.fn()} />)
+    const input = screen.getByRole("textbox")
+    expect(input).toHaveAttribute("aria-label", "commandPalette.searchAriaLabel")
+  })
+
+  it("T-014: group order is stable across renders (navigate before theme)", () => {
+    render(<CommandPalette open={true} onClose={vi.fn()} />)
+    const navLabel = screen.getByText("commandPalette.group.navigate")
+    const themeLabel = screen.getByText("commandPalette.group.theme")
+    expect(navLabel).toBeInTheDocument()
+    expect(themeLabel).toBeInTheDocument()
+    // navigate group header appears before theme group header in the DOM
+    expect(
+      navLabel.compareDocumentPosition(themeLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it("navigates list with ArrowDown/ArrowUp and wraps at boundaries", async () => {
+    render(<CommandPalette open={true} onClose={vi.fn()} />)
+    const input = screen.getByRole("textbox")
     const items = screen.getAllByRole("option")
     expect(items.length).toBeGreaterThan(0)
+    // ArrowUp from first item wraps to last
+    fireEvent.keyDown(input, { key: "ArrowUp" })
+    expect(items[items.length - 1]).toHaveAttribute("aria-selected", "true")
+    // ArrowDown from last wraps to first
+    fireEvent.keyDown(input, { key: "ArrowDown" })
     expect(items[0]).toHaveAttribute("aria-selected", "true")
   })
 
-  it("executes highlighted command on Enter", async () => {
+  it("first item is highlighted when palette opens (activeIndex = 0)", () => {
+    render(<CommandPalette open={true} onClose={vi.fn()} />)
+    const items = screen.getAllByRole("option")
+    expect(items[0]).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("executes first command on Enter without needing ArrowDown", async () => {
     const onClose = vi.fn()
     render(<CommandPalette open={true} onClose={onClose} />)
     const input = screen.getByRole("textbox")
-    // activeIndex starts at -1, ArrowDown moves to 0 = nav-wiki
-    fireEvent.keyDown(input, { key: "ArrowDown" })
     fireEvent.keyDown(input, { key: "Enter" })
     expect(mockActions.navWiki).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("BUG REGRESSION: after typing query, Enter executes first filtered result without ArrowDown", async () => {
+    const onClose = vi.fn()
+    render(<CommandPalette open={true} onClose={onClose} />)
+    const input = screen.getByRole("textbox")
+    // Type "wiki" — matches only nav-wiki
+    await userEvent.type(input, "wiki")
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(mockActions.navWiki).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("ArrowDown from first item moves to second item", async () => {
+    render(<CommandPalette open={true} onClose={vi.fn()} />)
+    const input = screen.getByRole("textbox")
+    fireEvent.keyDown(input, { key: "ArrowDown" })
+    const items = screen.getAllByRole("option")
+    expect(items[0]).toHaveAttribute("aria-selected", "false")
+    expect(items[1]).toHaveAttribute("aria-selected", "true")
   })
 })

@@ -18,13 +18,14 @@ import MergeType from "@mui/icons-material/MergeType"
 import BarChart from "@mui/icons-material/BarChart"
 import HelpOutlineOutlined from "@mui/icons-material/HelpOutlineOutlined"
 import ViewModule from "@mui/icons-material/ViewModule"
+import { TreeSkeleton } from "@/components/ui/tree-skeleton"
 import Public from "@mui/icons-material/Public"
 import MoreHoriz from "@mui/icons-material/MoreHoriz"
 import DriveFileRenameOutline from "@mui/icons-material/DriveFileRenameOutline"
 import DeleteOutlined from "@mui/icons-material/DeleteOutlined"
 import type { SvgIconProps } from "@mui/material/SvgIcon"
 import { useWikiStore } from "@/stores/wiki-store"
-import { readFile, listDirectory } from "@/commands/fs"
+import { readFile, writeFile, deleteFile, listDirectory } from "@/commands/fs"
 import type { FileNode } from "@/types/wiki"
 
 type IconComp = React.ComponentType<SvgIconProps>
@@ -263,6 +264,7 @@ export function KnowledgeTree() {
   const fileTree = useWikiStore((s) => s.fileTree)
 
   const [pages, setPages] = useState<WikiPageInfo[]>([])
+  const [loading, setLoading] = useState(false)
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(
     new Set(["overview", "entity", "concept", "source"])
   )
@@ -275,6 +277,7 @@ export function KnowledgeTree() {
 
   const loadPages = useCallback(async () => {
     if (!project) return
+    setLoading(true)
     try {
       const wikiTree = await listDirectory(project.id, "wiki")
       const mdFiles = flattenMdFiles(wikiTree)
@@ -296,6 +299,8 @@ export function KnowledgeTree() {
       setPages(pageInfos)
     } catch {
       setPages([])
+    } finally {
+      setLoading(false)
     }
   }, [project])
 
@@ -309,6 +314,10 @@ export function KnowledgeTree() {
         </Typography>
       </Box>
     )
+  }
+
+  if (loading) {
+    return <TreeSkeleton />
   }
 
   const grouped = new Map<string, WikiPageInfo[]>()
@@ -345,11 +354,34 @@ export function KnowledgeTree() {
 
   function handleRenameSubmit(page: WikiPageInfo, newTitle: string) {
     setRenamingPath(null)
-    // TODO: write new title to frontmatter via writeFile
-    if (newTitle.trim() && newTitle !== page.title) {
-      setPages((prev) =>
-        prev.map((p) => (p.relativePath === page.relativePath ? { ...p, title: newTitle.trim() } : p))
-      )
+    const trimmed = newTitle.trim()
+    if (!trimmed || trimmed === page.title) return
+
+    // Optimistically update local state
+    setPages((prev) =>
+      prev.map((p) => (p.relativePath === page.relativePath ? { ...p, title: trimmed } : p))
+    )
+
+    // Persist: read → patch title in frontmatter → write
+    if (project) {
+      readFile(project.id, page.relativePath)
+        .then((content) => {
+          const patched = content.replace(
+            /^title:\s*.*$/m,
+            `title: ${trimmed}`,
+          )
+          // If no title field exists in frontmatter, insert it after first ---
+          const updated = patched === content
+            ? content.replace(/^---\n/, `---\ntitle: ${trimmed}\n`)
+            : patched
+          return writeFile(project.id, page.relativePath, updated)
+        })
+        .catch(() => {
+          // Rollback optimistic update on error
+          setPages((prev) =>
+            prev.map((p) => (p.relativePath === page.relativePath ? { ...p, title: page.title } : p))
+          )
+        })
     }
   }
 
@@ -452,8 +484,19 @@ export function KnowledgeTree() {
         <Divider sx={{ my: 0.25 }} />
         <MenuItem
           onClick={() => {
-            // TODO: delete file
-            handleCloseContextMenu()
+            if (contextMenu && project) {
+              const page = contextMenu.page
+              handleCloseContextMenu()
+              deleteFile(project.id, page.relativePath)
+                .then(() => {
+                  setPages((prev) => prev.filter((p) => p.relativePath !== page.relativePath))
+                })
+                .catch(() => {
+                  // ignore - file may not exist
+                })
+            } else {
+              handleCloseContextMenu()
+            }
           }}
           sx={{ color: "error.main" }}
         >
@@ -502,7 +545,10 @@ function RawSourcesSection() {
               isSelected={activeTabPath === file.relativePath}
               isRenaming={false}
               depth={1}
-              onClick={() => { navigateInCurrentTab(file.relativePath); setActiveView("wiki") }}
+              onClick={() => {
+                navigateInCurrentTab(file.relativePath)
+                setActiveView("wiki")
+              }}
               onDoubleClick={() => {}}
               onRenameSubmit={() => {}}
               onContextMenu={() => {}}

@@ -1,3 +1,4 @@
+import React from "react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { render, waitFor, fireEvent } from "@testing-library/react"
 import { WikiEditor } from "../editor/wiki-editor"
@@ -39,6 +40,7 @@ vi.mock("@tiptap/react", () => {
         {editor ? "editor" : "no editor"}
       </div>
     ),
+    BubbleMenu: ({ children }: { children?: React.ReactNode }) => <div data-testid="bubble-menu">{children}</div>,
   }
 })
 

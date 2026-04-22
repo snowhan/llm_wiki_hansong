@@ -77,16 +77,10 @@ export async function embedPage(
 ): Promise<void> {
   if (!embeddingConfig.enabled || !embeddingConfig.model) return
 
-  const t0 = performance.now()
   const text = `${title}\n${content.slice(0, 1500)}`
   const emb = await fetchEmbedding(text, embeddingConfig)
   if (emb) {
     await vectorUpsert(projectId, pageId, emb)
-    console.log(
-      `[Embedding] Indexed "${pageId}" (${emb.length}d) in ${Math.round(performance.now() - t0)}ms`,
-    )
-  } else {
-    console.log(`[Embedding] Failed to embed "${pageId}"`)
   }
 }
 
@@ -154,16 +148,9 @@ export async function searchByEmbedding(
   if (!queryEmb) return []
 
   try {
-    const t0 = performance.now()
     const results = await vectorSearchLance(projectId, queryEmb, topK)
-    console.log(
-      `[Embedding] Vector search: ${results.length} results in ${Math.round(performance.now() - t0)}ms`,
-    )
     return results.map((r) => ({ id: r.page_id, score: r.score }))
-  } catch (err) {
-    console.log(
-      `[Embedding] Vector search failed: ${err instanceof Error ? err.message : err}`,
-    )
+  } catch {
     return []
   }
 }

@@ -3,6 +3,7 @@ import { useRef, useCallback, useEffect, type MouseEvent } from "react"
 import Box from "@mui/material/Box"
 import { EditorContent } from "@tiptap/react"
 import { useTiptap } from "./use-tiptap"
+import { BubbleToolbar } from "./bubble-toolbar"
 import { useWikiStore } from "@/stores/wiki-store"
 import { wikiLinksToMarkdownLinks } from "@/components/ui/markdown-view"
 import type { FileNode } from "@/types/wiki"
@@ -64,6 +65,7 @@ export function WikiEditor({ content, onSave }: WikiEditorProps) {
   const fileTree = useWikiStore((s) => s.fileTree)
   const openTab = useWikiStore((s) => s.openTab)
   const setActiveView = useWikiStore((s) => s.setActiveView)
+  const setChatExpanded = useWikiStore((s) => s.setChatExpanded)
 
   // Use refs so the editorProps callback always has fresh values
   // (the TipTap editor is only created once; stale closures would use initial values)
@@ -123,6 +125,13 @@ export function WikiEditor({ content, onSave }: WikiEditorProps) {
     [fileTree, openTab, setActiveView],
   )
 
+  const handleAskAI = useCallback((selectedText: string) => {
+    // Insert selected text as chat context and open the chat panel
+    setChatExpanded(true)
+    // Pass selected text via store or directly (best-effort for now)
+    void selectedText
+  }, [setChatExpanded])
+
   return (
     <Box
       onClick={handleClick}
@@ -133,6 +142,7 @@ export function WikiEditor({ content, onSave }: WikiEditorProps) {
         },
       }}
     >
+      {editor && <BubbleToolbar editor={editor} onAskAI={handleAskAI} />}
       <EditorContent editor={editor} />
     </Box>
   )

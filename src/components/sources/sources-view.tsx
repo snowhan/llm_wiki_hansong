@@ -158,10 +158,9 @@ export function SourcesView() {
           if (current !== "processing") setFileStatus(file.relativePath, "idle")
         })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // setFileStatus is a stable Zustand action; sources is the intended trigger
   }, [sources])
-
-  // Check wiki ingest status for all source files on load
   useEffect(() => {
     if (!sources.length || !project) return
     const allFiles = flattenAllFiles(sources)
@@ -176,7 +175,8 @@ export function SourcesView() {
           }
         })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // setIngestStatus is a stable Zustand action; sources is the intended trigger
   }, [sources])
 
   // ── Reconnect to running server tasks on mount ────────────────────────────
@@ -327,7 +327,8 @@ export function SourcesView() {
       // SSE connections live at module level and survive Tab switches.
       // reconnectRanRef is reset only on project change (above).
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // SSE reconnect must not re-run on every project object change, only on sources list change
   }, [sources, project])
 
   // Reconcile stale running activity items with the file-level ingest status shown in Sources.
@@ -381,12 +382,10 @@ export function SourcesView() {
 
     // Guard: already ingesting in this session
     if (currentStatus === "ingesting") {
-      console.log(`[ingest] skip – already ingesting: ${node.name}`)
       return
     }
     // Guard: already have a live SSE connection for this file
     if (hasSseConnection(project.id, node.relativePath)) {
-      console.log(`[ingest] skip – live SSE connection exists: ${node.name}`)
       return
     }
     // Guard: stored server task ID (persists across page refresh via wiki store).
@@ -394,7 +393,6 @@ export function SourcesView() {
     // or a task was started in this session and not yet finished, skip to avoid
     // creating duplicate activity items and duplicate server tasks.
     if (store.serverTaskIds[node.relativePath]) {
-      console.log(`[ingest] skip – server task already running: ${node.name}`)
       return
     }
 

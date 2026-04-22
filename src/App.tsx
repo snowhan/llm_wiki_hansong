@@ -23,6 +23,7 @@ import { AuthModal } from "@/components/auth/AuthModal"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog"
 import { ServerDirBrowser } from "@/components/project/server-dir-browser"
 import { CommandPalette } from "@/components/command-palette/command-palette"
+import { globalShortcuts } from "@/lib/keyboard-shortcuts"
 import { apiGet } from "@/lib/api-client"
 import type { WikiProject } from "@/types/wiki"
 
@@ -57,18 +58,19 @@ function App() {
       .catch(() => {})
   }, [isAuthInitializing, authUser?.role])
 
-  // Global ⌘K / Ctrl+K shortcut for Command Palette
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-      e.preventDefault()
-      setShowCommandPalette((prev) => !prev)
+  // Global ⌘K / Ctrl+K shortcut for Command Palette — registered in globalShortcuts
+  useEffect(() => {
+    const unregister = globalShortcuts.register(
+      { key: "k", meta: true, label: "命令面板", description: "打开命令面板" },
+      (e) => { e.preventDefault(); setShowCommandPalette((prev) => !prev) },
+    )
+    const handler = (e: KeyboardEvent) => globalShortcuts.handleKeyDown(e)
+    document.addEventListener("keydown", handler)
+    return () => {
+      unregister()
+      document.removeEventListener("keydown", handler)
     }
   }, [])
-
-  useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [handleKeyDown])
 
   useEffect(() => {
     setupAutoSave()

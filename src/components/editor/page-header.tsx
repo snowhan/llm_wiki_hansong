@@ -43,6 +43,7 @@ export function PageHeader({
   return (
     <Box
       component="header"
+      className="page-header"
       sx={{ position: "relative", mb: 0 }}
     >
       {/* Cover image */}

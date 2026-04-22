@@ -15,7 +15,18 @@ type StoreSlice = Pick<
 >
 
 export function buildCommands(store: StoreSlice): Command[] {
+  // ── File commands: one per open tab ────────────────────────────────────────
+  const fileCommands: Command[] = store.openTabs.map((tab) => ({
+    id: `file-${tab.id}`,
+    label: tab.title || tab.path.split("/").pop()?.replace(/\.md$/, "") || tab.path,
+    description: tab.path,
+    group: "file" as const,
+    keywords: [tab.path, tab.title ?? ""],
+    action: () => store.navigateInCurrentTab(tab.path, tab.title ?? ""),
+  }))
+
   return [
+    ...fileCommands,
     // ── Navigate ─────────────────────────────────────────────────────────
     {
       id: "nav-wiki",
@@ -85,7 +96,6 @@ export function buildCommands(store: StoreSlice): Command[] {
     },
   ]
 }
-
 /** Fuzzy match: returns true if every char of `query` appears in order in `target` (case-insensitive). */
 export function fuzzyMatch(query: string, target: string): boolean {
   if (!query) return true

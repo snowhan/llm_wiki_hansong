@@ -484,5 +484,16 @@
     "emptyOutput": "（无输出）",
     "done": "成功",
     "error": "错误"
+  },
+  "commandPalette": {
+    "searchPlaceholder": "搜索命令...",
+    "searchAriaLabel": "搜索命令",
+    "noResults": "无匹配结果",
+    "group": {
+      "navigate": "导航",
+      "file": "文件",
+      "action": "操作",
+      "theme": "主题"
+    }
   }
 }

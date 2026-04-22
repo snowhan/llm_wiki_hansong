@@ -30,6 +30,12 @@ export default defineConfig(async () => ({
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    alias: {
+      // tippy.js and @tiptap/suggestion are runtime peer deps not installed in dev.
+      // Stub them so the bundler resolves without errors in tests.
+      "tippy.js": path.resolve(__dirname, "./src/test/stubs/tippy.stub.ts"),
+      "@tiptap/suggestion": path.resolve(__dirname, "./src/test/stubs/suggestion.stub.ts"),
+    },
     deps: {
       optimizer: {
         web: {

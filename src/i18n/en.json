@@ -484,5 +484,16 @@
     "emptyOutput": "(empty output)",
     "done": "Done",
     "error": "Error"
+  },
+  "commandPalette": {
+    "searchPlaceholder": "Search commands...",
+    "searchAriaLabel": "Search commands",
+    "noResults": "No results found",
+    "group": {
+      "navigate": "Navigate",
+      "file": "File",
+      "action": "Action",
+      "theme": "Theme"
+    }
   }
 }

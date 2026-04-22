@@ -8,16 +8,13 @@ import ListItemText from "@mui/material/ListItemText"
 import Typography from "@mui/material/Typography"
 import Divider from "@mui/material/Divider"
 import SearchIcon from "@mui/icons-material/Search"
+import { useTranslation } from "react-i18next"
 import { useWikiStore } from "@/stores/wiki-store"
 import { buildCommands, filterCommands } from "./commands"
 import type { Command } from "./commands"
 
-const GROUP_LABELS: Record<Command["group"], string> = {
-  navigate: "导航",
-  theme:    "主题",
-  action:   "操作",
-  file:     "文件",
-}
+// T-014: stable group order — avoids Object.entries() insertion-order jitter
+const GROUP_ORDER: Command["group"][] = ["navigate", "file", "action", "theme"]
 
 interface CommandPaletteProps {
   open: boolean
@@ -25,6 +22,7 @@ interface CommandPaletteProps {
 }
 
 export function CommandPalette({ open, onClose }: CommandPaletteProps) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState("")
   const [activeIndex, setActiveIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -51,11 +49,6 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [open])
-
-  // Reset active index when query changes
-  useEffect(() => {
-    setActiveIndex(-1)
-  }, [query])
 
   const executeCommand = useCallback(
     (cmd: Command) => {
@@ -90,7 +83,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     item?.scrollIntoView({ block: "nearest" })
   }, [activeIndex])
 
-  // Group filtered commands
+  // Group filtered commands in stable GROUP_ORDER
   const grouped = useMemo(() => {
     const groups: Partial<Record<Command["group"], Command[]>> = {}
     for (const cmd of filtered) {
@@ -99,6 +92,12 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }
     return groups
   }, [filtered])
+
+  // T-014: render groups in stable declared order
+  const orderedGroups = useMemo(
+    () => GROUP_ORDER.filter((g) => (grouped[g]?.length ?? 0) > 0).map((g) => [g, grouped[g]!] as [Command["group"], Command[]]),
+    [grouped]
+  )
 
   // Build flat list for keyboard navigation (maintains order)
   const flatFiltered = filtered
@@ -145,11 +144,11 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
           value={query}
           onChange={(e) => { setQuery(e.target.value); setActiveIndex(0) }}
           onKeyDown={handleKeyDown}
-          placeholder="搜索命令..."
+          placeholder={t("commandPalette.searchPlaceholder")}
           fullWidth
           inputProps={{
             role: "textbox",
-            "aria-label": "搜索命令",
+            "aria-label": t("commandPalette.searchAriaLabel"),
             style: { padding: 0, fontSize: 15, fontWeight: 400 },
           }}
           sx={{ flex: 1, fontSize: 15 }}
@@ -179,7 +178,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         {flatFiltered.length === 0 ? (
           <Box sx={{ py: 8, textAlign: "center" }}>
             <Typography variant="body2" color="text.secondary">
-              无匹配结果
+              {t("commandPalette.noResults")}
             </Typography>
           </Box>
         ) : (
@@ -190,7 +189,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             role="listbox"
             sx={{ py: 1 }}
           >
-            {(Object.entries(grouped) as [Command["group"], Command[]][]).map(
+            {orderedGroups.map(
               ([group, cmds], gIdx) => (
                 <Box key={group}>
                   {gIdx > 0 && <Divider sx={{ mx: 2, my: 0.5 }} />}
@@ -207,7 +206,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                       fontSize: "0.6875rem",
                     }}
                   >
-                    {GROUP_LABELS[group]}
+                    {t(`commandPalette.group.${group}`)}
                   </Typography>
                   {cmds.map((cmd) => {
                     const flatIdx = flatFiltered.indexOf(cmd)

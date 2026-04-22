@@ -10,6 +10,7 @@ import { getFileCategory, isBinary, needsPreprocess } from "@/lib/file-types"
 import { splitFrontmatter } from "@/lib/path-utils"
 import { WikiEditor } from "@/components/editor/wiki-editor"
 import { FilePreview } from "@/components/editor/file-preview"
+import { PageHeader } from "@/components/editor/page-header"
 import { parseFrontmatter } from "@/lib/frontmatter"
 import type { FrontmatterFields } from "@/lib/frontmatter"
 import Description from "@mui/icons-material/Description"
@@ -236,6 +237,20 @@ export function EditorArea() {
     [activeTabPath, frontmatter, project]
   )
 
+  const handleFrontmatterFieldSave = useCallback(
+    (key: string, value: string | undefined) => {
+      if (!activeTabPath || isNewTab(activeTabPath) || !project) return
+      if (activeTabPath !== loadedPathRef.current) return
+      const updatedFm = value !== undefined
+        ? setOrInsertFrontmatterField(frontmatter.replace(/^---\n|---\n?$/g, ""), key, value)
+        : frontmatter.replace(/^---\n|---\n?$/g, "").replace(new RegExp(`^${key}:\\s*.*\\n?`, "m"), "")
+      const newContent = `---\n${updatedFm.trim()}\n---\n${markdownBody}`
+      setFileContent(newContent)
+      writeFile(project.id, activeTabPath, newContent, { writer: "editor-autosave" }).catch(() => {})
+    },
+    [activeTabPath, frontmatter, markdownBody, project, setFileContent]
+  )
+
   useEffect(() => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -316,8 +331,22 @@ export function EditorArea() {
             pb: 10,
           }}
         >
-          {/* Page title from frontmatter — Notion H1 style */}
-          {fmFields.title && (
+          {/* PageHeader: title + emoji + cover (Notion-style) */}
+          {hasFrontmatter && (
+            <PageHeader
+              title={fmFields.title ?? ""}
+              emoji={fmFields.emoji}
+              onTitleChange={(newTitle) => handleFrontmatterFieldSave("title", newTitle)}
+              onEmojiChange={(newEmoji) =>
+                newEmoji
+                  ? handleFrontmatterFieldSave("emoji", newEmoji)
+                  : handleFrontmatterFieldSave("emoji", undefined)
+              }
+            />
+          )}
+
+          {/* Page title from frontmatter — Notion H1 style (legacy fallback if no hasFrontmatter) */}
+          {!hasFrontmatter && fmFields.title && (
             <Typography
               component="h1"
               sx={{

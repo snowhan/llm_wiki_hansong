@@ -24,6 +24,11 @@ describe("SLASH_ITEMS", () => {
     const lists = SLASH_ITEMS.filter((i) => i.group === "list")
     expect(lists.length).toBeGreaterThanOrEqual(2)
   })
+
+  it("T-013: no item has group 'media' (dead group cleanup)", () => {
+    const mediaItems = SLASH_ITEMS.filter((i) => i.group === ("media" as string))
+    expect(mediaItems).toHaveLength(0)
+  })
 })
 
 describe("filterSlashItems", () => {

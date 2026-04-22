@@ -1,4 +1,3 @@
-import { BubbleMenu } from "@tiptap/extension-bubble-menu"
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight"
 import { Highlight } from "@tiptap/extension-highlight"
 import { Image } from "@tiptap/extension-image"
@@ -16,6 +15,7 @@ import { Markdown } from "@tiptap/markdown"
 import type { Extensions } from "@tiptap/core"
 import { StarterKit } from "@tiptap/starter-kit"
 import { common, createLowlight } from "lowlight"
+import { SlashCommandsExtension } from "./slash-extension"
 
 const lowlight = createLowlight(common)
 
@@ -76,15 +76,13 @@ function buildExtensions(options: GetEditorExtensionsOptions = {}): Extensions {
     }),
     TaskList,
     TaskItem.configure({ nested: true }),
-    BubbleMenu.configure({
-      element: null,
-    }),
     UniqueID.configure({
       types: ["heading", "paragraph", "blockquote", "codeBlock"],
       updateDocument: !readonly,
     }),
     TableOfContents,
     Markdown,
+    SlashCommandsExtension,
   ]
 }
 

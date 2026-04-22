@@ -5,7 +5,7 @@ export interface SlashItem {
   label: string
   description?: string
   icon?: string
-  group: "heading" | "list" | "block" | "media" | "advanced"
+  group: "heading" | "list" | "block" | "advanced"
   keywords?: string[]
   command: (editor: Editor) => void
 }
@@ -125,8 +125,7 @@ const GROUP_ORDER: Record<SlashItem["group"], number> = {
   heading: 0,
   list: 1,
   block: 2,
-  media: 3,
-  advanced: 4,
+  advanced: 3,
 }
 
 export function filterSlashItems(query: string): SlashItem[] {
