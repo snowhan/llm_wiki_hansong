@@ -43,8 +43,17 @@ vi.mock("../project/server-dir-browser", () => ({
     open ? <div data-testid="dir-browser" data-initial-path={initialPath} /> : null,
 }))
 
+// Auth store mock — default to admin; individual tests can override
+const mockAuthUser = { id: "u1", username: "admin", role: "admin" }
+vi.mock("@/stores/auth-store", () => ({
+  useAuthStore: vi.fn((selector: (s: any) => any) =>
+    selector({ user: mockAuthUser }),
+  ),
+}))
+
 beforeEach(() => {
   vi.clearAllMocks()
+  mockAuthUser.role = "admin"
   vi.mocked(createProject).mockResolvedValue({
     name: "N",
     path: "/parent/N",
@@ -117,5 +126,31 @@ describe("CreateProjectDialog", () => {
       const browser = screen.getByTestId("dir-browser")
       expect(browser).toHaveAttribute("data-initial-path", "/data/projects")
     })
+  })
+
+  it("does NOT fetch projectsRoot when user is not admin", async () => {
+    mockAuthUser.role = "member"
+    const { apiGet } = await import("@/lib/api-client")
+
+    await act(async () => {
+      render(<CreateProjectDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />)
+    })
+
+    // Give any pending microtasks a chance to settle
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
+
+    expect(apiGet).not.toHaveBeenCalledWith("/api/project/root")
+  })
+
+  it("does NOT fetch projectsRoot when dialog is closed", async () => {
+    const { apiGet } = await import("@/lib/api-client")
+
+    await act(async () => {
+      render(<CreateProjectDialog open={false} onOpenChange={vi.fn()} onCreated={vi.fn()} />)
+    })
+
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)) })
+
+    expect(apiGet).not.toHaveBeenCalledWith("/api/project/root")
   })
 })

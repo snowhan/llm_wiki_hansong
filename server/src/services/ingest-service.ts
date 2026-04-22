@@ -301,7 +301,7 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
   try {
     sourceEntries = await fs.readdir(sourcesDir, { withFileTypes: true })
   } catch {
-    await writeWithMkdir(path.join(wikiDir, "overview.md"), "# Wiki Overview\n\nNo source summaries yet.\n")
+    await writeWithMkdir(path.join(wikiDir, "overview.md"), "# Wiki 概览\n\n暂无来源摘要。\n")
     return
   }
 
@@ -337,23 +337,23 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
   conceptSlugs.sort((a, b) => a.localeCompare(b, "zh-Hans-CN"))
 
   const lines: string[] = [
-    "# Wiki Overview",
+    "# Wiki 概览",
     "",
-    "> Auto-generated from current wiki pages.",
+    "> 自动从当前 Wiki 页面生成。",
     "",
-    "## Snapshot",
+    "## 快照",
     "",
-    `- Source pages: ${stats.source}`,
-    `- Entity pages: ${stats.entity}`,
-    `- Concept pages: ${stats.concept}`,
-    `- Other pages: ${stats.other}`,
+    `- 来源页面：${stats.source}`,
+    `- 实体页面：${stats.entity}`,
+    `- 概念页面：${stats.concept}`,
+    `- 其他页面：${stats.other}`,
     "",
-    "## Source Summaries",
+    "## 来源摘要",
     "",
   ]
 
   if (sourceSummaries.length === 0) {
-    lines.push("- No source summary pages found.", "")
+    lines.push("- 暂未找到来源摘要页面。", "")
   } else {
     for (const fileName of sourceSummaries) {
       const relPath = `sources/${fileName}`
@@ -377,7 +377,7 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
 
   // OPT-04: Key Entities section (top 10)
   if (entitySlugs.length > 0) {
-    lines.push("## Key Entities", "")
+    lines.push("## 核心实体", "")
     const top10 = entitySlugs.slice(0, 10)
     for (const slug of top10) {
       lines.push(`- [[${slug}]]`)
@@ -387,7 +387,7 @@ export async function rebuildWikiOverview(projectPath: string): Promise<void> {
 
   // OPT-04: Key Concepts section (top 10)
   if (conceptSlugs.length > 0) {
-    lines.push("## Key Concepts", "")
+    lines.push("## 核心概念", "")
     const top10 = conceptSlugs.slice(0, 10)
     for (const slug of top10) {
       lines.push(`- [[${slug}]]`)
@@ -1081,9 +1081,9 @@ export function buildGenerationPrompt(
     "- ✅ Example correct: a page about '韩松' describes this person's identity and role in the source",
     "- Required sections:",
     "  ## {title}",
-    "  ## 背景 / Background",
-    "  ## 在本源中的角色 / Role in Source",
-    "  ## 相关 / Related",
+    "  ## 背景",
+    "  ## 在本源中的角色",
+    "  ## 相关",
     "",
     `### Concept Pages  (path must be under wiki/sources/${base}/concepts/)`,
     "- A concept page is about an ABSTRACT IDEA, MEDICAL CONDITION, METHODOLOGY, or TECHNIQUE",
@@ -1092,10 +1092,10 @@ export function buildGenerationPrompt(
     "- ✅ Example correct: a page about '高尿酸血症' explains what this medical condition is",
     "- Required sections:",
     "  ## {title}",
-    "  ## 定义 / Definition",
-    "  ## 意义 / Significance",
-    "  ## 在本源中的体现 / In This Source",
-    "  ## 相关 / Related",
+    "  ## 定义",
+    "  ## 意义",
+    "  ## 在本源中的体现",
+    "  ## 相关",
     "",
     "### SELF-CHECK before writing each FILE block:",
     "- Path contains /entities/ → content MUST be about a specific person/org/product/tool",
@@ -1340,9 +1340,9 @@ export function buildSingleFilePrompt(
           "- Focus on: identity, background, significance, role in the source document",
           "- Required sections:",
           "  ## {title}",
-          "  ## 背景 / Background",
-          "  ## 在本源中的角色 / Role in Source",
-          "  ## 相关 / Related",
+          "  ## 背景",
+          "  ## 在本源中的角色",
+          "  ## 相关",
         ]
       : [
           `- This is a CONCEPT page about an abstract idea, medical condition, or technique: "${title}"`,
@@ -1351,10 +1351,10 @@ export function buildSingleFilePrompt(
           "- Focus on: definition, clinical/technical significance, how it appears in the source",
           "- Required sections:",
           "  ## {title}",
-          "  ## 定义 / Definition",
-          "  ## 意义 / Significance",
-          "  ## 在本源中的体现 / In This Source",
-          "  ## 相关 / Related",
+          "  ## 定义",
+          "  ## 意义",
+          "  ## 在本源中的体现",
+          "  ## 相关",
         ]
 
   return [

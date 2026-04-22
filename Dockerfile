@@ -37,8 +37,7 @@ RUN apt-get update && \
   apt-get install -y --no-install-recommends python3 python3-venv python3-pip wget && \
   rm -rf /var/lib/apt/lists/* && \
   python3 -m venv /opt/venv && \
-  /opt/venv/bin/pip install --upgrade pip && \
-  /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+  /opt/venv/bin/pip install --no-cache-dir --prefer-binary --retries 10 --timeout 120 -r requirements.txt
 ENV PATH="/opt/venv/bin:${PATH}"
 
 # Build-time dependency validation (fail fast if preprocessing stack is broken)

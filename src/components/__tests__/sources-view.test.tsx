@@ -102,3 +102,67 @@ describe("SourcesView", () => {
     })
   })
 })
+
+// ── Cache status detection ─────────────────────────────────────────────────────
+
+describe("SourcesView – cache status detection", () => {
+  const FILE_PATH = "raw/sources/doc.pdf"
+  const FILE_NAME = "doc.pdf"
+
+  function setupProject() {
+    useWikiStore.setState({ project: { id: "proj-uuid", name: "P" } } as any)
+    vi.mocked(listDirectory).mockImplementation(async (_projectId: string) => [
+      { name: FILE_NAME, relativePath: FILE_PATH, is_dir: false },
+    ])
+  }
+
+  it("marks file as 'done' when a valid cache file exists", async () => {
+    setupProject()
+    vi.mocked(readFile).mockResolvedValueOnce("# Document\n\nExtracted PDF content.")
+
+    const { unmount } = render(<SourcesView />)
+
+    await screen.findByText(FILE_NAME)
+
+    await waitFor(() => {
+      const { preprocessStatuses } = (useWikiStore.getState() as any)
+      expect(preprocessStatuses[FILE_PATH]).toBe("done")
+    })
+
+    unmount()
+  })
+
+  it("marks file as 'idle' when cache contains the fallback 'markitdown not installed' message", async () => {
+    setupProject()
+    const fallbackContent =
+      "[Binary file: doc.pdf]\n\n(markitdown is not installed; install it with: pip install markitdown)"
+    vi.mocked(readFile).mockResolvedValueOnce(fallbackContent)
+
+    const { unmount } = render(<SourcesView />)
+
+    await screen.findByText(FILE_NAME)
+
+    await waitFor(() => {
+      const { preprocessStatuses } = (useWikiStore.getState() as any)
+      expect(preprocessStatuses[FILE_PATH]).toBe("idle")
+    })
+
+    unmount()
+  })
+
+  it("marks file as 'idle' when no cache file exists (readFile rejects)", async () => {
+    setupProject()
+    vi.mocked(readFile).mockRejectedValueOnce(new Error("not found"))
+
+    const { unmount } = render(<SourcesView />)
+
+    await screen.findByText(FILE_NAME)
+
+    await waitFor(() => {
+      const { preprocessStatuses } = (useWikiStore.getState() as any)
+      expect(preprocessStatuses[FILE_PATH]).toBe("idle")
+    })
+
+    unmount()
+  })
+})
