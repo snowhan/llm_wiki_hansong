@@ -1,0 +1,41 @@
+---
+description: 后端 Vitest 测试的 mock 顺序和初始化规范
+globs: server/src/**/__tests__/*.test.ts
+alwaysApply: false
+---
+
+# 测试 Mock 规范
+
+## Mock 必须在 import 之前声明
+```typescript
+// ✅ 正确顺序
+vi.mock("node:fs/promises", () => ({ readFile: vi.fn(), writeFile: vi.fn() }))
+vi.stubGlobal("fetch", vi.fn())
+vi.mock("../state-service.js", () => ({ getProjectConfig: vi.fn() }))
+
+// 然后才 import 被测模块
+const { startIngestTask } = await import("../ingest-service.js")
+```
+
+## 三个必须 Mock 的全局对象
+每个 service 测试必须 mock：
+1. `node:fs/promises` — 防止文件系统副作用
+2. `fetch` — 防止真实 LLM/外部 HTTP 调用
+3. `../state-service.js` — 防止读取真实配置
+
+## 状态隔离
+```typescript
+// ✅ 每个测试前清理 mock 状态
+beforeEach(() => {
+  vi.clearAllMocks()
+  // in-memory store 测试：用唯一路径避免测试间污染
+  uniquePath = `/tmp/test-${randomUUID()}`
+})
+```
+
+## 异步测试
+```typescript
+// ✅ 总是 await 异步断言
+await expect(startIngestTask(args)).resolves.toMatchObject({ status: "pending" })
+await expect(startIngestTask(null)).rejects.toThrow("projectId is required")
+```

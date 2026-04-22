@@ -32,7 +32,10 @@
     "test:mapping-overview": "bash scripts/test-mapping-overview.sh",
     "test:ingest-count-gate": "bash scripts/test-ingest-count-gate.sh",
     "fixtures:sync": "node scripts/ingest-fixture-sync.mjs",
-    "fixtures:seed": "node scripts/ingest-fixture-sync.mjs --seed-fallback-only"
+    "fixtures:seed": "node scripts/ingest-fixture-sync.mjs --seed-fallback-only",
+    "pre-commit": "npm run test:ci -- --reporter=dot && npm --prefix server test -- --reporter=dot",
+    "typecheck": "tsc --noEmit",
+    "typecheck:server": "cd server && tsc --noEmit"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

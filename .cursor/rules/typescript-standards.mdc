@@ -1,0 +1,43 @@
+---
+description: TypeScript 类型规范和错误处理标准
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+# TypeScript 规范
+
+## 禁止事项
+```typescript
+// ❌ 禁止 as any（除非有注释说明原因）
+const data = response as any
+
+// ❌ 禁止 @ts-ignore（用 @ts-expect-error + 说明）
+// @ts-ignore
+
+// ❌ 禁止非空断言链
+const name = user!.profile!.name!
+```
+
+## 错误处理
+```typescript
+// ❌ 吃掉错误
+try {
+  await doSomething()
+} catch { /* noop */ }
+
+// ✅ 最小可接受
+try {
+  await doSomething()
+} catch (err) {
+  console.error("[module] operation failed:", err)
+}
+```
+
+## 类型导入
+```typescript
+// ✅ 纯类型用 import type，减少运行时依赖
+import type { WikiProject, FileNode } from "@shared/types.js"
+
+// ✅ 共享类型从 shared/ 导入，禁止重复定义
+import type { ServerIngestTask } from "@shared/types.js"
+```

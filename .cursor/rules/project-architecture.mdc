@@ -1,0 +1,43 @@
+---
+description: llm-wiki 核心架构约束，AI 编码时必须遵守
+alwaysApply: true
+---
+
+# 架构不变量
+
+## 路径安全
+- 前端（`src/`）**永不持有绝对文件系统路径**；只用 `relativePath`（相对 project root）
+- 服务端路径操作必须经过 `middleware/path-sandbox.ts` 校验
+- 用户输入路径用 `path.posix.normalize()` 防 path traversal
+
+## 任务 ID
+```typescript
+// ✅ 正确
+import { randomUUID } from "node:crypto"
+const id = randomUUID()
+
+// ❌ 禁止
+const id = `task_${Date.now()}_${Math.random()}`
+```
+
+## 类型单一来源
+- `ServerIngestTask`、`FileNode`、`WikiProject` 等共享类型定义在 `shared/types.ts`
+- 前后端禁止重复定义相同接口；前端从 `@shared` 导入
+
+## LLM 调用
+```typescript
+// ✅ 正确 — 走统一入口
+import { callLlmStreaming } from "../lib/llm-client.js"
+
+// ❌ 禁止 — 在 service 里直接 fetch LLM API
+fetch(pc.url, { method: "POST", body: JSON.stringify(body) })
+```
+
+## SSE 认证
+```typescript
+// ✅ 正确 — POST + Authorization header
+router.post("/stream/:taskId", requireMember, handler)
+
+// ❌ 禁止 — JWT token 放入 URL query param
+GET /stream/123?token=eyJhbGc...
+```

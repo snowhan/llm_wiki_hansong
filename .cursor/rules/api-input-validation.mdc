@@ -1,0 +1,30 @@
+---
+description: 所有 POST/PUT 路由必须用 Zod 校验请求体
+globs: server/src/routes/*.ts
+alwaysApply: false
+---
+
+# API 输入校验规范
+
+## 每个 mutation 路由必须
+1. 在 `server/src/lib/schemas.ts` 定义对应 Zod schema
+2. 在认证 middleware 之后使用 `validate(XxxSchema)` 中间件
+3. handler 中直接使用类型安全的 `req.body`
+
+```typescript
+// ✅ 正确
+router.post("/start", requireMember, validate(StartIngestSchema), async (req, res) => {
+  const { projectId, sourcePath, folderContext, force } = req.body  // 类型安全
+})
+
+// ❌ 错误 — 未校验直接使用
+router.post("/start", requireMember, async (req, res) => {
+  const { projectId } = req.body  // 任意输入，存在注入风险
+})
+```
+
+## 错误响应格式
+```typescript
+// validate 中间件自动返回
+{ "error": "Validation failed", "details": [{ "path": ["projectId"], "message": "Required" }] }
+```

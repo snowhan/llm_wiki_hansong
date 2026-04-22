@@ -1,0 +1,42 @@
+---
+description: 前端状态管理分层规则：TanStack Query vs Zustand
+globs: src/stores/**/*.ts,src/hooks/**/*.ts
+alwaysApply: false
+---
+
+# 状态管理分层
+
+## 判断标准
+
+| 状态类型 | 来自服务器 | 正确位置 |
+|---------|---------|---------|
+| `llmConfig`, `searchApiConfig`, `embeddingConfig` | ✅ 是 | TanStack Query (`useQuery`) |
+| UI 偏好（`colorScheme`, `chatExpanded`, `sidebarWidth`） | ❌ 否 | Zustand `useUiStore` |
+| 项目导航（`tabs`, `fileTree`, `currentProject`） | ❌ 否 | Zustand `useWikiStore` |
+| Ingest 任务状态（需持久化） | ❌ 否 | Zustand + `persist` middleware |
+
+## 禁止事项
+```typescript
+// ❌ 禁止 — 把服务器配置放入 Zustand persist
+const useWikiStore = create(persist((set) => ({
+  llmConfig: null,  // 这是服务端数据，不应 persist
+})))
+
+// ❌ 禁止 — 在 Zustand action 中 fetch 服务端数据
+fetchLlmConfig: async () => {
+  const data = await fetch("/api/config/llm")
+  set({ llmConfig: data })
+}
+```
+
+## 正确示例
+```typescript
+// ✅ 服务端配置用 TanStack Query
+const { data: llmConfig } = useQuery({
+  queryKey: ["config", "llm"],
+  queryFn: () => api.get("/api/config/llm"),
+})
+
+// ✅ UI 状态用 Zustand
+const { colorScheme, setColorScheme } = useUiStore()
+```

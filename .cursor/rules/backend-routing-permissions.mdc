@@ -1,0 +1,34 @@
+---
+description: Express 路由的权限中间件使用规范
+globs: server/src/routes/*.ts,server/src/index.ts
+alwaysApply: false
+---
+
+# 路由权限规范
+
+## 三级权限模型
+
+| 级别 | Middleware | 适用端点 |
+|---|---|---|
+| 公开 | 无 | wiki 只读、媒体访问、`/api/health` |
+| Member | `requireMember` | ingest、research、preprocess、vector |
+| Admin | `requireAdmin` | llm 配置、项目管理、用户管理 |
+
+## 新增路由 Checklist
+- [ ] 确认端点属于哪个权限级别
+- [ ] 在 `index.ts` 中用对应 middleware 挂载路由
+- [ ] 在 `routes/__tests__/` 新增覆盖 401/403 场景的测试
+
+## SSE 端点规范
+```typescript
+// ✅ 正确 — POST + 必须设置 SSE headers
+router.post("/stream/:taskId", requireMember, (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream")
+  res.setHeader("Cache-Control", "no-cache")
+  res.setHeader("X-Accel-Buffering", "no")
+  req.on("close", () => unregisterSseClient(taskId))
+})
+
+// ❌ 禁止 — GET + token 在 URL
+router.get("/stream/:taskId?token=xxx", ...)
+```

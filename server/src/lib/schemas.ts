@@ -1,8 +1,13 @@
 /**
  * Centralized Zod schemas for all API route bodies / query params.
  * Import the relevant schema in each route and call `.safeParse()` or `.parse()`.
+ *
+ * Usage:
+ *   router.post("/start", requireMember, validate(ingestStartSchema), handler)
+ *   // handler receives typed req.body
  */
 import { z } from "zod"
+import type { Request, Response, NextFunction } from "express"
 
 // ── Shared primitives ──────────────────────────────────────────────────────────
 export const projectIdSchema = z.string().min(1, "projectId is required")
@@ -124,3 +129,34 @@ export const vectorDeleteSchema = z.object({
 export const vectorCountQuerySchema = z.object({
   projectId: z.string().min(1, "projectId query is required"),
 })
+
+// ── StartIngestSchema alias (matches plan convention) ──────────────────────
+export const StartIngestSchema = ingestStartSchema
+
+// ── Generic validate middleware ────────────────────────────────────────────
+
+/**
+ * Express middleware that validates `req.body` against a Zod schema.
+ * Returns 400 with structured error details on failure.
+ * On success, replaces req.body with the parsed (typed) value and calls next().
+ *
+ * Usage:
+ *   router.post("/start", requireMember, validate(ingestStartSchema), handler)
+ */
+export function validate<T>(schema: z.ZodSchema<T>) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const result = schema.safeParse(req.body)
+    if (!result.success) {
+      res.status(400).json({
+        error: "Validation failed",
+        details: result.error.issues.map((issue) => ({
+          path: issue.path,
+          message: issue.message,
+        })),
+      })
+      return
+    }
+    req.body = result.data
+    next()
+  }
+}

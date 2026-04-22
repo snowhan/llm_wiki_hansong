@@ -10,21 +10,62 @@
 import fs from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
-import { createHash, randomUUID } from "node:crypto"
+import { randomUUID } from "node:crypto"
 import type { Response } from "express"
 import type { LlmConfig, ServerIngestTask } from "../types.js"
 import { getProjectRoot } from "./project-service.js"
-import { logLlmCall, logFileChange, nowBeijing } from "./ingest-audit-logger.js"
+import { logLlmCall, nowBeijing } from "./ingest-audit-logger.js"
 import { getState } from "./state-service.js"
 import { getProviderConfig } from "../lib/llm-providers.js"
-import type { ChatMessage, ContentPart } from "../lib/llm-providers.js"
+import type { ChatMessage } from "../lib/llm-providers.js"
 import { llmDebugLogger, inferLlmCallSource } from "./llm-debug-logger.js"
 import { supportsVision } from "../lib/vision-capability.js"
 import {
   readImageAsBase64DataUri,
   extractEmbeddedImages,
-  getEmbeddedImageDir,
 } from "./preprocess-service.js"
+
+// ── Imports from extracted modules ────────────────────────────────────────
+import { extractFmField, extractMarkdownBody } from "./ingest-validators.js"
+import {
+  tryRead, writeWithMkdir,
+  BINARY_EXTS, IMAGE_EXTS, MAX_IMAGES_PER_INGEST,
+  buildMultimodalUserContent,
+  parseFileBlocks, buildAllowedPaths,
+  writeSingleBlock, writeBlocks, parseReviewBlocksText,
+} from "./ingest-file-writer.js"
+import {
+  buildAnalysisPrompt, buildGenerationPrompt,
+  parsePlan, summarizePlanCounts, sanitizeFilename,
+  evaluatePlannedCountGate,
+  buildSourceSummaryPrompt, buildSingleFilePrompt, buildSharedFilesPrompt,
+  buildRebuildSummaryPrompt,
+  parseMergePlan, buildDeduplicatePrompt, buildMergeContentPrompt,
+} from "./ingest-prompts.js"
+import type {
+  PlanItem, PlanCountSummary, PlannedCountGateInput, PlannedCountGateResult, MergeGroup,
+} from "./ingest-prompts.js"
+import { checkCache, persistCache } from "./ingest-cache.js"
+
+// ── Re-exports for backward compatibility ────────────────────────────────
+export {
+  normFrontmatter, setFmField, ensureCanonicalTitleType,
+  isTitleFilenameConsistent, isBodyTitleSemanticallyConsistent, extractFmField,
+} from "./ingest-validators.js"
+export {
+  buildMultimodalUserContent, parseFileBlocks, buildAllowedPaths,
+} from "./ingest-file-writer.js"
+export {
+  buildAnalysisPrompt, buildGenerationPrompt,
+  parsePlan, evaluatePlannedCountGate, summarizePlanCounts,
+  sanitizeFilename,
+  buildSourceSummaryPrompt, buildSingleFilePrompt, buildSharedFilesPrompt,
+  buildRebuildSummaryPrompt,
+  parseMergePlan, buildDeduplicatePrompt, buildMergeContentPrompt,
+} from "./ingest-prompts.js"
+export type {
+  PlanItem, PlanCountSummary, PlannedCountGateInput, PlannedCountGateResult, MergeGroup,
+} from "./ingest-prompts.js"
 
 // ── Task types ────────────────────────────────────────────────────────────
 
@@ -134,55 +175,9 @@ export function startIngestTask(
   return id
 }
 
-// ── File I/O helpers ──────────────────────────────────────────────────────
-
-async function tryRead(filePath: string): Promise<string> {
-  try { return await fs.readFile(filePath, "utf-8") } catch { return "" }
-}
-
-async function writeWithMkdir(filePath: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, content, "utf-8")
-}
-
-function sha256(text: string): string {
-  return createHash("sha256").update(text).digest("hex")
-}
-
-const BINARY_EXTS = new Set(["pdf", "docx", "pptx", "xlsx", "xls", "rtf", "odt", "odp", "ods"])
-const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "avif", "heic", "heif"])
-const MAX_IMAGES_PER_INGEST = 10
-
-/**
- * Build the user message content for an ingest LLM call.
- * When images are provided, returns a ContentPart[] (multimodal).
- * When no images, returns a plain string (backward-compatible).
- */
-export function buildMultimodalUserContent(
-  textPrompt: string,
-  imageDataUris: string[],
-): string | ContentPart[] {
-  if (imageDataUris.length === 0) return textPrompt
-
-  const capped = imageDataUris.slice(0, MAX_IMAGES_PER_INGEST)
-  const truncationNotice =
-    imageDataUris.length > MAX_IMAGES_PER_INGEST
-      ? `\n\n[Note: ${imageDataUris.length} images found; sending first ${MAX_IMAGES_PER_INGEST} to stay within token limits.]`
-      : ""
-
-  const parts: ContentPart[] = [
-    { type: "text", text: textPrompt + truncationNotice },
-    ...capped.map((url) => ({
-      type: "image_url" as const,
-      image_url: { url, detail: "auto" as const },
-    })),
-  ]
-  return parts
-}
-
-// Paths the shared-files LLM call is allowed to write.
-// wiki/index.md is intentionally excluded — it is rebuilt programmatically after each ingest.
-const SHARED_ALLOWED: ReadonlySet<string> = new Set(["wiki/log.md", "wiki/overview.md"])
+// ── File I/O helpers — moved to ingest-file-writer.ts ────────────────────
+// (tryRead, writeWithMkdir, BINARY_EXTS, IMAGE_EXTS, MAX_IMAGES_PER_INGEST,
+//  buildMultimodalUserContent, SHARED_ALLOWED — imported from ingest-file-writer.ts)
 
 // ── Index rebuild ─────────────────────────────────────────────────────────
 
@@ -211,25 +206,9 @@ async function collectMdFiles(dir: string, baseDir: string): Promise<string[]> {
 const INDEX_SKIP = new Set(["index.md", "log.md", "overview.md"])
 const INDEX_TYPE_ORDER = ["source", "entity", "concept", "synthesis", "comparison", "query"]
 
-function extractFmField(content: string, field: string): string {
-  const m = content.match(new RegExp(`^${field}:\\s*["']?([^"'\\n]+?)["']?\\s*$`, "m"))
-  return m ? m[1].trim() : ""
-}
-
-function extractMarkdownBody(content: string): string {
-  const fmMatch = content.match(/^---\s*\n[\s\S]*?\n---\s*\n?/)
-  if (fmMatch) return content.slice(fmMatch[0].length).trim()
-  return content.trim()
-}
-
-function normalizeForMatch(text: string): string {
-  return text.toLowerCase().replace(/\s+/g, "").replace(/[`*_[\]()#.:,，。！？!?\-]/g, "")
-}
-
-function extractFirstHeading(body: string): string {
-  const m = body.match(/^#\s+(.+)\s*$/m)
-  return m ? m[1].trim() : ""
-}
+// ── Validator helpers — moved to ingest-validators.ts ────────────────────
+// (extractFmField, extractMarkdownBody, normalizeForMatch, extractFirstHeading
+//  — imported from ingest-validators.ts)
 
 /**
  * Scan wiki/ directory, read frontmatter from every .md file, and write
@@ -452,50 +431,9 @@ async function readSourceForIngest(sourcePath: string): Promise<string> {
   return tryRead(sourcePath)
 }
 
-// ── Ingest cache ──────────────────────────────────────────────────────────
-
-interface CacheEntry { hash: string; timestamp: number; filesWritten: string[] }
-interface CacheData { entries: Record<string, CacheEntry> }
-
-async function loadCache(projectPath: string): Promise<CacheData> {
-  try {
-    const raw = await fs.readFile(
-      path.join(projectPath, ".llm-wiki", "ingest-cache.json"),
-      "utf-8",
-    )
-    return JSON.parse(raw) as CacheData
-  } catch { return { entries: {} } }
-}
-
-async function saveCache(projectPath: string, data: CacheData): Promise<void> {
-  try {
-    const p = path.join(projectPath, ".llm-wiki", "ingest-cache.json")
-    await fs.mkdir(path.dirname(p), { recursive: true })
-    await fs.writeFile(p, JSON.stringify(data, null, 2))
-  } catch { /* non-critical */ }
-}
-
-async function checkCache(
-  projectPath: string,
-  fileName: string,
-  content: string,
-): Promise<string[] | null> {
-  const cache = await loadCache(projectPath)
-  const entry = cache.entries[fileName]
-  if (!entry) return null
-  return entry.hash === sha256(content) ? entry.filesWritten : null
-}
-
-async function persistCache(
-  projectPath: string,
-  fileName: string,
-  content: string,
-  files: string[],
-): Promise<void> {
-  const cache = await loadCache(projectPath)
-  cache.entries[fileName] = { hash: sha256(content), timestamp: Date.now(), filesWritten: files }
-  await saveCache(projectPath, cache)
-}
+// ── Ingest cache — moved to ingest-cache.ts ──────────────────────────────
+// (CacheEntry, CacheData, loadCache, saveCache, checkCache, persistCache
+//  — imported from ingest-cache.ts)
 
 // ── LLM call ──────────────────────────────────────────────────────────────
 
@@ -581,660 +519,19 @@ async function callLlm(
   }
 }
 
-// ── File blocks ───────────────────────────────────────────────────────────
+// ── File blocks — moved to ingest-file-writer.ts ──────────────────────────
+// (parseFileBlocks, normFrontmatter, setFmField, ensureCanonicalTitleType,
+//  isTitleFilenameConsistent, isBodyTitleSemanticallyConsistent,
+//  writeSingleBlock, buildAllowedPaths, writeBlocks, parseReviewBlocksText
+//  — imported from ingest-file-writer.ts and ingest-validators.ts)
 
-/**
- * Parse FILE blocks from LLM output.
- *
- * The LLM occasionally omits ---END FILE--- for a block. A pure regex
- * (non-greedy [\s\S]*?) would then consume all content up to the NEXT
- * ---END FILE--- — pulling in the following file's content and creating
- * title/content mismatches.
- *
- * This line-based parser treats a new ---FILE: header as an implicit
- * terminator for any open block, so missing ---END FILE--- markers can
- * never cause content bleed between files.
- */
-export function parseFileBlocks(text: string): Array<{ path: string; content: string }> {
-  const results: Array<{ path: string; content: string }> = []
-  const lines = text.split("\n")
-  let currentPath: string | null = null
-  const currentLines: string[] = []
+// ── Prompts — moved to ingest-prompts.ts ───────────────────────────────────
+// (LANGUAGE_RULE, buildAnalysisPrompt, buildGenerationPrompt, PlanItem,
+//  parsePlan, evaluatePlannedCountGate, sanitizeFilename,
+//  buildSourceSummaryPrompt, buildSingleFilePrompt, buildSharedFilesPrompt
+//  — imported from ingest-prompts.ts)
 
-  const flush = () => {
-    if (currentPath !== null) {
-      results.push({ path: currentPath, content: currentLines.join("\n") })
-      currentLines.length = 0
-      currentPath = null
-    }
-  }
-
-  for (const line of lines) {
-    const startMatch = line.match(/^---FILE:\s*(.+?)\s*---$/)
-    if (startMatch) {
-      flush() // close previous block (handles missing ---END FILE---)
-      currentPath = startMatch[1]
-    } else if (line === "---END FILE---") {
-      flush()
-    } else if (currentPath !== null) {
-      currentLines.push(line)
-    }
-  }
-  flush() // handle trailing open block
-
-  return results
-}
-
-export function normFrontmatter(content: string): string {
-  if (/^-{3}[ \t]*\r?\n/.test(content)) return content
-  const m = content.match(/^((?:[a-z_][a-z0-9_]*[ \t]*:[ \t]*[^\n]*\n){2,})/)
-  if (m) {
-    return `---\n${m[1]}---\n\n${content.slice(m[1].length).replace(/^\n+/, "")}`
-  }
-  return content
-}
-
-/**
- * Set or insert a frontmatter key/value pair (the block between the --- delimiters).
- */
-export function setFmField(fm: string, key: string, value: string): string {
-  const line = `${key}: ${value}`
-  const re = new RegExp(`^${key}:\\s*.*$`, "m")
-  if (re.test(fm)) return fm.replace(re, line)
-  return `${fm}\n${line}`.trim()
-}
-
-/**
- * Correct the `title` and `type` frontmatter fields to match the canonical
- * values derived from the file path.  Called by writeSingleBlock so that LLM
- * output with wrong titles never reaches disk.
- */
-export function ensureCanonicalTitleType(rel: string, content: string): string {
-  const fmMatch = content.match(/^(---\n)([\s\S]*?)(\n---\n?)([\s\S]*)$/)
-  if (!fmMatch) return content
-
-  const canonicalType = rel === "wiki/overview.md"
-    ? "overview"
-    : rel.includes("/entities/") ? "entity"
-    : rel.includes("/concepts/") ? "concept"
-    : /^wiki\/sources\/[^/]+\.md$/.test(rel) ? "source"
-    : null
-
-  const entityMatch = rel.match(/^wiki\/sources\/.+\/(entities|concepts)\/([^/]+)\.md$/)
-  const sourceMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
-  const canonicalTitle = rel === "wiki/overview.md"
-    ? "Wiki 总览"
-    : entityMatch ? path.basename(rel, ".md")
-    : sourceMatch ? sourceMatch[1]
-    : null
-
-  if (!canonicalType && !canonicalTitle) return content
-
-  let fm = fmMatch[2]
-  if (canonicalType) fm = setFmField(fm, "type", canonicalType)
-  if (canonicalTitle) fm = setFmField(fm, "title", canonicalTitle)
-  return `---\n${fm}\n---\n${fmMatch[4]}`
-}
-
-
-/**
- * Check that the frontmatter title in a wiki file matches the file's basename.
- * Returns true when consistent (or when the check is not applicable).
- * This is the invariant that prevents LLM path-content mismatches from reaching disk.
- */
-export function isTitleFilenameConsistent(rel: string, content: string): boolean {
-  const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
-  const titleInFrontmatter = titleMatch?.[1]?.trim()
-  if (!titleInFrontmatter) return true // no title → let empty-content check handle it
-
-  // 汇总页：wiki/sources/<base>.md（直接在 sources/ 下，不含子目录）
-  const sourceSummaryMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
-  if (sourceSummaryMatch) {
-    return titleInFrontmatter.toLowerCase() === sourceSummaryMatch[1].toLowerCase()
-  }
-
-  // 实体/概念页：wiki/sources/<base>/entities/<name>.md 或 .../concepts/<name>.md
-  if (!rel.match(/\/(entities|concepts)\/[^/]+\.md$/)) return true
-  const fileBasename = path.basename(rel, ".md")
-  return titleInFrontmatter.toLowerCase() === fileBasename.toLowerCase()
-}
-
-/**
- * Check semantic consistency between path/title/body for generated pages.
- * This blocks cases where filename/title are valid but body obviously belongs to another topic.
- */
-export function isBodyTitleSemanticallyConsistent(rel: string, content: string): boolean {
-  if (!rel.endsWith(".md")) return true
-  if (rel === "wiki/log.md" || rel === "wiki/index.md" || rel === "wiki/overview.md") return true
-  const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
-  const title = titleMatch?.[1]?.trim()
-  if (!title) return true
-
-  const expectedType = rel.includes("/entities/")
-    ? "entity"
-    : rel.includes("/concepts/")
-      ? "concept"
-      : null
-  if (expectedType) {
-    const type = extractFmField(content, "type")
-    if (type && type !== expectedType) return false
-  }
-
-  const body = extractMarkdownBody(content)
-  if (!body) return false
-  const titleNorm = normalizeForMatch(title)
-  const bodyNorm = normalizeForMatch(body)
-  const heading = extractFirstHeading(body)
-  if (heading) {
-    const headingNorm = normalizeForMatch(heading)
-    if (!headingNorm.includes(titleNorm) && !titleNorm.includes(headingNorm)) return false
-  }
-
-  if (rel.includes("/entities/") || rel.includes("/concepts/")) {
-    const hasDirectMention = bodyNorm.includes(titleNorm)
-    const hasWikilinkMention = body.includes(`[[${title}]]`)
-    if (!hasDirectMention && !hasWikilinkMention) return false
-  }
-
-  const summaryMatch = rel.match(/^wiki\/sources\/([^/]+)\.md$/)
-  if (summaryMatch) {
-    const sourceBaseNorm = normalizeForMatch(summaryMatch[1])
-    const hasSourceMention = bodyNorm.includes(sourceBaseNorm) || body.includes(`[[${summaryMatch[1]}]]`)
-    if (!hasSourceMention) return false
-  }
-
-  return true
-}
-
-async function writeSingleBlock(
-  projectPath: string,
-  rel: string,
-  rawContent: string,
-  opts?: { allowedPaths?: ReadonlySet<string>; writtenInTask?: Set<string> },
-): Promise<boolean> {
-  if (!rel) return false
-
-  // Contract validation: reject writes not in the declared allowed set
-  if (opts?.allowedPaths && !opts.allowedPaths.has(rel)) {
-    console.warn(`[ingest-service] Rejected out-of-contract write: ${rel}`)
-    return false
-  }
-
-  const isLogFile = rel === "wiki/log.md" || rel.endsWith("/log.md")
-
-  // Write protection: prevent a later step from overwriting a file already written in this task
-  if (!isLogFile && opts?.writtenInTask?.has(rel)) {
-    console.warn(`[ingest-service] Skipping already-written file: ${rel}`)
-    return false
-  }
-
-  let content = rawContent
-
-  if (rel.endsWith(".md") && !isLogFile) {
-    content = normFrontmatter(content)
-    content = ensureCanonicalTitleType(rel, content)
-  }
-  if (!isLogFile && !content.trim()) {
-    console.warn(`[ingest-service] Skipping empty content for ${rel}`)
-    return false
-  }
-
-  // TEST: title-filename 一致性校验暂时注释掉，用于测试错位是否由 LLM 输出本身导致
-  // if (!isTitleFilenameConsistent(rel, content)) {
-  //   const fileBasename = path.basename(rel, ".md")
-  //   const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
-  //   console.warn(
-  //     `[ingest-service] ⛔ REJECTED title-filename mismatch: path="${rel}" title="${titleMatch?.[1]?.trim()}" filename="${fileBasename}"`,
-  //   )
-  //   return false
-  // }
-  // TEST: semantic mismatch 拦截暂时注释掉，测试 LLM 原始输出写入磁盘的裸状态
-  // if (!isBodyTitleSemanticallyConsistent(rel, content)) {
-  //   const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
-  //   console.warn(
-  //     `[ingest-service] ⛔ REJECTED semantic mismatch: path="${rel}" title="${titleMatch?.[1]?.trim() ?? ""}"`,
-  //   )
-  //   return false
-  // }
-
-  const full = path.join(projectPath, rel)
-  try {
-    if (isLogFile) {
-      const existing = await tryRead(full)
-      await writeWithMkdir(full, existing ? `${existing}\n\n${content.trim()}` : content.trim())
-    } else {
-      await writeWithMkdir(full, content)
-    }
-    opts?.writtenInTask?.add(rel)
-    return true
-  } catch (err) {
-    console.error(`[ingest-service] Write failed ${rel}:`, err)
-    return false
-  }
-}
-
-/**
- * Build the set of paths this ingest task is allowed to write.
- * Paths outside this set are rejected to prevent LLM cross-source hallucinations.
- *
- * Allowed:
- *   - wiki/sources/<sourceBase>.md          (source summary page)
- *   - wiki/sources/<sourceBase>/**          (entities, concepts, etc.)
- *   - wiki/log.md                           (append-only log)
- *   - wiki/overview.md                      (shared overview, updated each ingest)
- *
- * wiki/index.md is intentionally excluded — it is rebuilt programmatically after each ingest.
- */
-export function buildAllowedPaths(sourceBase: string): ReadonlySet<string> {
-  return new Set<string>([
-    `wiki/sources/${sourceBase}.md`,
-    `wiki/log.md`,
-    `wiki/overview.md`,
-  ]) as ReadonlySet<string>
-}
-
-async function writeBlocks(
-  projectPath: string,
-  text: string,
-  sourceBase: string,
-  taskId: string,
-  sourceFile: string,
-): Promise<string[]> {
-  const written: string[] = []
-  const rejected: string[] = []
-  const staticAllowed = buildAllowedPaths(sourceBase)
-  const sourcePrefix = `wiki/sources/${sourceBase}/`
-  const blocks = parseFileBlocks(text)
-
-  console.log(`[writeBlocks] source="${sourceBase}" totalBlocks=${blocks.length}`)
-
-  for (const { path: relRaw, content: rawContent } of blocks) {
-    // Normalize to prevent path traversal (e.g. "sources/A/../../evil.md")
-    const rel = path.posix.normalize(relRaw)
-
-    if (rel === "wiki/overview.md") {
-      // Shared overview is rebuilt programmatically to avoid concurrent LLM drift.
-      continue
-    }
-
-    // Extract title and sources from frontmatter for logging
-    const titleMatch = rawContent.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
-    const titleInContent = titleMatch?.[1]?.trim() ?? "(no title)"
-    const sourcesMatch = rawContent.match(/^---\s*\n[\s\S]*?^sources:\s*(.+?)$/m)
-    const sourcesField = sourcesMatch?.[1]?.trim() ?? ""
-    const fileBasename = rel.split("/").pop()?.replace(/\.md$/, "") ?? ""
-    const titleMatchesFilename = fileBasename.toLowerCase() === titleInContent.toLowerCase()
-
-    const isAllowed = rel.startsWith(sourcePrefix) || staticAllowed.has(rel)
-    if (!isAllowed) {
-      rejected.push(rel)
-      console.warn(
-        `[writeBlocks] ⛔ REJECTED out-of-scope (source=${sourceBase}): ${rel}`,
-      )
-      logFileChange(projectPath, {
-        ts: nowBeijing(),
-        taskId,
-        sourceFile,
-        operation: "rejected-scope",
-        path: rel,
-        titleInContent,
-        titleMatchesFilename,
-        sourcesField,
-        contentSnippet: rawContent.slice(0, 300),
-      }).catch(() => {})
-      continue
-    }
-    const ok = await writeSingleBlock(projectPath, rel, rawContent)
-    if (ok) {
-      written.push(rel)
-      console.log(`[writeBlocks] ✅ WRITTEN (source=${sourceBase}): ${rel}`)
-      logFileChange(projectPath, {
-        ts: nowBeijing(),
-        taskId,
-        sourceFile,
-        operation: "written",
-        path: rel,
-        titleInContent,
-        titleMatchesFilename,
-        sourcesField,
-        contentSnippet: rawContent.slice(0, 300),
-      }).catch(() => {})
-    } else {
-      console.warn(`[writeBlocks] ⚠️ SKIPPED empty/invalid (source=${sourceBase}): ${rel}`)
-      logFileChange(projectPath, {
-        ts: nowBeijing(),
-        taskId,
-        sourceFile,
-        operation: "skipped-empty",
-        path: rel,
-        titleInContent,
-        titleMatchesFilename,
-        sourcesField,
-        contentSnippet: rawContent.slice(0, 300),
-      }).catch(() => {})
-    }
-  }
-
-  console.log(
-    `[writeBlocks] DONE source="${sourceBase}" written=${written.length} rejected=${rejected.length}` +
-    (rejected.length > 0 ? ` rejectedPaths=[${rejected.join(", ")}]` : ""),
-  )
-  return written
-}
-
-const REVIEW_BLOCK_RE = /---REVIEW:\s*(\w[\w-]*)\s*\|\s*(.+?)\s*---\n([\s\S]*?)---END REVIEW---/g
-
-function parseReviewBlocksText(
-  text: string,
-  sourcePath: string,
-): Array<{ type: string; title: string; description: string; sourcePath: string; affectedPages?: string[]; options: Array<{ label: string; action: string }> }> {
-  const items = []
-  for (const match of text.matchAll(REVIEW_BLOCK_RE)) {
-    const rawType = match[1].trim().toLowerCase()
-    const title = match[2].trim()
-    const body = match[3].trim()
-
-    const type = ["contradiction", "duplicate", "missing-page", "suggestion"].includes(rawType)
-      ? rawType
-      : "suggestion"
-
-    const optionsMatch = body.match(/^OPTIONS:\s*(.+)$/m)
-    const options = optionsMatch
-      ? optionsMatch[1].split("|").map((o) => { const label = o.trim(); return { label, action: label } })
-      : [{ label: "Approve", action: "Approve" }, { label: "Skip", action: "Skip" }]
-
-    const pagesMatch = body.match(/^PAGES:\s*(.+)$/m)
-    const affectedPages = pagesMatch ? pagesMatch[1].split(",").map((p) => p.trim()) : undefined
-
-    const description = body
-      .replace(/^OPTIONS:.*$/m, "").replace(/^PAGES:.*$/m, "").replace(/^SEARCH:.*$/m, "").trim()
-
-    items.push({ type, title, description, sourcePath, affectedPages, options })
-  }
-  return items
-}
-
-// ── Prompts ───────────────────────────────────────────────────────────────
-
-const LANGUAGE_RULE =
-  "## Language Rule\n- ALWAYS match the language of the source document. " +
-  "If the source is in Chinese, write in Chinese. If in English, write in English. " +
-  "Wiki page titles, content, and descriptions should all be in the same language as the source material."
-
-export function buildAnalysisPrompt(purpose: string, existingSourcePaths: string): string {
-  return [
-    "You are an expert research analyst. Read the source document and produce a structured analysis.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    "Your analysis should cover:",
-    "",
-    "## Key Entities",
-    "List people, organizations, products, datasets, tools mentioned. For each:",
-    "- Name and type",
-    "- Role in the source (central vs. peripheral)",
-    "- Common aliases or alternative names (e.g. abbreviations, short forms)",
-    "- Whether it likely already exists as a page for this source (check existing pages below)",
-    "",
-    "## Key Concepts",
-    "List theories, methods, techniques, phenomena. For each:",
-    "- Name and brief definition",
-    "- Why it matters in this source",
-    "- Whether it likely already exists as a page for this source",
-    "",
-    "## Main Arguments & Findings",
-    "- What are the core claims or results?",
-    "- What evidence supports them?",
-    "- How strong is the evidence?",
-    "",
-    "## Connections to Existing Pages",
-    "- What existing pages for this source does the new content relate to?",
-    "- Does it strengthen, challenge, or extend existing knowledge?",
-    "",
-    "## Contradictions & Tensions",
-    "- Are there internal tensions or caveats within this source?",
-    "",
-    "## Recommendations",
-    "- What wiki pages should be created or updated for this source?",
-    "- What should be emphasized vs. de-emphasized?",
-    "- Any open questions worth flagging for the user?",
-    "",
-    "Be thorough but concise. Focus on what's genuinely important.",
-    "",
-    "If a folder context is provided, use it as a hint for categorization.",
-    "",
-    purpose ? `## Wiki Purpose (for context)\n${purpose}` : "",
-    existingSourcePaths ? `## Existing pages for this source\n${existingSourcePaths}` : "",
-  ].filter(Boolean).join("\n")
-}
-
-export function buildGenerationPrompt(
-  schema: string,
-  purpose: string,
-  existingSourcePaths: string,
-  sourceFileName: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _overview?: string,
-): string {
-  const base = sourceFileName.replace(/\.[^.]+$/, "")
-  return [
-    "You are a wiki maintainer. Based on the analysis provided, generate wiki files.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    `## IMPORTANT: Source File`,
-    `The original source file is: **${sourceFileName}**`,
-    `All wiki pages generated from this source MUST include this filename in their frontmatter \`sources\` field.`,
-    "",
-    "## Output Format",
-    "",
-    "Output each wiki file in this exact format:",
-    "",
-    "---FILE: wiki/sources/filename.md---",
-    `(or: ---FILE: wiki/sources/${base}/entities/entity-name.md---)`,
-    "(complete file content with YAML frontmatter)",
-    "---END FILE---",
-    "",
-    "Generate:",
-    `1. A source summary page at **wiki/sources/${base}.md** (MUST use this exact path)`,
-    `2. Entity pages in **wiki/sources/${base}/entities/** for key entities identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/entities/entity-name.md)`,
-    `3. Concept pages in **wiki/sources/${base}/concepts/** for key concepts identified in the analysis (MUST use this exact prefix, e.g. wiki/sources/${base}/concepts/concept-name.md)`,
-    "4. A log entry for wiki/log.md (just the new entry to append, format: ## [YYYY-MM-DD] ingest | Title)",
-    "",
-    "## Frontmatter Rules (CRITICAL)",
-    "",
-    "Every page MUST have YAML frontmatter with these fields:",
-    "```yaml",
-    "---",
-    "type: source | entity | concept | comparison | query | synthesis",
-    "title: Human-readable title",
-    "description: \"One-sentence summary of this page (≤80 chars)\"",
-    "aliases: []",
-    "created: YYYY-MM-DD",
-    "updated: YYYY-MM-DD",
-    "tags: []",
-    "related: []",
-    `sources: ["${sourceFileName}"]  # MUST contain the original source filename`,
-    "---",
-    "```",
-    "",
-    `The \`sources\` field MUST always contain "${sourceFileName}".`,
-    "",
-    "## Frontmatter Field Guidelines",
-    "- `description`: one sentence describing the page content (≤80 chars)",
-    "- `aliases`: list of alternative names or abbreviations for this entity/concept",
-    "- `tags`: 2-5 descriptive tags relevant to the content (e.g. [\"医疗\", \"体检\", \"珠海\"])",
-    "- `related`: slugs of related pages already in this wiki (e.g. [\"高尿酸血症\", \"珠海奥乐医院\"])",
-    "",
-    "Other rules:",
-    "- Use [[wikilink]] syntax for cross-references between pages — available pages are listed in the Existing pages section below",
-    "- Link to existing pages using [[slug]] — use the Existing pages list as the source for cross-reference wikilinks",
-    "- Filenames MUST follow source language. If the source is Chinese, use Chinese filenames directly (DO NOT transliterate to pinyin). If the source is English, use readable English filenames.",
-    "- Follow the analysis recommendations on what to emphasize",
-    "",
-    "## Page Type Rules (CRITICAL — read before writing each FILE block)",
-    "",
-    `### Entity Pages  (path must be under wiki/sources/${base}/entities/)`,
-    "- An entity page is about a SPECIFIC PERSON, ORGANIZATION, PRODUCT, DATASET, or TOOL",
-    "- Content MUST describe: who/what this entity is, their background, their role in this source",
-    "- ❌ DO NOT write about medical conditions, abstract concepts, or techniques in entity pages",
-    "- ✅ Example correct: a page about '韩松' describes this person's identity and role in the source",
-    "- Required sections:",
-    "  ## {title}",
-    "  ## 背景",
-    "  ## 在本源中的角色",
-    "  ## 相关",
-    "",
-    `### Concept Pages  (path must be under wiki/sources/${base}/concepts/)`,
-    "- A concept page is about an ABSTRACT IDEA, MEDICAL CONDITION, METHODOLOGY, or TECHNIQUE",
-    "- Content MUST describe: definition, clinical/technical significance, how it appears in this source",
-    "- ❌ DO NOT write about specific people, organizations, or products in concept pages",
-    "- ✅ Example correct: a page about '高尿酸血症' explains what this medical condition is",
-    "- Required sections:",
-    "  ## {title}",
-    "  ## 定义",
-    "  ## 意义",
-    "  ## 在本源中的体现",
-    "  ## 相关",
-    "",
-    "### SELF-CHECK before writing each FILE block:",
-    "- Path contains /entities/ → content MUST be about a specific person/org/product/tool",
-    "- Path contains /concepts/ → content MUST be about an abstract idea/condition/method",
-    "- If content and path type do not match → FIX IT before outputting",
-    "",
-    "## Review Items",
-    "",
-    "After the FILE blocks, output REVIEW blocks for anything that needs human judgment:",
-    "",
-    "---REVIEW: type | Title---",
-    "Description of what needs the user's attention.",
-    "OPTIONS: (see allowed options below)",
-    "PAGES: wiki/page1.md, wiki/page2.md",
-    "SEARCH: search query 1 | search query 2",
-    "---END REVIEW---",
-    "",
-    "Review types: contradiction, duplicate, missing-page, suggestion.",
-    "For each: OPTIONS: Create Page | Skip",
-    "",
-    "Only create reviews for things that genuinely need human input.",
-    "",
-    purpose ? `## Wiki Purpose\n${purpose}` : "",
-    schema ? `## Wiki Schema\n${schema}` : "",
-    existingSourcePaths ? `## Existing pages for this source (use [[wikilink]] cross-references to link to these pages)\n${existingSourcePaths}` : "",
-  ].filter(Boolean).join("\n")
-}
-
-// ── File plan ─────────────────────────────────────────────────────────────
-
-interface PlanItem {
-  type: "entity" | "concept"
-  name: string
-  description: string
-}
-
-/**
- * Extract entity/concept file plan from the LLM analysis output.
- * Looks for lines like: ENTITY: Name | description
- */
-export function parsePlan(analysis: string): PlanItem[] {
-  const planMatch = analysis.match(/## File Plan\s*\n([\s\S]*)$/)
-  const planSection = planMatch ? planMatch[1] : analysis
-  const items: PlanItem[] = []
-
-  for (const line of planSection.split("\n")) {
-    const entityMatch = line.match(/^ENTITY:\s*(.+?)\s*\|\s*(.+)$/)
-    if (entityMatch) {
-      items.push({ type: "entity", name: entityMatch[1].trim(), description: entityMatch[2].trim() })
-      continue
-    }
-    const conceptMatch = line.match(/^CONCEPT:\s*(.+?)\s*\|\s*(.+)$/)
-    if (conceptMatch) {
-      items.push({ type: "concept", name: conceptMatch[1].trim(), description: conceptMatch[2].trim() })
-    }
-  }
-  return items
-}
-
-interface PlanCountSummary {
-  expectedEntityNames: string[]
-  expectedConceptNames: string[]
-}
-
-interface PlannedCountGateInput {
-  expectedEntityNames: string[]
-  expectedConceptNames: string[]
-  actualEntityNames: string[]
-  actualConceptNames: string[]
-}
-
-interface PlannedCountGateResult {
-  ok: boolean
-  detail?: string
-}
-
-function normalizeCountName(name: string): string {
-  return name.trim().toLowerCase()
-}
-
-function dedupeNames(names: string[]): string[] {
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const rawName of names) {
-    const normalized = normalizeCountName(rawName)
-    if (!normalized || seen.has(normalized)) continue
-    seen.add(normalized)
-    result.push(rawName.trim())
-  }
-  return result
-}
-
-function summarizePlanCounts(items: PlanItem[]): PlanCountSummary {
-  const expectedEntityNames = dedupeNames(
-    items.filter((item) => item.type === "entity").map((item) => item.name),
-  )
-  const expectedConceptNames = dedupeNames(
-    items.filter((item) => item.type === "concept").map((item) => item.name),
-  )
-  return { expectedEntityNames, expectedConceptNames }
-}
-
-function findMissingPlannedNames(expectedNames: string[], actualNames: string[]): string[] {
-  const actualSet = new Set(actualNames.map((name) => normalizeCountName(name)))
-  return expectedNames.filter((name) => !actualSet.has(normalizeCountName(name)))
-}
-
-export function evaluatePlannedCountGate(input: PlannedCountGateInput): PlannedCountGateResult {
-  const expectedEntityNames = dedupeNames(input.expectedEntityNames)
-  const expectedConceptNames = dedupeNames(input.expectedConceptNames)
-  const actualEntityNames = dedupeNames(input.actualEntityNames)
-  const actualConceptNames = dedupeNames(input.actualConceptNames)
-
-  const missingEntities = findMissingPlannedNames(expectedEntityNames, actualEntityNames)
-  const missingConcepts = findMissingPlannedNames(expectedConceptNames, actualConceptNames)
-  const entityMissingCount = Math.max(0, expectedEntityNames.length - actualEntityNames.length)
-  const conceptMissingCount = Math.max(0, expectedConceptNames.length - actualConceptNames.length)
-
-  if (entityMissingCount === 0 && conceptMissingCount === 0) {
-    return { ok: true }
-  }
-
-  const details: string[] = [
-    `planned_count_mismatch: expected entities=${expectedEntityNames.length}, concepts=${expectedConceptNames.length}; actual entities=${actualEntityNames.length}, concepts=${actualConceptNames.length}`,
-  ]
-  if (entityMissingCount > 0) {
-    details.push(
-      `missing entities=${entityMissingCount}` +
-      (missingEntities.length > 0 ? ` sample=[${missingEntities.slice(0, 5).join(", ")}]` : ""),
-    )
-  }
-  if (conceptMissingCount > 0) {
-    details.push(
-      `missing concepts=${conceptMissingCount}` +
-      (missingConcepts.length > 0 ? ` sample=[${missingConcepts.slice(0, 5).join(", ")}]` : ""),
-    )
-  }
-  return { ok: false, detail: details.join(" | ") }
-}
+// ── Count gate helpers ─────────────────────────────────────────────────────
 
 async function collectActualWikiNames(
   projectPath: string,
@@ -1269,182 +566,6 @@ async function validatePostRebuildCountGate(
     actualEntityNames: actual.entityNames,
     actualConceptNames: actual.conceptNames,
   })
-}
-
-/** Remove characters that are unsafe in filenames */
-function sanitizeFilename(name: string): string {
-  return name.replace(/[/\\:*?"<>|]/g, "-").trim()
-}
-
-export function buildSourceSummaryPrompt(
-  sourceFileName: string,
-  purpose: string,
-  schema: string,
-): string {
-  const base = sourceFileName.replace(/\.[^.]+$/, "")
-  return [
-    "You are a wiki maintainer. Generate EXACTLY ONE wiki file: the source summary page.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    `## File to Generate`,
-    `- Path: wiki/sources/${base}.md`,
-    `- Type: source`,
-    `- This page summarizes the source document and links to entity/concept pages.`,
-    "",
-    "## Output Format",
-    `Output ONLY this single FILE block:`,
-    `---FILE: wiki/sources/${base}.md---`,
-    "(YAML frontmatter + content)",
-    "---END FILE---",
-    "",
-    "## Frontmatter",
-    "```yaml",
-    "---",
-    "type: source",
-    `title: "${base}"`,
-    "description: \"One-sentence summary of this source (≤80 chars)\"",
-    "aliases: []",
-    "created: YYYY-MM-DD",
-    "updated: YYYY-MM-DD",
-    "tags: []",
-    "related: []",
-    `sources: ["${sourceFileName}"]`,
-    "---",
-    "```",
-    "",
-    "## Content Rules",
-    "- Summarize the source document's key findings, entities, and concepts",
-    "- Use [[wikilink]] to link to entity and concept pages",
-    "- Be comprehensive but concise",
-    "",
-    purpose ? `## Wiki Purpose\n${purpose}` : "",
-    schema ? `## Wiki Schema\n${schema}` : "",
-  ].filter(Boolean).join("\n")
-}
-
-export function buildSingleFilePrompt(
-  filePath: string,
-  fileType: "entity" | "concept",
-  title: string,
-  description: string,
-  sourceFileName: string,
-  purpose: string,
-): string {
-  const typeRules =
-    fileType === "entity"
-      ? [
-          `- This is an ENTITY page about a specific person, organization, product, or tool: "${title}"`,
-          `- Content MUST describe who/what "${title}" is and their role in the source`,
-          "- DO NOT write about abstract ideas, medical conditions, or techniques in this page",
-          "- Focus on: identity, background, significance, role in the source document",
-          "- Required sections:",
-          "  ## {title}",
-          "  ## 背景",
-          "  ## 在本源中的角色",
-          "  ## 相关",
-        ]
-      : [
-          `- This is a CONCEPT page about an abstract idea, medical condition, or technique: "${title}"`,
-          `- Content MUST explain what "${title}" means and why it matters`,
-          "- DO NOT write about specific people or organizations in this page",
-          "- Focus on: definition, clinical/technical significance, how it appears in the source",
-          "- Required sections:",
-          "  ## {title}",
-          "  ## 定义",
-          "  ## 意义",
-          "  ## 在本源中的体现",
-          "  ## 相关",
-        ]
-
-  return [
-    `You are a wiki maintainer. Generate EXACTLY ONE wiki file.`,
-    "",
-    LANGUAGE_RULE,
-    "",
-    `## File to Generate`,
-    `- Path: ${filePath}`,
-    `- Type: ${fileType}`,
-    `- Title: ${title}`,
-    `- Description: ${description}`,
-    `- Source: ${sourceFileName}`,
-    "",
-    "## Output Format",
-    "Output ONLY this single FILE block (no other text before or after):",
-    `---FILE: ${filePath}---`,
-    "(YAML frontmatter + page content)",
-    "---END FILE---",
-    "",
-    "## Frontmatter",
-    "```yaml",
-    "---",
-    `type: ${fileType}`,
-    `title: "${title}"`,
-    "description: \"One-sentence summary (≤80 chars)\"",
-    "aliases: []",
-    "created: YYYY-MM-DD",
-    "updated: YYYY-MM-DD",
-    "tags: []",
-    "related: []",
-    `sources: ["${sourceFileName}"]`,
-    "---",
-    "```",
-    "",
-    "## Content Rules (CRITICAL)",
-    ...typeRules,
-    "- Use [[wikilink]] syntax for cross-references to other pages",
-    `- The \`sources\` field MUST contain "${sourceFileName}"`,
-    "",
-    purpose ? `## Wiki Purpose\n${purpose}` : "",
-  ].filter(Boolean).join("\n")
-}
-
-function buildSharedFilesPrompt(
-  sourceFileName: string,
-  writtenFiles: string[],
-  purpose: string,
-  _index: string,
-  overview: string,
-): string {
-  return [
-    "You are a wiki maintainer. Generate exactly 2 wiki management files.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    `## Source Just Ingested: ${sourceFileName}`,
-    `Pages created: ${writtenFiles.join(", ")}`,
-    "",
-    "## Files to Generate",
-    "",
-    "1. wiki/log.md — append a new log entry ONLY",
-    `   - Format: ## [${new Date().toISOString().slice(0, 10)}] ingest | ${sourceFileName}`,
-    "   - List the pages created",
-    "",
-    "2. wiki/overview.md — updated high-level summary of the entire wiki",
-    "   - 2-5 paragraphs covering ALL topics in the wiki",
-    "   - Reflect the newly added content",
-    "",
-    "## Output Format",
-    "---FILE: wiki/log.md---",
-    "(new log entry only)",
-    "---END FILE---",
-    "---FILE: wiki/overview.md---",
-    "(complete updated overview)",
-    "---END FILE---",
-    "",
-    "## Review Items",
-    "After the FILE blocks, you may output REVIEW blocks:",
-    "---REVIEW: type | Title---",
-    "Description.",
-    "OPTIONS: Create Page | Skip",
-    "PAGES: wiki/page1.md",
-    "SEARCH: query1 | query2",
-    "---END REVIEW---",
-    "Review types: contradiction, duplicate, missing-page, suggestion",
-    "",
-    purpose ? `## Wiki Purpose\n${purpose}` : "",
-    overview ? `## Current Overview\n${overview}` : "",
-  ].filter(Boolean).join("\n")
 }
 
 // ── Main ingest runner ────────────────────────────────────────────────────
@@ -1795,54 +916,8 @@ function updateRebuildSummaryTask(task: RebuildSummaryTask, updates: Partial<Reb
   Object.assign(task, { ...updates, updatedAt: Date.now() })
 }
 
-/**
- * Build the LLM prompt for rebuilding wiki/index.md and wiki/overview.md.
- * @param pageListing - compact listing of all wiki pages, each entry may include
- *   a `desc:` suffix with the page's one-sentence description
- */
-export function buildRebuildSummaryPrompt(pageListing: string): string {
-  return [
-    "You are a wiki librarian. Generate two high-quality wiki meta-documents based on the existing wiki pages listed below.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    "## Existing Wiki Pages",
-    "",
-    "Each line is formatted as: `[type] [[slug]] — Title | desc: one-sentence page description`",
-    "Use the `desc:` description field to better understand the page content when writing the overview.",
-    "",
-    pageListing,
-    "",
-    "## Output Format",
-    "",
-    "Output each file in this exact format:",
-    "",
-    "---FILE: wiki/index.md---",
-    "(complete file content)",
-    "---END FILE---",
-    "",
-    "---FILE: wiki/overview.md---",
-    "(complete file content)",
-    "---END FILE---",
-    "",
-    "## Generate",
-    "",
-    "1. **wiki/index.md** — A well-organized catalog of all wiki pages.",
-    "   - Group pages by type (Entities, Concepts, Sources, etc.).",
-    "   - Each entry format: `- [[slug]] — Title`",
-    "   - Do NOT include index.md, overview.md, or log.md themselves.",
-    "",
-    "2. **wiki/overview.md** — A high-level prose summary of the entire wiki.",
-    "   - Describe the main topics, entities, and concepts covered.",
-    "   - Mention the number of sources, entities, and concepts.",
-    "   - Write in a clear, encyclopedic style.",
-    "   - Begin with a YAML frontmatter block: `---\\ntype: overview\\ntitle: Wiki 总览\\n---`",
-  ].join("\n")
-}
+// (buildRebuildSummaryPrompt — moved to ingest-prompts.ts)
 
-/**
- * Execute the rebuild-summary task: scan wiki pages, call LLM, write files.
- */
 async function runRebuildSummaryTask(task: RebuildSummaryTask): Promise<void> {
   const projectPath = await getProjectRoot(task.projectId).catch(() => null)
   if (!projectPath) {
@@ -1954,18 +1029,8 @@ async function runRebuildSummaryTask(task: RebuildSummaryTask): Promise<void> {
 }
 
 // ── Deduplicate Task ──────────────────────────────────────────────────────────
-
-export interface MergeGroup {
-  /**
-   * Relative path from wikiDir to the canonical file, WITHOUT .md extension.
-   * Example: "sources/2024/entities/珠海奥乐医院"
-   * Using full paths (not just slugs) to correctly handle same-named files
-   * from different source directories.
-   */
-  canonical: string
-  /** Relative paths (same format as canonical) of files to merge into canonical and delete. */
-  aliases: string[]
-}
+// (MergeGroup, parseMergePlan, buildDeduplicatePrompt, buildMergeContentPrompt
+//  — moved to ingest-prompts.ts and imported from there)
 
 export interface DeduplicateTask {
   id: string
@@ -1981,130 +1046,6 @@ export interface DeduplicateTask {
 
 const _deduplicateTasks = new Map<string, DeduplicateTask>()
 
-/**
- * Parse the ---MERGE-PLAN--- block from LLM output.
- * Returns an array of MergeGroup objects, or [] if absent/invalid.
- */
-export function parseMergePlan(text: string): MergeGroup[] {
-  const match = text.match(/---MERGE-PLAN---\s*([\s\S]*?)\s*---END MERGE-PLAN---/)
-  if (!match || !match[1]) return []
-  try {
-    const parsed = JSON.parse(match[1].trim())
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (g): g is MergeGroup =>
-        typeof g === "object" && g !== null &&
-        typeof g.canonical === "string" &&
-        Array.isArray(g.aliases),
-    )
-  } catch {
-    return []
-  }
-}
-
-/**
- * Build the LLM prompt for deduplicating wiki entities and concepts.
- * Round 1: identification only — outputs MERGE-PLAN JSON, no file content.
- * @param pageListing - compact listing including full path, slug, title for each page
- */
-export function buildDeduplicatePrompt(pageListing: string): string {
-  return [
-    "You are a wiki librarian. Analyze the wiki pages listed below and identify duplicate or semantically similar entries.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    "## Existing Wiki Pages (entities and concepts only)",
-    "",
-    "Each line format: [type] path: wiki/<rel-path> | slug: [[slug]] | title: <title> | sources: <count>",
-    "The `path` field is the UNIQUE identifier for each file (files can share the same slug but have different paths).",
-    "",
-    pageListing,
-    "",
-    "## Task",
-    "",
-    "1. Identify groups of pages that represent the same real-world entity or concept and should be merged.",
-    "   - Only group pages that are clearly duplicates or near-duplicates.",
-    "   - Do NOT group pages that are merely related.",
-    "   - If no duplicates exist, output an empty MERGE-PLAN array.",
-    "",
-    "2. For each merge group, choose ONE canonical page:",
-    "   - Prefer the page with the most source references.",
-    "   - Tiebreak: longest body, then alphabetical path.",
-    "   - Use the canonical page's FULL REL-PATH (without wiki/ prefix, without .md) as the `canonical` value.",
-    "   - Use each alias page's FULL REL-PATH (without wiki/ prefix, without .md) as the `aliases` values.",
-    "",
-    "## Output Format",
-    "",
-    "Output ONLY the merge plan (use FULL REL-PATHS, not just slugs):",
-    "",
-    "---MERGE-PLAN---",
-    '[{"canonical":"sources/2024/entities/example","aliases":["sources/2025/entities/example"]},...]',
-    "---END MERGE-PLAN---",
-    "",
-    "CRITICAL: The `canonical` and `aliases` values must be the rel-path WITHOUT wiki/ prefix and WITHOUT .md.",
-    "Example: `sources/2024/entities/珠海奥乐医院`  (NOT just `珠海奥乐医院`)",
-    "",
-    "If there are no duplicates to merge, output only:",
-    "---MERGE-PLAN---",
-    "[]",
-    "---END MERGE-PLAN---",
-  ].join("\n")
-}
-
-const MERGE_CONTENT_MAX_CHARS = 10000
-
-/**
- * Build the LLM prompt for merging the full content of duplicate wiki entries.
- * Round 2: content merging — receives actual file bodies, outputs a single FILE block.
- * @param entries - {path, content} for each entry being merged; canonical should be first.
- * @param canonicalPath - Exact wiki path used in the FILE block header (e.g. "wiki/sources/2024/entities/foo.md")
- */
-export function buildMergeContentPrompt(
-  entries: { path: string; content: string }[],
-  canonicalPath: string,
-): string {
-  const entryBlocks = entries.map((e) => {
-    const body = e.content.length > MERGE_CONTENT_MAX_CHARS
-      ? e.content.slice(0, MERGE_CONTENT_MAX_CHARS) + "\n\n[...truncated]"
-      : e.content
-    return `== Entry: ${e.path} ==\n${body}`
-  })
-
-  return [
-    "You are a wiki editor. Merge the following wiki entries into one high-quality entry.",
-    "",
-    LANGUAGE_RULE,
-    "",
-    "## Merge Rules",
-    "",
-    "1. Preserve ALL non-overlapping factual information from every entry.",
-    "2. The `sources` field in YAML frontmatter must be the union of all entries' sources (no duplicates).",
-    "3. Prefer completeness over brevity — keep details even if slightly redundant.",
-    "4. Use the canonical entry's frontmatter structure as the base.",
-    "5. If entries describe the same fact differently, keep the most detailed version.",
-    "6. The `tags` field must be the union of all entries' tags (deduplicated, no duplicates).",
-    "7. The `related` field must be the union of all entries' related slugs (deduplicated, no duplicates).",
-    "",
-    "## Entries to Merge",
-    "",
-    entryBlocks.join("\n\n"),
-    "",
-    "## Output Format",
-    "",
-    "Output the merged entry as a single FILE block:",
-    "",
-    `---FILE: ${canonicalPath}---`,
-    "(complete merged file content with YAML frontmatter)",
-    "---END FILE---",
-    "",
-    "Output ONLY the FILE block. No explanation or commentary.",
-  ].join("\n")
-}
-
-/**
- * Create and enqueue a new deduplicate task for the given project.
- * Returns the taskId immediately; the task runs asynchronously.
- */
 export function startDeduplicateTask(projectId: string): string {
   const taskId = randomUUID()
   const now = Date.now()

@@ -1,0 +1,50 @@
+---
+description: 如何正确添加新的 LLM provider
+globs: server/src/lib/llm-providers.ts
+alwaysApply: false
+---
+
+# 添加新 Provider 的规范
+
+## 每个 provider 必须实现的四个字段
+```typescript
+interface ProviderConfig {
+  url: string                            // API 端点
+  headers: Record<string, string>        // 认证头
+  buildBody: (                           // 构建请求体
+    messages: LlmMessage[],
+    maxOutputTokens?: number
+  ) => unknown
+  parseStream: (line: string) => string | null  // 解析 SSE 行
+}
+```
+
+## parseStream 规范
+```typescript
+// ✅ 正确
+parseStream: (line) => {
+  if (!line.startsWith("data:")) return null
+  const data = line.slice(5).trim()
+  if (data === "[DONE]") return null
+  try {
+    const json = JSON.parse(data)
+    return json.choices?.[0]?.delta?.content ?? null
+  } catch {
+    return null  // 解析失败静默跳过
+  }
+}
+```
+
+## maxOutputTokens 传递
+```typescript
+// ✅ 正确 — 动态传递，不硬编码
+buildBody: (messages, maxOutputTokens = 4096) => ({
+  model: "gpt-4o",
+  messages,
+  max_tokens: maxOutputTokens,
+  stream: true,
+})
+
+// ❌ 禁止 — 硬编码
+buildBody: (messages) => ({ max_tokens: 4096 })
+```

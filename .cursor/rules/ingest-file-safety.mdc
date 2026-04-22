@@ -1,0 +1,38 @@
+---
+description: ingest-service 写文件的路径校验和内容质量门规则
+globs: server/src/services/ingest*.ts
+alwaysApply: false
+---
+
+# Ingest 写文件安全规则
+
+## LLM 输出写入 wiki 的三道门
+1. **路径白名单**：只能写 `wiki/sources/<sourceBase>/**` 和 `wiki/log.md`
+2. **title-filename 一致性**：`isTitleFilenameConsistent()` 必须通过（默认启用）
+3. **内容语义一致性**：`isBodyTitleSemanticallyConsistent()` 必须通过
+
+## 调试时的正确做法
+```bash
+# 通过环境变量临时禁用，而非注释代码
+LLM_WIKI_SKIP_VALIDATION=1 npm run dev:server
+```
+
+## 校验开关模式
+```typescript
+// ✅ 正确 — 用环境变量开关，不注释代码
+const SKIP_VALIDATION = process.env.LLM_WIKI_SKIP_VALIDATION === "1"
+if (!SKIP_VALIDATION && !isTitleFilenameConsistent(rel, content)) {
+  logger.warn(`[ingest] title-filename 不一致，跳过: ${rel}`)
+  return false
+}
+if (!SKIP_VALIDATION && !isBodyTitleSemanticallyConsistent(rel, content)) {
+  logger.warn(`[ingest] 内容语义不一致，跳过: ${rel}`)
+  return false
+}
+
+// ❌ 禁止 — 直接注释掉校验
+// if (!isTitleFilenameConsistent(rel, content)) { ... }
+```
+
+## 当前已知问题
+- `writeSingleBlock` 中两处质量校验已注释，改造 G 中需恢复并加环境变量开关
