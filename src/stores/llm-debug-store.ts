@@ -1,5 +1,8 @@
 import { create } from "zustand"
 import { getStoredToken } from "@/lib/auth"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
+
+const BASE_URL = import.meta.env.BASE_URL.replace(/\/$/, "")
 
 export interface LlmCallLog {
   id: string
@@ -31,10 +34,7 @@ export const useLlmDebugStore = create<LlmDebugState>((set, get) => ({
 
   loadLogs: async () => {
     try {
-      const token = getStoredToken()
-      const headers: Record<string, string> = {}
-      if (token) headers["Authorization"] = `Bearer ${token}`
-      const res = await fetch("/api/llm/debug/logs", { headers })
+      const res = await fetchWithAuth("/api/llm/debug/logs")
       if (res.ok) {
         const data = await res.json() as { logs: LlmCallLog[] }
         set({ logs: data.logs ?? [] })
@@ -49,9 +49,9 @@ export const useLlmDebugStore = create<LlmDebugState>((set, get) => ({
     if (existing) return // already connected
 
     const token = getStoredToken()
-    const url = token
-      ? `/api/llm/debug/stream?token=${encodeURIComponent(token)}`
-      : "/api/llm/debug/stream"
+    const sseUrl = token
+      ? `${BASE_URL}/api/llm/debug/stream?token=${encodeURIComponent(token)}`
+      : `${BASE_URL}/api/llm/debug/stream`
 
     // Use fetch-based SSE since EventSource doesn't support custom headers
     // Fall back to polling-compatible approach using a custom reader
@@ -63,7 +63,7 @@ export const useLlmDebugStore = create<LlmDebugState>((set, get) => ({
 
     void (async () => {
       try {
-        const res = await fetch("/api/llm/debug/stream", {
+        const res = await fetch(sseUrl, {
           headers,
           signal: controller.signal,
         })
@@ -123,10 +123,7 @@ export const useLlmDebugStore = create<LlmDebugState>((set, get) => ({
 
   clearLogs: async () => {
     try {
-      const token = getStoredToken()
-      const headers: Record<string, string> = {}
-      if (token) headers["Authorization"] = `Bearer ${token}`
-      await fetch("/api/llm/debug/logs", { method: "DELETE", headers })
+      await fetchWithAuth("/api/llm/debug/logs", { method: "DELETE" })
       set({ logs: [] })
     } catch {
       // Non-critical

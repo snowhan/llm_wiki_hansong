@@ -1,4 +1,5 @@
 import { readFile, writeFile, listDirectory } from "@/commands/fs"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 import { streamChat } from "@/lib/llm-client"
 import type { LlmConfig } from "@/stores/wiki-store"
 import { getFileCategory, needsVisionIngest } from "@/lib/file-types"
@@ -231,7 +232,7 @@ export async function autoIngest(
       // ignore
     }
     // Trigger server-side index rebuild (non-blocking, best-effort)
-    fetch("/api/ingest/rebuild-index", {
+    fetchWithAuth("/api/ingest/rebuild-index", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId }),

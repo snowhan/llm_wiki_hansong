@@ -1,5 +1,5 @@
 import { apiPost, apiGet, apiUpload } from "@/lib/api-client"
-import { getStoredToken } from "@/lib/auth"
+import { fetchWithAuth } from "@/lib/fetch-with-auth"
 import type { FileNode, WikiProject } from "@/types/wiki"
 
 // ── File operations ────────────────────────────────────────────────────────
@@ -52,13 +52,9 @@ export async function preprocessFile(
   relativePath: string,
   onStage?: (stage: PreprocessStage) => void,
 ): Promise<string> {
-  const token = getStoredToken()
-  const headers: Record<string, string> = { "Content-Type": "application/json" }
-  if (token) headers["Authorization"] = `Bearer ${token}`
-
-  const res = await fetch("/api/preprocess", {
+  const res = await fetchWithAuth("/api/preprocess", {
     method: "POST",
-    headers,
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ projectId, path: relativePath }),
   })
   if (!res.ok) throw new Error(await res.text())
