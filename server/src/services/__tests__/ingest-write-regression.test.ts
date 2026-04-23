@@ -193,12 +193,12 @@ describe("runIngest write regression", () => {
     expect(fallbackSummary).toContain("title: \"lab-bad\"")
   })
 
-  it("正文语义与 title 不一致时，当前实现允许写入（语义拦截为可选增强）", async () => {
-    // NOTE: Semantic body-title consistency check is an optional guard that is
-    // not currently enforced. This test documents the current (permissive) behavior.
-    // If the guard is enabled in future, update this test to expect rejection.
-    const { projectDir, sourcePath } = await createProjectWithSource("lab-semantic.pdf")
-    mockGetProjectRoot.mockResolvedValue(projectDir)
+  it("正文语义与 title 不一致时，Phase 3G 后校验默认开启，文件被拒绝写入", async () => {
+    // Phase 3G: Semantic body-title consistency check is now enforced by default.
+    // Files whose body does not mention the page title are rejected.
+    // Set LLM_WIKI_SKIP_VALIDATION=1 to bypass (e.g. for legacy data imports).
+    const { projectDir: _dir, sourcePath } = await createProjectWithSource("lab-semantic.pdf")
+    mockGetProjectRoot.mockResolvedValue(_dir)
 
     let callIndex = 0
     vi.stubGlobal("fetch", vi.fn(async () => {
@@ -223,16 +223,10 @@ describe("runIngest write regression", () => {
     await waitTaskDone(taskId)
     const task = getTask(taskId)
     expect(task?.status).toBe("done")
-    // title already matches filename → ensureCanonicalTitleType is a no-op
-    // semantic check is not enforced → file is written
-    expect(task?.filesWritten).toContain("wiki/sources/lab-semantic/entities/韩松.md")
+    // Semantic check rejects the entity because the body never mentions "韩松"
+    expect(task?.filesWritten).not.toContain("wiki/sources/lab-semantic/entities/韩松.md")
+    // The fallback source summary is still written (no body inconsistency)
     expect(task?.filesWritten).toContain("wiki/sources/lab-semantic.md")
-
-    const entity = await fs.readFile(
-      path.join(projectDir, "wiki", "sources", "lab-semantic", "entities", "韩松.md"),
-      "utf-8",
-    )
-    expect(entity).toContain("title: 韩松")
   })
 })
 

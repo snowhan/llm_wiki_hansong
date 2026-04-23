@@ -171,67 +171,122 @@ export async function getDeduplicateStatus(taskId: string): Promise<DeduplicateS
   }
 }
 
+/**
+ * Subscribe to ingest task progress via SSE.
+ * Uses fetch + ReadableStream instead of EventSource so the JWT can be sent
+ * in the Authorization header (not as an insecure URL query param).
+ */
 export function subscribeIngestSSE(taskId: string, callbacks: SseCallbacks): () => void {
   const token = getStoredToken()
-  const url = token
-    ? `${BASE_URL}/api/ingest/stream/${taskId}?token=${encodeURIComponent(token)}`
-    : `${BASE_URL}/api/ingest/stream/${taskId}`
-
-  const es = new EventSource(url)
-  let intentionallyClosed = false
+  const url = `${BASE_URL}/api/ingest/stream/${taskId}`
+  const abortController = new AbortController()
+  let closed = false
 
   const closeClean = () => {
-    intentionallyClosed = true
-    es.close()
+    if (closed) return
+    closed = true
+    abortController.abort()
   }
 
-  es.onmessage = (ev) => {
-    let data: {
-      type: string
-      task?: ServerIngestTask
-      token?: string
-      step?: string
-      message?: string
-    }
+  const run = async () => {
+    let response: Response
     try {
-      data = JSON.parse(ev.data as string) as typeof data
-    } catch {
-      callbacks.onError?.("Invalid SSE payload")
-      return
-    }
-
-    if (data.type === "state" || data.type === "update") {
-      if (data.task) callbacks.onUpdate?.(data.task)
-    } else if (data.type === "token") {
-      if (data.step !== undefined && data.token !== undefined) {
-        callbacks.onToken?.(data.step, data.token)
-      }
-    } else if (data.type === "done") {
-      closeClean()
-      if (data.task) {
-        callbacks.onDone?.(data.task)
-      } else {
-        callbacks.onError?.("Incomplete done event from server")
-      }
-    } else if (data.type === "error") {
-      closeClean()
-      callbacks.onError?.(data.message ?? "Unknown error")
-    }
-  }
-
-  es.onerror = () => {
-    if (intentionallyClosed) return
-    if (es.readyState === EventSource.CLOSED) {
-      intentionallyClosed = true
-      // Prefer onConnectionLost so callers can query the server before deciding
-      // whether to report failure. Fall back to onError for legacy callers.
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Accept: "text/event-stream",
+        },
+        signal: abortController.signal,
+      })
+    } catch (err) {
+      if (closed) return
       if (callbacks.onConnectionLost) {
         callbacks.onConnectionLost()
       } else {
-        callbacks.onError?.("SSE connection error")
+        callbacks.onError?.("SSE connection failed")
+      }
+      return
+    }
+
+    if (!response.ok) {
+      callbacks.onError?.(`SSE request failed: ${response.status}`)
+      return
+    }
+
+    if (!response.body) {
+      callbacks.onError?.("Empty SSE response body")
+      return
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ""
+
+    const processLine = (line: string) => {
+      if (!line.startsWith("data:")) return
+      const raw = line.slice(5).trim()
+      if (!raw || raw === "[DONE]") return
+
+      let data: {
+        type: string
+        task?: ServerIngestTask
+        token?: string
+        step?: string
+        message?: string
+      }
+      try {
+        data = JSON.parse(raw) as typeof data
+      } catch {
+        callbacks.onError?.("Invalid SSE payload")
+        return
+      }
+
+      if (data.type === "state" || data.type === "update") {
+        if (data.task) callbacks.onUpdate?.(data.task)
+      } else if (data.type === "token") {
+        if (data.step !== undefined && data.token !== undefined) {
+          callbacks.onToken?.(data.step, data.token)
+        }
+      } else if (data.type === "done") {
+        closeClean()
+        if (data.task) {
+          callbacks.onDone?.(data.task)
+        } else {
+          callbacks.onError?.("Incomplete done event from server")
+        }
+      } else if (data.type === "error") {
+        closeClean()
+        callbacks.onError?.(data.message ?? "Unknown error")
       }
     }
+
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const lines = buf.split("\n")
+        buf = lines.pop() ?? ""
+        for (const line of lines) {
+          processLine(line.trim())
+        }
+      }
+    } catch (err) {
+      if (closed) return
+      if (callbacks.onConnectionLost) {
+        callbacks.onConnectionLost()
+      } else {
+        callbacks.onError?.("SSE connection lost")
+      }
+    } finally {
+      reader.releaseLock()
+    }
   }
+
+  run().catch(() => {
+    if (!closed) callbacks.onError?.("SSE unexpected error")
+  })
 
   return closeClean
 }

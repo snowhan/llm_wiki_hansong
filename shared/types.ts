@@ -40,6 +40,7 @@ export interface LlmConfig {
   ollamaUrl: string
   customEndpoint: string
   maxContextSize: number
+  maxOutputTokens?: number
 }
 
 export interface SearchApiConfig {

@@ -20,10 +20,10 @@ export interface ChatMessage {
   content: string | ContentPart[]
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   url: string
   headers: Record<string, string>
-  buildBody: (messages: ChatMessage[]) => unknown
+  buildBody: (messages: ChatMessage[], maxOutputTokens?: number) => unknown
   parseStream: (line: string) => string | null
 }
 

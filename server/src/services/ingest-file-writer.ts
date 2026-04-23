@@ -199,11 +199,10 @@ export async function writeSingleBlock(
     return false
   }
 
-  // Quality gates — DISABLED until Phase 3G restoration.
-  // Use LLM_WIKI_SKIP_VALIDATION=1 to skip, LLM_WIKI_ENABLE_VALIDATION=1 to enable.
-  // See .cursor/rules/ingest-file-safety.mdc for the restoration plan.
-  const ENABLE_VALIDATION = process.env.LLM_WIKI_ENABLE_VALIDATION === "1"
-  if (ENABLE_VALIDATION && !isTitleFilenameConsistent(rel, content)) {
+  // Quality gates — ON by default (Phase 3G).
+  // Set LLM_WIKI_SKIP_VALIDATION=1 to bypass (e.g. for legacy data replay tests).
+  const SKIP_VALIDATION = process.env.LLM_WIKI_SKIP_VALIDATION === "1"
+  if (!SKIP_VALIDATION && !isTitleFilenameConsistent(rel, content)) {
     const fileBasename = path.basename(rel, ".md")
     const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
     console.warn(
@@ -211,7 +210,7 @@ export async function writeSingleBlock(
     )
     return false
   }
-  if (ENABLE_VALIDATION && !isBodyTitleSemanticallyConsistent(rel, content)) {
+  if (!SKIP_VALIDATION && !isBodyTitleSemanticallyConsistent(rel, content)) {
     const titleMatch = content.match(/^---\s*\n[\s\S]*?^title:\s*(.+?)\s*$/m)
     console.warn(
       `[ingest-service] ⛔ REJECTED semantic mismatch: path="${rel}" title="${titleMatch?.[1]?.trim() ?? ""}"`,

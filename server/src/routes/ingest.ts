@@ -14,6 +14,7 @@ import {
 } from "../services/ingest-service.js"
 import { ingestStartSchema } from "../lib/schemas.js"
 import { getProjectRoot } from "../services/project-service.js"
+import { requireMember } from "../middleware/auth-guards.js"
 
 const router = Router()
 
@@ -58,10 +59,13 @@ router.get("/tasks", (_req: Request, res: Response) => {
 })
 
 /**
- * GET /api/ingest/stream/:taskId
+ * POST /api/ingest/stream/:taskId
  * Server-Sent Events stream for real-time progress.
+ * Requires Authorization: Bearer <jwt> header (token must NOT be in URL).
+ * Changed from GET to POST so JWT can be sent in the Authorization header
+ * instead of as an insecure URL query parameter.
  */
-router.get("/stream/:taskId", (req: Request, res: Response) => {
+router.post("/stream/:taskId", requireMember, (req: Request, res: Response) => {
   const taskId = req.params["taskId"] as string
 
   res.setHeader("Content-Type", "text/event-stream")
@@ -93,6 +97,18 @@ router.get("/stream/:taskId", (req: Request, res: Response) => {
   req.on("close", () => {
     clearInterval(heartbeat)
     unregisterSseClient(taskId, res)
+  })
+})
+
+/**
+ * GET /api/ingest/stream/:taskId — REMOVED
+ * This endpoint has been replaced by POST /api/ingest/stream/:taskId.
+ * Returns 405 to help clients migrate.
+ */
+router.get("/stream/:taskId", (_req: Request, res: Response) => {
+  res.status(405).json({
+    error: "Method Not Allowed",
+    message: "Use POST /api/ingest/stream/:taskId with Authorization: Bearer <token> header",
   })
 })
 

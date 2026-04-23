@@ -1,5 +1,6 @@
-import { useCallback } from "react"
-import { BubbleMenu } from "@tiptap/extension-bubble-menu"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
+import { BubbleMenuPlugin } from "@tiptap/extension-bubble-menu"
 import type { Editor } from "@tiptap/react"
 import Box from "@mui/material/Box"
 import IconButton from "@mui/material/IconButton"
@@ -42,6 +43,40 @@ const BTN_SX = (active: boolean) => ({
   },
 })
 
+// ── Tiptap v3 compat: BubbleMenu was removed from @tiptap/react ──────────────
+// We register BubbleMenuPlugin (which handles show/hide + floating-ui positioning)
+// and render our toolbar children into the plugin's DOM element via a React portal.
+
+let _keySeq = 0
+
+function FloatingBubbleMenu({ editor, children }: { editor: Editor; children: ReactNode }) {
+  const [element, setElement] = useState<HTMLDivElement | null>(null)
+  const pluginKeyRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const el = document.createElement("div")
+    document.body.appendChild(el)
+    const key = `bubbleMenuReact_${++_keySeq}`
+    pluginKeyRef.current = key
+
+    const plugin = BubbleMenuPlugin({ pluginKey: key, editor, element: el })
+    editor.registerPlugin(plugin)
+    setElement(el)
+
+    return () => {
+      const k = pluginKeyRef.current
+      if (k) {
+        try { editor.unregisterPlugin(k) } catch { /* editor already destroyed */ }
+      }
+      el.remove()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor])
+
+  if (!element) return null
+  return createPortal(children, element)
+}
+
 interface BubbleToolbarProps {
   editor: Editor
   onAskAI?: (selectedText: string) => void
@@ -65,15 +100,7 @@ export function BubbleToolbar({ editor, onAskAI }: BubbleToolbarProps) {
   }, [editor])
 
   return (
-    <BubbleMenu
-      editor={editor}
-      tippyOptions={{
-        duration: [120, 80],
-        placement: "top",
-        animation: "scale",
-        maxWidth: "none",
-      }}
-    >
+    <FloatingBubbleMenu editor={editor}>
       <Box sx={TOOLBAR_SX}>
         {/* Ask AI — premium action */}
         <Tooltip title="AI 助手 (Ask AI)" enterDelay={400}>
@@ -178,6 +205,6 @@ export function BubbleToolbar({ editor, onAskAI }: BubbleToolbarProps) {
           </IconButton>
         </Tooltip>
       </Box>
-    </BubbleMenu>
+    </FloatingBubbleMenu>
   )
 }

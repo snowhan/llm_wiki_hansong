@@ -105,7 +105,6 @@ export function PageHeader({
       {/* Page icon + add cover row */}
       <Box
         sx={{
-          px: { xs: 3, md: 6 },
           pt: coverUrl ? 2 : 3,
           display: "flex",
           flexDirection: "column",

@@ -207,3 +207,59 @@ describe("registerSseClient / unregisterSseClient", () => {
     expect(() => unregisterSseClient("ghost-task", res as never)).not.toThrow()
   })
 })
+
+// ── Phase 3G: writeSingleBlock content-quality gates ─────────────────────
+//
+// RED phase: Tests verify the RESTORED semantics where validation is ON by
+// default and LLM_WIKI_SKIP_VALIDATION=1 disables it.
+//
+// These tests currently FAIL because ingest-file-writer.ts still uses the
+// inverted LLM_WIKI_ENABLE_VALIDATION=1 semantics.
+
+describe("writeSingleBlock — content quality gates (Phase 3G)", () => {
+  let writeSingleBlock: (
+    projectPath: string,
+    rel: string,
+    content: string,
+    opts?: { writtenInTask?: Set<string> }
+  ) => Promise<boolean>
+
+  beforeEach(async () => {
+    vi.resetModules()
+    // Default: no env variable set → validation should be ON
+    delete process.env.LLM_WIKI_SKIP_VALIDATION
+    delete process.env.LLM_WIKI_ENABLE_VALIDATION
+    ;({ writeSingleBlock } = await import("../ingest-file-writer.js"))
+  })
+
+  it("G-01: rejects a file whose title is inconsistent with the filename (validation ON by default)", async () => {
+    // File is named "cats.md" but title in frontmatter is "Dogs"
+    const content = `---\ntitle: Dogs\ntype: concept\n---\n\n# Dogs\n\nContent about dogs.\n`
+    const result = await writeSingleBlock("/tmp/proj", "wiki/concepts/cats.md", content)
+    expect(result).toBe(false)
+  })
+
+  it("G-02: accepts a file when LLM_WIKI_SKIP_VALIDATION=1 bypasses the gates", async () => {
+    process.env.LLM_WIKI_SKIP_VALIDATION = "1"
+    vi.resetModules()
+    ;({ writeSingleBlock } = await import("../ingest-file-writer.js"))
+
+    const content = `---\ntitle: Dogs\ntype: concept\n---\n\n# Dogs\n\nContent about dogs.\n`
+    const result = await writeSingleBlock("/tmp/proj", "wiki/concepts/cats.md", content)
+    // With skip flag, validation is bypassed so the write should succeed
+    expect(result).toBe(true)
+  })
+
+  it("G-03: rejects when body heading does not match title (semantic gate)", async () => {
+    // Title says "Alpha" but body has no heading related to it
+    const content = `---\ntitle: Alpha\ntype: concept\n---\n\n# Beta\n\nThis is about beta.\n`
+    const result = await writeSingleBlock("/tmp/proj", "wiki/concepts/alpha.md", content)
+    expect(result).toBe(false)
+  })
+
+  it("G-04: accepts a valid well-formed file when validation is ON", async () => {
+    const content = `---\ntitle: Alpha\ntype: concept\n---\n\n# Alpha\n\nThis concept is about Alpha.\n`
+    const result = await writeSingleBlock("/tmp/proj", "wiki/concepts/alpha.md", content)
+    expect(result).toBe(true)
+  })
+})

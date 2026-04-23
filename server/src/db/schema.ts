@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb } from "drizzle-orm/pg-core"
+import { pgTable, uuid, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core"
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -31,3 +31,40 @@ export type NewUser = typeof users.$inferInsert
 export type RefreshToken = typeof refreshTokens.$inferSelect
 export type NewRefreshToken = typeof refreshTokens.$inferInsert
 export type AppSetting = typeof appSettings.$inferSelect
+
+// ── Task tables ────────────────────────────────────────────────────────────
+
+export const ingestTasks = pgTable("ingest_tasks", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  sourcePath: text("source_path").notNull(),
+  folderContext: text("folder_context").notNull().default(""),
+  force: boolean("force").notNull().default(false),
+  status: text("status", { enum: ["pending", "running", "done", "error"] }).notNull().default("pending"),
+  detail: text("detail").notNull().default(""),
+  filesWritten: jsonb("files_written").$type<string[]>().notNull().default([]),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const researchTasks = pgTable("research_tasks", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  topic: text("topic").notNull(),
+  searchQueries: jsonb("search_queries").$type<string[]>().notNull().default([]),
+  status: text("status", {
+    enum: ["queued", "searching", "synthesizing", "saving", "done", "error"],
+  }).notNull().default("queued"),
+  webResults: jsonb("web_results").$type<unknown[]>().notNull().default([]),
+  synthesis: text("synthesis").notNull().default(""),
+  savedPath: text("saved_path"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+export type IngestTask = typeof ingestTasks.$inferSelect
+export type NewIngestTask = typeof ingestTasks.$inferInsert
+export type ResearchTask = typeof researchTasks.$inferSelect
+export type NewResearchTask = typeof researchTasks.$inferInsert
